@@ -20,6 +20,11 @@ The system provides:
 - Task system (claiming, collaboration, verification)
 - Orchestrator for multi-agent simulation
 
+**Governance Layer:**
+- Configurable levers (taxes, reputation decay, staking, circuit breakers, audits)
+- Integration with orchestrator via epoch and interaction hooks
+- Populates `c_a` and `c_b` governance costs on interactions
+
 ## Installation
 
 ```bash
@@ -141,6 +146,15 @@ distributional-agi-safety/
 │   │   ├── state.py            # EnvState, RateLimits
 │   │   ├── feed.py             # Posts, replies, voting
 │   │   └── tasks.py            # Task pool and lifecycle
+│   ├── governance/
+│   │   ├── config.py           # GovernanceConfig
+│   │   ├── levers.py           # Abstract GovernanceLever base
+│   │   ├── engine.py           # GovernanceEngine (aggregates levers)
+│   │   ├── taxes.py            # TransactionTaxLever
+│   │   ├── reputation.py       # ReputationDecayLever, VoteNormalizationLever
+│   │   ├── admission.py        # StakingLever
+│   │   ├── circuit_breaker.py  # CircuitBreakerLever
+│   │   └── audits.py           # RandomAuditLever
 │   ├── metrics/
 │   │   ├── soft_metrics.py     # SoftMetrics (40+ metrics)
 │   │   └── reporters.py        # Dual reporting (soft + hard)
@@ -153,6 +167,7 @@ distributional-agi-safety/
 │   ├── test_agents.py
 │   ├── test_env.py
 │   ├── test_orchestrator.py
+│   ├── test_governance.py
 │   └── fixtures/
 │       └── interactions.py     # Test data generators
 ├── examples/
@@ -192,6 +207,67 @@ for epoch in range(n_epochs):
 - Rate limit enforcement (posts, votes, interactions per epoch)
 - Automatic payoff computation via SoftPayoffEngine
 - Event logging with full simulation replay
+
+## Governance
+
+The governance module provides configurable levers that affect agent behavior and payoffs:
+
+```python
+from src.governance import GovernanceConfig, GovernanceEngine
+from src.core.orchestrator import Orchestrator, OrchestratorConfig
+
+# Configure governance levers
+gov_config = GovernanceConfig(
+    # Transaction tax: 5% of |tau|, split 50/50
+    transaction_tax_rate=0.05,
+    transaction_tax_split=0.5,
+
+    # Reputation decays 10% each epoch
+    reputation_decay_rate=0.9,
+
+    # Require minimum stake to participate
+    staking_enabled=True,
+    min_stake_to_participate=10.0,
+
+    # Freeze agents with >70% toxicity after 3 violations
+    circuit_breaker_enabled=True,
+    freeze_threshold_toxicity=0.7,
+    freeze_threshold_violations=3,
+    freeze_duration_epochs=2,
+
+    # 10% chance of audit, penalty if p < 0.5
+    audit_enabled=True,
+    audit_probability=0.1,
+    audit_threshold_p=0.5,
+)
+
+# Pass to orchestrator
+config = OrchestratorConfig(
+    n_epochs=10,
+    governance_config=gov_config,
+)
+orchestrator = Orchestrator(config=config)
+```
+
+### Governance Levers
+
+| Lever | Effect | Hook |
+|-------|--------|------|
+| **Transaction Tax** | `c_a += rate * \|tau\| * split`, `c_b += rate * \|tau\| * (1-split)` | on_interaction |
+| **Reputation Decay** | `reputation *= decay_rate` each epoch | on_epoch_start |
+| **Vote Normalization** | Diminishing influence as vote count increases | compute_vote_weight |
+| **Staking** | Block actions if `resources < min_stake` | can_agent_act |
+| **Circuit Breaker** | Freeze agent if `avg_toxicity > threshold` for N violations | on_interaction |
+| **Random Audit** | Penalty `(threshold - p) * multiplier` if audited and `p < threshold` | on_interaction |
+
+### Integration Points
+
+Governance hooks into the orchestrator at:
+1. **Epoch start**: Reputation decay, unfreeze agents whose freeze duration expired
+2. **Agent action**: Staking check blocks under-resourced agents
+3. **Interaction completion**: Taxes, circuit breaker tracking, random audits
+
+Costs are added to `interaction.c_a` and `interaction.c_b` before payoff computation.
 
 ## Core Concepts
 
@@ -260,7 +336,7 @@ interactions = orchestrator.event_log.to_interactions()
 ## Running Tests
 
 ```bash
-# Run all tests (156 tests)
+# Run all tests (190 tests)
 pytest tests/ -v
 
 # Run with coverage
@@ -299,10 +375,10 @@ payoff:
 
 ## Future Extensions (MVP v1)
 
-- **Governance module**: Transaction taxes, reputation decay, circuit breakers
 - **Marketplace**: Bounties, bids, escrow for task completion
 - **Scenario runner**: Parameter sweeps, batch simulations
 - **Dashboard**: Streamlit visualization of metrics over time
+- **YAML governance**: Parse governance config from scenario files
 
 ## Inspired By
 
