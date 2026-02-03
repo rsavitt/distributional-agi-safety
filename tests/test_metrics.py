@@ -1,0 +1,360 @@
+"""Tests for soft metrics."""
+
+import pytest
+from src.metrics.soft_metrics import SoftMetrics
+from src.metrics.reporters import MetricsReporter
+from src.core.payoff import SoftPayoffEngine, PayoffConfig
+from src.models.interaction import SoftInteraction
+from tests.fixtures.interactions import (
+    generate_benign_batch,
+    generate_toxic_batch,
+    generate_mixed_batch,
+    generate_uncertain_batch,
+)
+
+
+class TestToxicityRate:
+    """Tests for toxicity rate calculation."""
+
+    def test_toxicity_benign_batch(self):
+        """Benign batch should have low toxicity."""
+        interactions = generate_benign_batch(count=100, seed=42)
+        metrics = SoftMetrics()
+
+        toxicity = metrics.toxicity_rate(interactions)
+
+        # Benign has p in [0.7, 0.95], so toxicity = E[1-p] in [0.05, 0.3]
+        assert toxicity < 0.35
+
+    def test_toxicity_toxic_batch(self):
+        """Toxic batch should have high toxicity."""
+        interactions = generate_toxic_batch(count=100, seed=42)
+        metrics = SoftMetrics()
+
+        toxicity = metrics.toxicity_rate(interactions)
+
+        # Toxic has p in [0.1, 0.4], so toxicity = E[1-p] in [0.6, 0.9]
+        assert toxicity > 0.55
+
+    def test_toxicity_bounds(self):
+        """Toxicity should be in [0, 1]."""
+        metrics = SoftMetrics()
+
+        for batch_gen in [generate_benign_batch, generate_toxic_batch, generate_mixed_batch]:
+            interactions = batch_gen(count=50, seed=42)
+            toxicity = metrics.toxicity_rate(interactions)
+            assert 0.0 <= toxicity <= 1.0
+
+    def test_toxicity_empty_list(self):
+        """Empty list should return 0."""
+        metrics = SoftMetrics()
+        assert metrics.toxicity_rate([]) == 0.0
+
+    def test_toxicity_no_accepted(self):
+        """No accepted interactions should return 0."""
+        metrics = SoftMetrics()
+        interactions = [
+            SoftInteraction(p=0.2, accepted=False),
+            SoftInteraction(p=0.8, accepted=False),
+        ]
+        assert metrics.toxicity_rate(interactions) == 0.0
+
+
+class TestConditionalLoss:
+    """Tests for conditional loss calculation."""
+
+    def test_conditional_loss_adverse_selection(self):
+        """
+        When low-quality interactions are preferentially accepted,
+        conditional loss should be negative.
+        """
+        metrics = SoftMetrics()
+
+        # Create adverse selection: low p accepted, high p rejected
+        interactions = []
+        for p in [0.2, 0.3, 0.25]:  # Low quality, accepted
+            interactions.append(SoftInteraction(p=p, accepted=True))
+        for p in [0.8, 0.85, 0.9]:  # High quality, rejected
+            interactions.append(SoftInteraction(p=p, accepted=False))
+
+        cl = metrics.conditional_loss_initiator(interactions)
+
+        # Accepted have lower payoffs than average → negative CL
+        assert cl < 0
+
+    def test_conditional_loss_positive_selection(self):
+        """
+        When high-quality interactions are preferentially accepted,
+        conditional loss should be positive.
+        """
+        metrics = SoftMetrics()
+
+        # Create positive selection
+        interactions = []
+        for p in [0.8, 0.85, 0.9]:  # High quality, accepted
+            interactions.append(SoftInteraction(p=p, accepted=True))
+        for p in [0.2, 0.3, 0.25]:  # Low quality, rejected
+            interactions.append(SoftInteraction(p=p, accepted=False))
+
+        cl = metrics.conditional_loss_initiator(interactions)
+
+        # Accepted have higher payoffs than average → positive CL
+        assert cl > 0
+
+
+class TestSpread:
+    """Tests for spread calculation."""
+
+    def test_spread_adverse_selection(self):
+        """Positive spread indicates adverse selection in quality."""
+        metrics = SoftMetrics()
+
+        # Low quality preferentially accepted
+        interactions = []
+        for _ in range(5):
+            interactions.append(SoftInteraction(p=0.3, accepted=True))
+        for _ in range(5):
+            interactions.append(SoftInteraction(p=0.8, accepted=False))
+
+        spread = metrics.spread(interactions)
+
+        # E[p] > E[p|accepted] → positive spread
+        assert spread > 0
+
+    def test_spread_zero_when_uniform(self):
+        """Spread should be near zero with uniform acceptance."""
+        metrics = SoftMetrics()
+
+        # All interactions accepted
+        interactions = [
+            SoftInteraction(p=p, accepted=True)
+            for p in [0.2, 0.4, 0.6, 0.8]
+        ]
+
+        spread = metrics.spread(interactions)
+
+        # E[p] = E[p|accepted] → zero spread
+        assert spread == pytest.approx(0.0)
+
+
+class TestQualityGap:
+    """Tests for quality gap calculation."""
+
+    def test_quality_gap_adverse_selection(self):
+        """Negative quality gap indicates adverse selection."""
+        metrics = SoftMetrics()
+
+        interactions = [
+            SoftInteraction(p=0.3, accepted=True),
+            SoftInteraction(p=0.35, accepted=True),
+            SoftInteraction(p=0.8, accepted=False),
+            SoftInteraction(p=0.85, accepted=False),
+        ]
+
+        gap = metrics.quality_gap(interactions)
+
+        # E[p|accepted] < E[p|rejected] → negative gap
+        assert gap < 0
+
+    def test_quality_gap_positive_selection(self):
+        """Positive quality gap indicates good filtering."""
+        metrics = SoftMetrics()
+
+        interactions = [
+            SoftInteraction(p=0.8, accepted=True),
+            SoftInteraction(p=0.85, accepted=True),
+            SoftInteraction(p=0.3, accepted=False),
+            SoftInteraction(p=0.35, accepted=False),
+        ]
+
+        gap = metrics.quality_gap(interactions)
+
+        # E[p|accepted] > E[p|rejected] → positive gap
+        assert gap > 0
+
+    def test_quality_gap_empty_groups(self):
+        """Should return 0 if either group is empty."""
+        metrics = SoftMetrics()
+
+        # All accepted
+        interactions = [SoftInteraction(p=0.5, accepted=True)]
+        assert metrics.quality_gap(interactions) == 0.0
+
+        # All rejected
+        interactions = [SoftInteraction(p=0.5, accepted=False)]
+        assert metrics.quality_gap(interactions) == 0.0
+
+
+class TestParticipationByQuality:
+    """Tests for participation by quality."""
+
+    def test_participation_rates(self):
+        """Should compute correct acceptance rates by quality tier."""
+        metrics = SoftMetrics()
+
+        interactions = [
+            # High quality (p >= 0.5): 3 total, 2 accepted
+            SoftInteraction(p=0.6, accepted=True),
+            SoftInteraction(p=0.7, accepted=True),
+            SoftInteraction(p=0.8, accepted=False),
+            # Low quality (p < 0.5): 2 total, 1 accepted
+            SoftInteraction(p=0.3, accepted=True),
+            SoftInteraction(p=0.4, accepted=False),
+        ]
+
+        result = metrics.participation_by_quality(interactions, threshold=0.5)
+
+        assert result["high_quality_acceptance"] == pytest.approx(2/3)
+        assert result["low_quality_acceptance"] == pytest.approx(1/2)
+        assert result["high_quality_count"] == 3
+        assert result["low_quality_count"] == 2
+
+
+class TestUncertainty:
+    """Tests for uncertainty flagging."""
+
+    def test_flag_uncertain(self):
+        """Should flag interactions near p=0.5."""
+        metrics = SoftMetrics()
+
+        interactions = [
+            SoftInteraction(p=0.45),  # Uncertain
+            SoftInteraction(p=0.55),  # Uncertain
+            SoftInteraction(p=0.2),   # Not uncertain
+            SoftInteraction(p=0.8),   # Not uncertain
+        ]
+
+        uncertain = metrics.flag_uncertain(interactions, band=0.1)
+
+        assert len(uncertain) == 2
+        assert all(0.4 < i.p < 0.6 for i in uncertain)
+
+    def test_uncertain_fraction(self):
+        """Should compute correct uncertain fraction."""
+        metrics = SoftMetrics()
+
+        interactions = generate_uncertain_batch(count=100, band=0.15, seed=42)
+        fraction = metrics.uncertain_fraction(interactions, band=0.2)
+
+        # All generated are in [0.35, 0.65], so all should be uncertain
+        assert fraction == 1.0
+
+
+class TestAverageQuality:
+    """Tests for average quality."""
+
+    def test_average_quality_all(self):
+        """Should compute E[p] correctly."""
+        metrics = SoftMetrics()
+
+        interactions = [
+            SoftInteraction(p=0.2),
+            SoftInteraction(p=0.4),
+            SoftInteraction(p=0.6),
+            SoftInteraction(p=0.8),
+        ]
+
+        avg = metrics.average_quality(interactions)
+        assert avg == pytest.approx(0.5)
+
+    def test_average_quality_accepted_only(self):
+        """Should compute E[p|accepted] correctly."""
+        metrics = SoftMetrics()
+
+        interactions = [
+            SoftInteraction(p=0.2, accepted=False),
+            SoftInteraction(p=0.4, accepted=True),
+            SoftInteraction(p=0.6, accepted=True),
+            SoftInteraction(p=0.8, accepted=False),
+        ]
+
+        avg = metrics.average_quality(interactions, accepted_only=True)
+        assert avg == pytest.approx(0.5)
+
+
+class TestMetricsReporter:
+    """Tests for MetricsReporter."""
+
+    def test_summary_structure(self):
+        """Summary should have all expected fields."""
+        reporter = MetricsReporter()
+        interactions = generate_mixed_batch(count=100, seed=42)
+
+        summary = reporter.summary(interactions)
+
+        assert hasattr(summary, "toxicity_soft")
+        assert hasattr(summary, "toxicity_hard")
+        assert hasattr(summary, "quality_gap")
+        assert hasattr(summary, "spread")
+        assert hasattr(summary, "total_interactions")
+
+    def test_summary_empty(self):
+        """Empty list should produce zero summary."""
+        reporter = MetricsReporter()
+        summary = reporter.summary([])
+
+        assert summary.total_interactions == 0
+        assert summary.toxicity_soft == 0.0
+
+    def test_compare_soft_hard(self):
+        """Should produce comparison dictionary."""
+        reporter = MetricsReporter()
+        interactions = generate_mixed_batch(count=100, seed=42)
+
+        comparison = reporter.compare_soft_hard(interactions)
+
+        assert "toxicity" in comparison
+        assert "soft" in comparison["toxicity"]
+        assert "hard" in comparison["toxicity"]
+
+    def test_format_report(self):
+        """Should produce formatted string report."""
+        reporter = MetricsReporter()
+        interactions = generate_mixed_batch(count=100, seed=42)
+
+        report = reporter.format_report(interactions, verbose=True)
+
+        assert isinstance(report, str)
+        assert "METRICS REPORT" in report
+        assert "SOFT METRICS" in report
+        assert "HARD METRICS" in report
+
+    def test_to_dict(self):
+        """Summary should be convertible to dict."""
+        reporter = MetricsReporter()
+        interactions = generate_mixed_batch(count=50, seed=42)
+
+        summary = reporter.summary(interactions)
+        d = summary.to_dict()
+
+        assert isinstance(d, dict)
+        assert "soft_metrics" in d
+        assert "hard_metrics" in d
+        assert "counts" in d
+        assert "welfare" in d
+
+
+class TestWelfareMetrics:
+    """Tests for welfare calculations."""
+
+    def test_welfare_positive_for_good_interactions(self):
+        """High quality accepted interactions should have positive welfare."""
+        metrics = SoftMetrics()
+        interactions = generate_benign_batch(count=50, seed=42)
+
+        welfare = metrics.welfare_metrics(interactions)
+
+        assert welfare["total_welfare"] > 0
+        assert welfare["avg_initiator_payoff"] > 0
+
+    def test_welfare_lower_for_toxic(self):
+        """Toxic batch should have lower welfare than benign."""
+        metrics = SoftMetrics()
+
+        benign = generate_benign_batch(count=50, seed=42)
+        toxic = generate_toxic_batch(count=50, seed=42)
+
+        welfare_benign = metrics.welfare_metrics(benign)
+        welfare_toxic = metrics.welfare_metrics(toxic)
+
+        assert welfare_benign["avg_initiator_payoff"] > welfare_toxic["avg_initiator_payoff"]
