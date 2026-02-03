@@ -1,17 +1,24 @@
 # Distributional AGI Safety Sandbox
 
-## Soft Label Payoff & Metrics System
-
-This project implements a simulation framework for studying distributional safety in multi-agent AI systems using soft (probabilistic) labels rather than hard binary classifications.
+A simulation framework for studying distributional safety in multi-agent AI systems using soft (probabilistic) labels.
 
 ## Overview
 
 The system provides:
-1. **Core data models** for interactions with probabilistic labels
-2. **Downstream proxy computation** (v_hat → p)
-3. **Soft payoff engine** (reformulated A3b)
-4. **Metrics system** (toxicity, conditional loss, spread, quality gap)
-5. **Basic event logging infrastructure**
+
+**Foundation Layer:**
+- Core data models for interactions with probabilistic labels
+- Downstream proxy computation (v_hat → p via calibrated sigmoid)
+- Soft payoff engine (reformulated A3b)
+- Metrics system (toxicity, conditional loss, calibration, variance)
+- Append-only event logging with replay
+
+**Runtime Layer (MVP v0):**
+- Agent behavioral policies (honest, opportunistic, deceptive, adversarial)
+- Environment state management with rate limits
+- Feed engine (posts, replies, voting, visibility ranking)
+- Task system (claiming, collaboration, verification)
+- Orchestrator for multi-agent simulation
 
 ## Installation
 
@@ -29,7 +36,44 @@ pip install -e ".[analysis]"
 pip install -e ".[all]"
 ```
 
-## Quick Start
+## Quick Start: Running a Simulation
+
+```python
+from src.agents.honest import HonestAgent
+from src.agents.opportunistic import OpportunisticAgent
+from src.agents.deceptive import DeceptiveAgent
+from src.core.orchestrator import Orchestrator, OrchestratorConfig
+
+# Configure simulation
+config = OrchestratorConfig(
+    n_epochs=10,
+    steps_per_epoch=10,
+    seed=42,
+)
+
+# Create orchestrator
+orchestrator = Orchestrator(config=config)
+
+# Register agents
+orchestrator.register_agent(HonestAgent(agent_id="honest_1"))
+orchestrator.register_agent(HonestAgent(agent_id="honest_2"))
+orchestrator.register_agent(OpportunisticAgent(agent_id="opp_1"))
+orchestrator.register_agent(DeceptiveAgent(agent_id="dec_1"))
+
+# Run simulation
+metrics = orchestrator.run()
+
+# Analyze results
+for m in metrics:
+    print(f"Epoch {m.epoch}: toxicity={m.toxicity_rate:.3f}, welfare={m.total_welfare:.2f}")
+```
+
+Run the demo:
+```bash
+python examples/mvp_demo.py
+```
+
+## Quick Start: Computing Metrics
 
 ```python
 from src.models.interaction import SoftInteraction, InteractionType
@@ -69,8 +113,6 @@ from tests.fixtures.interactions import generate_mixed_batch
 
 interactions = generate_mixed_batch(count=100, toxic_fraction=0.3)
 reporter = MetricsReporter()
-summary = reporter.summary(interactions)
-
 print(reporter.format_report(interactions, verbose=True))
 ```
 
@@ -79,47 +121,90 @@ print(reporter.format_report(interactions, verbose=True))
 ```
 distributional-agi-safety/
 ├── src/
-│   ├── __init__.py
 │   ├── models/
-│   │   ├── __init__.py
 │   │   ├── interaction.py      # SoftInteraction, InteractionType
 │   │   ├── agent.py            # AgentType, AgentState
 │   │   └── events.py           # Event log schema
 │   ├── core/
-│   │   ├── __init__.py
 │   │   ├── payoff.py           # SoftPayoffEngine
 │   │   ├── proxy.py            # ProxyComputer (v_hat computation)
-│   │   └── sigmoid.py          # Calibrated sigmoid utilities
+│   │   ├── sigmoid.py          # Calibrated sigmoid utilities
+│   │   └── orchestrator.py     # Simulation orchestrator
+│   ├── agents/
+│   │   ├── base.py             # BaseAgent, Action, Observation
+│   │   ├── honest.py           # Cooperative agent policy
+│   │   ├── opportunistic.py    # Payoff-maximizing policy
+│   │   ├── deceptive.py        # Trust-then-exploit policy
+│   │   ├── adversarial.py      # Targeting/coordination policy
+│   │   └── roles/              # Role mixins (planner, worker, verifier, etc.)
+│   ├── env/
+│   │   ├── state.py            # EnvState, RateLimits
+│   │   ├── feed.py             # Posts, replies, voting
+│   │   └── tasks.py            # Task pool and lifecycle
 │   ├── metrics/
-│   │   ├── __init__.py
-│   │   ├── soft_metrics.py     # SoftMetrics class
+│   │   ├── soft_metrics.py     # SoftMetrics (40+ metrics)
 │   │   └── reporters.py        # Dual reporting (soft + hard)
 │   └── logging/
-│       ├── __init__.py
-│       └── event_log.py        # Append-only event logger
+│       └── event_log.py        # Append-only JSONL logger
 ├── tests/
-│   ├── __init__.py
 │   ├── test_payoff.py
 │   ├── test_proxy.py
 │   ├── test_metrics.py
+│   ├── test_agents.py
+│   ├── test_env.py
+│   ├── test_orchestrator.py
 │   └── fixtures/
 │       └── interactions.py     # Test data generators
-├── pyproject.toml
-└── README.md
+├── examples/
+│   └── mvp_demo.py             # End-to-end demo
+├── scenarios/
+│   ├── baseline.yaml           # 5-agent baseline scenario
+│   └── status_game.yaml        # Reputation competition
+└── pyproject.toml
 ```
+
+## Agent Policies
+
+| Type | Behavior |
+|------|----------|
+| **Honest** | Cooperative, trust-based, completes tasks diligently |
+| **Opportunistic** | Maximizes short-term payoff, cherry-picks tasks, strategic voting |
+| **Deceptive** | Builds trust through honest behavior, then exploits trusted relationships |
+| **Adversarial** | Targets honest agents, coordinates with allies, disrupts ecosystem |
+
+## Orchestrator
+
+The orchestrator manages the simulation loop:
+
+```python
+for epoch in range(n_epochs):
+    for step in range(steps_per_epoch):
+        for agent in agents:
+            observation = build_observation(agent, state)
+            action = agent.act(observation)
+            execute_action(action, state, event_log)
+        resolve_pending_interactions()
+    emit_epoch_metrics()
+```
+
+**Features:**
+- Agent scheduling (round-robin, random, or priority-based)
+- Rate limit enforcement (posts, votes, interactions per epoch)
+- Automatic payoff computation via SoftPayoffEngine
+- Event logging with full simulation replay
 
 ## Core Concepts
 
 ### Soft Labels
 
-Instead of binary labels (good/bad), interactions carry a probability `p = P(v = +1)` representing the likelihood of a beneficial outcome. This is computed from downstream observables via:
+Instead of binary labels (good/bad), interactions carry a probability `p = P(v = +1)` representing the likelihood of a beneficial outcome:
 
 1. **Proxy signals** are combined into a raw score `v_hat ∈ [-1, +1]`
 2. **Calibrated sigmoid** converts to probability: `p = 1 / (1 + exp(-k * v_hat))`
 
 ### Proxy Computation
 
-The `ProxyComputer` combines multiple observable signals:
+The `ProxyComputer` combines observable signals:
 
 | Signal | Weight | Description |
 |--------|--------|-------------|
@@ -130,8 +215,6 @@ The `ProxyComputer` combines multiple observable signals:
 
 ### Soft Payoff Engine (Reformulated A3b)
 
-Payoffs are computed using expected values:
-
 ```
 π_a = θ * S_soft - τ - c_a - ρ_a * E_soft + w_rep * r_a
 π_b = (1-θ) * S_soft + τ - c_b - ρ_b * E_soft + w_rep * r_b
@@ -140,116 +223,88 @@ Payoffs are computed using expected values:
 Where:
 - `S_soft = p * s_plus - (1-p) * s_minus` (expected surplus)
 - `E_soft = (1-p) * h` (expected harm externality)
-- `τ` = transfer from initiator to counterparty
-- `c_a, c_b` = governance costs
-- `r_a, r_b` = reputation changes
-- `θ` = surplus split (initiator share)
-- `ρ_a, ρ_b` = externality internalization
 
-**Default Parameters:**
-- s_plus = 2.0, s_minus = 1.0
-- h = 2.0 (harm magnitude)
-- θ = 0.5 (equal split)
-- ρ_a = ρ_b = 0.0 (no externality internalization)
-- w_rep = 1.0 (reputation weight)
-- sigmoid_k = 2.0 (calibration sharpness)
-
-### Metrics System
-
-#### Soft Metrics (Probabilistic)
+### Metrics
 
 | Metric | Formula | Interpretation |
 |--------|---------|----------------|
 | Toxicity rate | `E[1-p \| accepted]` | Expected harm among accepted |
-| Conditional loss | `E[π_a \| accepted] - E[π_a]` | Selection effect on payoffs |
-| Spread | `(s+ + s-) * (E[p] - E[p \| accepted])` | Quality filtering effectiveness |
 | Quality gap | `E[p \| accepted] - E[p \| rejected]` | Adverse selection indicator |
+| Conditional loss | `E[π \| accepted] - E[π]` | Selection effect on payoffs |
+| Brier score | `E[(p - v)²]` | Calibration quality |
+| ECE | Expected calibration error | Binned calibration |
 
-#### Hard Metrics (Threshold-based)
-
-| Metric | Formula | Interpretation |
-|--------|---------|----------------|
-| Toxicity rate | `P(p < 0.5 \| accepted)` | Fraction classified as harmful |
-| Acceptance rates | By quality tier | Participation patterns |
-
-### Event Logging
-
-Append-only JSONL logger for simulation replay:
+## Event Logging & Replay
 
 ```python
-from src.logging.event_log import EventLog
-from src.models.events import Event, EventType
+from pathlib import Path
+from src.core.orchestrator import Orchestrator, OrchestratorConfig
 
-log = EventLog(Path("simulation.jsonl"))
-log.append(Event(
-    event_type=EventType.INTERACTION_PROPOSED,
-    interaction_id="abc123",
-    initiator_id="agent_1",
-    counterparty_id="agent_2",
-    payload={"v_hat": 0.5, "p": 0.73},
-))
+# Run with logging
+config = OrchestratorConfig(
+    n_epochs=10,
+    log_path=Path("logs/simulation.jsonl"),
+    log_events=True,
+)
+orchestrator = Orchestrator(config=config)
+# ... register agents and run ...
 
 # Replay events
-for event in log.replay():
+for event in orchestrator.event_log.replay():
     print(event.event_type, event.timestamp)
 
 # Reconstruct interactions
-interactions = log.to_interactions()
+interactions = orchestrator.event_log.to_interactions()
 ```
 
 ## Running Tests
 
 ```bash
-# Run all tests
+# Run all tests (156 tests)
 pytest tests/ -v
 
 # Run with coverage
 pytest tests/ --cov=src --cov-report=html
 
 # Run specific test file
-pytest tests/test_payoff.py -v
+pytest tests/test_orchestrator.py -v
 ```
 
-## Test Fixtures
+## Scenarios
 
-Generate test data with various patterns:
+Define simulations in YAML:
 
-```python
-from tests.fixtures.interactions import (
-    generate_benign_batch,      # High quality, positive outcomes
-    generate_toxic_batch,       # Low quality, exploitation patterns
-    generate_mixed_batch,       # Realistic distribution
-    generate_adversarial_scenario,  # Coordinated attack pattern
-    generate_uncertain_batch,   # Labels near p=0.5
-)
+```yaml
+# scenarios/baseline.yaml
+scenario_id: baseline
+agents:
+  - type: honest
+    count: 3
+  - type: opportunistic
+    count: 1
+  - type: deceptive
+    count: 1
 
-# Generate 100 interactions, 30% toxic
-interactions = generate_mixed_batch(count=100, toxic_fraction=0.3, seed=42)
+simulation:
+  n_epochs: 10
+  steps_per_epoch: 10
+  seed: 42
+
+payoff:
+  s_plus: 2.0
+  s_minus: 1.0
+  h: 2.0
+  theta: 0.5
 ```
 
-## Key Design Decisions
+## Future Extensions (MVP v1)
 
-1. **Soft over hard labels**: Preserves uncertainty information and enables more nuanced analysis
-
-2. **Downstream proxies**: Labels are computed from observable outcomes rather than claimed intentions
-
-3. **Externality modeling**: Harm to the ecosystem is explicitly modeled and can be internalized via ρ parameters
-
-4. **Dual reporting**: Both soft and hard metrics are computed for comparison
-
-5. **Append-only logging**: Events are immutable for auditability and replay
-
-## Future Extensions
-
-- Governance lever integration (taxes, decay)
-- Feed/orchestrator integration
-- Scenario runner for batch simulations
-- Dashboard visualization
-- Multi-agent coordination protocols
+- **Governance module**: Transaction taxes, reputation decay, circuit breakers
+- **Marketplace**: Bounties, bids, escrow for task completion
+- **Scenario runner**: Parameter sweeps, batch simulations
+- **Dashboard**: Streamlit visualization of metrics over time
 
 ## Inspired By
-
-This project is inspired by research on multi-agent safety and market dynamics:
 
 - [Distributional Safety in Agentic Systems](https://arxiv.org/abs/2512.16856)
 - [Multi-Agent Market Dynamics](https://arxiv.org/abs/2502.141)
@@ -258,17 +313,12 @@ This project is inspired by research on multi-agent safety and market dynamics:
 
 ## Dependencies
 
-**Core:**
-- numpy >= 1.24
-- pydantic >= 2.0
+**Core:** numpy, pydantic
 
-**Development:**
-- pytest >= 7.0
-- pytest-cov
-- mypy
-- ruff
+**Development:** pytest, pytest-cov, mypy, ruff
 
-**Analysis:**
-- pandas >= 2.0
-- matplotlib >= 3.7
-- seaborn >= 0.12
+**Analysis:** pandas, matplotlib, seaborn
+
+**Runtime:** pyyaml
+
+**Dashboard:** streamlit, plotly
