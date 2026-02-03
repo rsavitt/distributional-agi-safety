@@ -160,6 +160,8 @@ distributional-agi-safety/
 │   │   └── reporters.py        # Dual reporting (soft + hard)
 │   ├── scenarios/
 │   │   └── loader.py           # YAML scenario loader
+│   ├── analysis/
+│   │   └── sweep.py            # Parameter sweep runner
 │   └── logging/
 │       └── event_log.py        # Append-only JSONL logger
 ├── tests/
@@ -171,11 +173,13 @@ distributional-agi-safety/
 │   ├── test_orchestrator.py
 │   ├── test_governance.py
 │   ├── test_scenarios.py
+│   ├── test_sweep.py
 │   └── fixtures/
 │       └── interactions.py     # Test data generators
 ├── examples/
 │   ├── mvp_demo.py             # End-to-end demo
-│   └── run_scenario.py         # Run simulation from YAML
+│   ├── run_scenario.py         # Run simulation from YAML
+│   └── parameter_sweep.py      # Batch parameter sweep
 ├── scenarios/
 │   ├── baseline.yaml           # 5-agent baseline scenario
 │   ├── status_game.yaml        # Reputation competition
@@ -341,7 +345,7 @@ interactions = orchestrator.event_log.to_interactions()
 ## Running Tests
 
 ```bash
-# Run all tests (212 tests)
+# Run all tests (230 tests)
 pytest tests/ -v
 
 # Run with coverage
@@ -426,10 +430,59 @@ metrics = orchestrator.run()
 
 Governance effectively punishes bad actors (payoffs drop from positive to negative) while maintaining similar toxicity levels. Stricter governance reduces bad actor gains but also dampens overall welfare.
 
+## Parameter Sweeps
+
+Run batch simulations over parameter ranges:
+
+```python
+from src.analysis import SweepConfig, SweepParameter, SweepRunner
+from src.scenarios import load_scenario
+
+# Load base scenario
+scenario = load_scenario(Path("scenarios/baseline.yaml"))
+
+# Configure sweep
+config = SweepConfig(
+    base_scenario=scenario,
+    parameters=[
+        SweepParameter(
+            name="governance.transaction_tax_rate",
+            values=[0.0, 0.05, 0.10, 0.15],
+        ),
+        SweepParameter(
+            name="governance.circuit_breaker_enabled",
+            values=[False, True],
+        ),
+    ],
+    runs_per_config=3,  # Multiple runs for statistical significance
+    seed_base=42,
+)
+
+# Run sweep
+runner = SweepRunner(config)
+results = runner.run()
+
+# Export to CSV
+runner.to_csv(Path("results.csv"))
+
+# Get summary statistics
+summary = runner.summary()
+```
+
+Run the example:
+```bash
+python examples/parameter_sweep.py
+python examples/parameter_sweep.py --output my_results.csv
+```
+
+Supported parameter paths:
+- `governance.*` - Any GovernanceConfig field
+- `payoff.*` - Any PayoffConfig field
+- `n_epochs`, `steps_per_epoch` - Simulation settings
+
 ## Future Extensions (MVP v1)
 
 - **Marketplace**: Bounties, bids, escrow for task completion
-- **Scenario runner**: Parameter sweeps, batch simulations
 - **Dashboard**: Streamlit visualization of metrics over time
 
 ## Inspired By
