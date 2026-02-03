@@ -25,6 +25,8 @@ from src.models.events import (
     reputation_updated_event,
 )
 from src.models.interaction import InteractionType, SoftInteraction
+from src.governance.config import GovernanceConfig
+from src.governance.engine import GovernanceEffect, GovernanceEngine
 
 
 @dataclass
@@ -46,6 +48,9 @@ class OrchestratorConfig:
 
     # Payoff configuration
     payoff_config: PayoffConfig = field(default_factory=PayoffConfig)
+
+    # Governance configuration
+    governance_config: Optional[GovernanceConfig] = None
 
     # Logging
     log_path: Optional[Path] = None
@@ -113,6 +118,15 @@ class Orchestrator:
         self.payoff_engine = SoftPayoffEngine(self.config.payoff_config)
         self.proxy_computer = ProxyComputer()
         self.metrics_calculator = SoftMetrics(self.payoff_engine)
+
+        # Governance engine
+        if self.config.governance_config is not None:
+            self.governance_engine: Optional[GovernanceEngine] = GovernanceEngine(
+                self.config.governance_config,
+                seed=self.config.seed,
+            )
+        else:
+            self.governance_engine = None
 
         # Event logging
         if self.config.log_path:
@@ -204,6 +218,13 @@ class Orchestrator:
         """Run a single epoch."""
         epoch_start = self.state.current_epoch
 
+        # Apply epoch-start governance (reputation decay, unfreezes)
+        if self.governance_engine:
+            gov_effect = self.governance_engine.apply_epoch_start(
+                self.state, self.state.current_epoch
+            )
+            self._apply_governance_effect(gov_effect)
+
         for step in range(self.config.steps_per_epoch):
             if self.state.is_paused:
                 break
@@ -238,6 +259,10 @@ class Orchestrator:
                 break
 
             if not self.state.can_agent_act(agent_id):
+                continue
+
+            # Check governance admission control (staking)
+            if self.governance_engine and not self.governance_engine.can_agent_act(agent_id, self.state):
                 continue
 
             agent = self._agents[agent_id]
@@ -520,6 +545,29 @@ class Orchestrator:
             tau=proposal.metadata.get("offered_transfer", 0),
         )
 
+        # Apply governance costs to interaction
+        if self.governance_engine:
+            gov_effect = self.governance_engine.apply_interaction(interaction, self.state)
+            interaction.c_a += gov_effect.cost_a
+            interaction.c_b += gov_effect.cost_b
+            self._apply_governance_effect(gov_effect)
+
+            # Log governance event
+            if gov_effect.cost_a > 0 or gov_effect.cost_b > 0:
+                self._emit_event(Event(
+                    event_type=EventType.GOVERNANCE_COST_APPLIED,
+                    interaction_id=proposal.proposal_id,
+                    initiator_id=proposal.initiator_id,
+                    counterparty_id=proposal.counterparty_id,
+                    payload={
+                        "cost_a": gov_effect.cost_a,
+                        "cost_b": gov_effect.cost_b,
+                        "levers": [e.lever_name for e in gov_effect.lever_effects],
+                    },
+                    epoch=self.state.current_epoch,
+                    step=self.state.current_step,
+                ))
+
         # Compute payoffs
         payoff_init = self.payoff_engine.payoff_initiator(interaction)
         payoff_counter = self.payoff_engine.payoff_counterparty(interaction)
@@ -646,6 +694,38 @@ class Orchestrator:
             epoch=self.state.current_epoch,
             step=self.state.current_step,
         ))
+
+    def _apply_governance_effect(self, effect: GovernanceEffect) -> None:
+        """Apply governance effects to state (freeze/unfreeze, reputation, resources)."""
+        # Freeze agents
+        for agent_id in effect.agents_to_freeze:
+            self.state.freeze_agent(agent_id)
+
+        # Unfreeze agents
+        for agent_id in effect.agents_to_unfreeze:
+            self.state.unfreeze_agent(agent_id)
+
+        # Apply reputation deltas
+        for agent_id, delta in effect.reputation_deltas.items():
+            agent_state = self.state.get_agent(agent_id)
+            if agent_state:
+                old_rep = agent_state.reputation
+                agent_state.update_reputation(delta)
+                self._emit_event(reputation_updated_event(
+                    agent_id=agent_id,
+                    old_reputation=old_rep,
+                    new_reputation=agent_state.reputation,
+                    delta=delta,
+                    reason="governance",
+                    epoch=self.state.current_epoch,
+                    step=self.state.current_step,
+                ))
+
+        # Apply resource deltas
+        for agent_id, delta in effect.resource_deltas.items():
+            agent_state = self.state.get_agent(agent_id)
+            if agent_state:
+                agent_state.update_resources(delta)
 
     def _compute_epoch_metrics(self) -> EpochMetrics:
         """Compute metrics for the current epoch."""

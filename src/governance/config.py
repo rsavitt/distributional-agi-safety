@@ -1,0 +1,72 @@
+"""Configuration dataclass for governance levers."""
+
+from dataclasses import dataclass
+
+
+@dataclass
+class GovernanceConfig:
+    """
+    Configuration for all governance levers.
+
+    Each lever can be enabled/disabled and parameterized independently.
+    """
+
+    # Transaction tax
+    transaction_tax_rate: float = 0.0
+    transaction_tax_split: float = 0.5  # fraction paid by initiator
+
+    # Reputation decay
+    reputation_decay_rate: float = 1.0  # 1.0 = no decay
+
+    # Vote normalization (diminishing influence with vote count)
+    vote_normalization_enabled: bool = False
+    max_vote_weight_per_agent: float = 10.0
+
+    # Bandwidth caps
+    bandwidth_cap: int = 10
+
+    # Staking requirements
+    staking_enabled: bool = False
+    min_stake_to_participate: float = 0.0
+    stake_slash_rate: float = 0.1  # fraction slashed on violation
+
+    # Circuit breaker
+    circuit_breaker_enabled: bool = False
+    freeze_threshold_toxicity: float = 0.7
+    freeze_threshold_violations: int = 3
+    freeze_duration_epochs: int = 2
+
+    # Random audit
+    audit_enabled: bool = False
+    audit_probability: float = 0.1
+    audit_penalty_multiplier: float = 2.0
+    audit_threshold_p: float = 0.5
+
+    def validate(self) -> None:
+        """Validate configuration values."""
+        if not 0.0 <= self.transaction_tax_rate <= 1.0:
+            raise ValueError("transaction_tax_rate must be in [0, 1]")
+        if not 0.0 <= self.transaction_tax_split <= 1.0:
+            raise ValueError("transaction_tax_split must be in [0, 1]")
+        if self.reputation_decay_rate < 0.0 or self.reputation_decay_rate > 1.0:
+            raise ValueError("reputation_decay_rate must be in [0, 1]")
+        if self.max_vote_weight_per_agent <= 0:
+            raise ValueError("max_vote_weight_per_agent must be positive")
+        if self.bandwidth_cap < 0:
+            raise ValueError("bandwidth_cap must be non-negative")
+        if self.min_stake_to_participate < 0:
+            raise ValueError("min_stake_to_participate must be non-negative")
+        if not 0.0 <= self.stake_slash_rate <= 1.0:
+            raise ValueError("stake_slash_rate must be in [0, 1]")
+        if not 0.0 <= self.freeze_threshold_toxicity <= 1.0:
+            raise ValueError("freeze_threshold_toxicity must be in [0, 1]")
+        if self.freeze_threshold_violations < 1:
+            raise ValueError("freeze_threshold_violations must be >= 1")
+        if self.freeze_duration_epochs < 1:
+            raise ValueError("freeze_duration_epochs must be >= 1")
+        if not 0.0 <= self.audit_probability <= 1.0:
+            raise ValueError("audit_probability must be in [0, 1]")
+        if self.audit_penalty_multiplier < 0:
+            raise ValueError("audit_penalty_multiplier must be non-negative")
+        if not 0.0 <= self.audit_threshold_p <= 1.0:
+            raise ValueError("audit_threshold_p must be in [0, 1]")
