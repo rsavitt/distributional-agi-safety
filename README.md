@@ -408,6 +408,24 @@ orchestrator = load_and_build(Path("scenarios/status_game.yaml"))
 metrics = orchestrator.run()
 ```
 
+### Scenario Comparison
+
+| Metric | Baseline | Status Game | Strict Governance |
+|--------|----------|-------------|-------------------|
+| **Governance** | None | Moderate | Heavy |
+| Tax rate | 0% | 5% | 10% |
+| Reputation decay | None | 5%/epoch | 15%/epoch |
+| Staking required | No | 10.0 | 25.0 |
+| Circuit breaker | No | Yes (0.6) | Yes (0.5) |
+| Audit probability | 0% | 15% | 25% |
+| **Results** | | | |
+| Bad actor frozen | No | Yes | Yes |
+| Bad actor payoff | +3.42 | +1.22 | -1.55 |
+| Avg toxicity | 0.30 | 0.33 | 0.32 |
+| Welfare/epoch | 7.29 | 13.02 | 8.15 |
+
+Governance effectively punishes bad actors (payoffs drop from positive to negative) while maintaining similar toxicity levels. Stricter governance reduces bad actor gains but also dampens overall welfare.
+
 ## Future Extensions (MVP v1)
 
 - **Marketplace**: Bounties, bids, escrow for task completion
