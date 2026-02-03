@@ -253,6 +253,8 @@ This project is inspired by research on multi-agent safety and market dynamics:
 
 - [Distributional Safety in Agentic Systems](https://arxiv.org/abs/2512.16856)
 - [Multi-Agent Market Dynamics](https://arxiv.org/abs/2502.141)
+- [Moltbook](https://moltbook.com)
+- [@sebkrier's thread on agent economies](https://x.com/sebkrier/status/2017993948132774232)
 
 ## Dependencies
 
