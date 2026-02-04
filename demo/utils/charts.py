@@ -201,8 +201,11 @@ def sweep_tradeoff_scatter(
     import plotly.graph_objects as go
     from plotly.subplots import make_subplots
 
+    # Human-readable label for the swept parameter
+    pretty = x_key.replace("_", " ").title()
+
     fig = make_subplots(rows=1, cols=2,
-                        subplot_titles=("Toxicity vs Tax Rate", "Welfare vs Tax Rate"))
+                        subplot_titles=(f"Toxicity vs {pretty}", f"Welfare vs {pretty}"))
 
     x_vals = [r[x_key] for r in sweep_results]
 
@@ -221,6 +224,6 @@ def sweep_tradeoff_scatter(
     )
 
     fig.update_layout(height=height, showlegend=False)
-    fig.update_xaxes(title_text="Tax Rate", row=1, col=1)
-    fig.update_xaxes(title_text="Tax Rate", row=1, col=2)
+    fig.update_xaxes(title_text=pretty, row=1, col=1)
+    fig.update_xaxes(title_text=pretty, row=1, col=2)
     return fig

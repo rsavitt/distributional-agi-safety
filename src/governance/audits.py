@@ -70,9 +70,10 @@ class RandomAuditLever(GovernanceLever):
             cost_a = base_penalty
             penalty_applied = True
 
-            # Reputation penalty: degrade the initiator's reputation so
-            # future interactions produce worse observables.
-            reputation_deltas[interaction.initiator] = -shortfall
+            # Reputation penalty scaled by the same multiplier as the cost
+            # so the feedback through reputation → observables → p is
+            # strong enough to show up in parameter sweeps.
+            reputation_deltas[interaction.initiator] = -base_penalty
 
         return LeverEffect(
             cost_a=cost_a,
