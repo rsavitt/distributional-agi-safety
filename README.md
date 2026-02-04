@@ -235,6 +235,8 @@ distributional-agi-safety/
 │   ├── test_collusion.py       # Collusion detection tests (26 tests)
 │   ├── test_capabilities.py    # Emergent capability tests (32 tests)
 │   ├── test_redteam.py         # Red-teaming tests (45 tests)
+│   ├── test_boundaries.py      # Boundary tests (53 tests)
+│   ├── test_dashboard.py       # Dashboard tests (19 tests)
 │   └── fixtures/
 │       └── interactions.py     # Test data generators
 ├── examples/
@@ -927,7 +929,7 @@ interactions = orchestrator.event_log.to_interactions()
 ## Running Tests
 
 ```bash
-# Run all tests (424 tests)
+# Run all tests (496 tests)
 pytest tests/ -v
 
 # Run with coverage
@@ -1062,10 +1064,166 @@ Supported parameter paths:
 - `payoff.*` - Any PayoffConfig field
 - `n_epochs`, `steps_per_epoch` - Simulation settings
 
-## Future Extensions
+## Semi-Permeable Boundaries
 
-- **Semi-Permeable Boundaries**: Model sandbox-external world interactions
-- **Dashboard**: Streamlit visualization of metrics over time
+Model sandbox-external world interactions with information flow tracking, boundary policies, and leakage detection.
+
+### External World Simulation
+
+```python
+from src.boundaries import (
+    ExternalWorld,
+    ExternalService,
+    ExternalDataSource,
+)
+
+# Create external world with default entities
+world = ExternalWorld().create_default_world()
+
+# Default entities include:
+# - web_search: Web search API
+# - code_repo: Code repository API
+# - external_llm: External LLM API
+# - public_data: Public dataset
+# - private_data: Private database
+```
+
+### Information Flow Tracking
+
+```python
+from src.boundaries import FlowTracker, FlowDirection, FlowType
+
+tracker = FlowTracker(sensitivity_threshold=0.5)
+
+# Flows are automatically tracked when using orchestrator boundaries
+metrics = tracker.get_summary()
+print(f"Total flows: {metrics.total_flows}")
+print(f"Blocked: {metrics.blocked_flows}")
+print(f"Sensitive: {metrics.sensitive_flows}")
+```
+
+### Boundary Policies
+
+```python
+from src.boundaries import (
+    PolicyEngine,
+    RateLimitPolicy,
+    ContentFilterPolicy,
+    SensitivityPolicy,
+)
+
+# Create policy engine with default policies
+engine = PolicyEngine().create_default_policies()
+
+# Or customize policies
+engine = PolicyEngine()
+engine.add_policy(RateLimitPolicy(
+    max_crossings_per_minute=100,
+    max_bytes_per_minute=10_000_000,
+))
+engine.add_policy(ContentFilterPolicy(
+    blocked_keywords={"password", "secret"},
+    blocked_patterns=[r"api_key\s*=\s*\S+"],
+))
+engine.add_policy(SensitivityPolicy(
+    max_outbound_sensitivity=0.6,
+))
+```
+
+### Leakage Detection
+
+```python
+from src.boundaries import LeakageDetector
+
+detector = LeakageDetector()
+
+# Scan outbound content
+events = detector.scan(
+    content="Send to user@example.com with password=secret123",
+    agent_id="agent_1",
+    destination_id="external_api",
+)
+
+for event in events:
+    print(f"Detected: {event.leakage_type.value} (severity: {event.severity})")
+
+# Generate report
+report = detector.generate_report()
+print(f"Total events: {report.total_events}")
+print(f"Recommendations: {report.recommendations}")
+```
+
+### Enable Boundaries in Orchestrator
+
+```python
+from src.core.orchestrator import Orchestrator, OrchestratorConfig
+
+config = OrchestratorConfig(
+    enable_boundaries=True,
+    boundary_sensitivity_threshold=0.5,
+)
+orchestrator = Orchestrator(config)
+
+# Request external interaction
+result = orchestrator.request_external_interaction(
+    agent_id="agent_1",
+    entity_id="web_search",
+    action="call",
+    payload={"query": "test"},
+)
+
+# Get boundary metrics
+metrics = orchestrator.get_boundary_metrics()
+```
+
+## Dashboard
+
+Real-time Streamlit dashboard for monitoring simulation metrics.
+
+### Running the Dashboard
+
+```bash
+# Generate and run dashboard
+streamlit run src/analysis/streamlit_app.py
+```
+
+### Programmatic Usage
+
+```python
+from src.analysis import (
+    DashboardState,
+    MetricSnapshot,
+    AgentSnapshot,
+    extract_metrics_from_orchestrator,
+    extract_agent_snapshots,
+    run_dashboard,
+)
+
+# Extract metrics from orchestrator
+snapshot = extract_metrics_from_orchestrator(orchestrator)
+
+# Create dashboard state
+state = DashboardState()
+state.update_metrics(snapshot)
+
+# Extract agent snapshots
+for agent_snapshot in extract_agent_snapshots(orchestrator):
+    state.update_agent(agent_snapshot)
+
+# Export to JSON
+json_data = state.export_to_json()
+
+# Run dashboard (opens in browser)
+run_dashboard(port=8501)
+```
+
+### Dashboard Features
+
+- **Metrics Over Time**: Toxicity rate, quality gap, welfare trends
+- **Agent Distribution**: Type breakdown, reputation rankings
+- **Governance Metrics**: Costs, audits, frozen agents
+- **Boundary Metrics**: Crossings, blocked attempts, leakage events
+- **Event Log**: Recent interactions and governance actions
 
 ## References
 
