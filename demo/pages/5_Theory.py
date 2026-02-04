@@ -32,12 +32,14 @@ before weighting.
 
 The raw score is then mapped to a probability through a calibrated sigmoid:
 """)
-st.latex(r"p = P(v = +1 \mid \hat{v}) = \frac{1}{1 + e^{-k\,\hat{v}}}")
+st.latex(r"p = P(v = +1 \mid \hat{v}) = \frac{1}{1 + e^{-k(\hat{v} - b)}}")
 st.markdown(r"""
-where $k > 0$ controls steepness (default $k = 2$; higher values yield sharper labels).
-The sigmoid is centered at $\hat{v} = 0$, so interactions with a positive proxy score
-map to $p > 0.5$. This gives us a **soft label** --- a probability that the interaction
-is beneficial, rather than a binary decision. Using probabilistic labels avoids the
+where $k > 0$ controls steepness (default $k = 2$; higher values yield sharper labels)
+and $b$ shifts the decision boundary (default $b = 0$). With $b = 0$ the sigmoid is
+centered at $\hat{v} = 0$, so interactions with a positive proxy score map to $p > 0.5$.
+A learned or tuned $b \neq 0$ would be useful if the proxy were fitted via gradient
+descent. This gives us a **soft label** --- a probability that the interaction is
+beneficial, rather than a binary decision. Using probabilistic labels avoids the
 brittleness of hard binary classifications and better captures uncertainty [4, 5].
 """)
 
