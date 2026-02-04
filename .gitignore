@@ -28,3 +28,4 @@ logs/
 .env
 .venv/
 venv/
+.streamlit/secrets.toml
