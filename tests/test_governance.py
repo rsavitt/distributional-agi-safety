@@ -89,36 +89,37 @@ class TestTransactionTaxLever:
         assert effect.cost_a == 0.0
         assert effect.cost_b == 0.0
 
-    def test_tax_proportional_to_tau(self):
-        """Tax should be proportional to |tau|."""
+    def test_tax_increases_with_tau(self):
+        """Tax should increase with |tau|."""
         config = GovernanceConfig(transaction_tax_rate=0.1, transaction_tax_split=0.5)
         lever = TransactionTaxLever(config)
 
         state = EnvState()
 
-        # tau = 1.0
-        interaction1 = SoftInteraction(tau=1.0)
+        # tau = 1.0, p = 0.5 → surplus_est = 0.5, tax_base = 1.5
+        interaction1 = SoftInteraction(tau=1.0, accepted=True)
         effect1 = lever.on_interaction(interaction1, state)
 
-        # tau = 2.0
-        interaction2 = SoftInteraction(tau=2.0)
+        # tau = 2.0, p = 0.5 → surplus_est = 0.5, tax_base = 2.5
+        interaction2 = SoftInteraction(tau=2.0, accepted=True)
         effect2 = lever.on_interaction(interaction2, state)
 
-        # Tax should double
-        assert effect2.cost_a == pytest.approx(2 * effect1.cost_a)
-        assert effect2.cost_b == pytest.approx(2 * effect1.cost_b)
+        # Tax should increase with tau
+        assert effect2.cost_a > effect1.cost_a
+        assert effect2.cost_b > effect1.cost_b
 
     def test_tax_split(self):
         """Tax should be split according to config."""
         config = GovernanceConfig(transaction_tax_rate=0.1, transaction_tax_split=0.7)
         lever = TransactionTaxLever(config)
 
-        interaction = SoftInteraction(tau=1.0)
+        # p=0.5 → surplus_est = 0.5, tax_base = 0.5 + 1.0 = 1.5
+        interaction = SoftInteraction(tau=1.0, accepted=True)
         state = EnvState()
 
         effect = lever.on_interaction(interaction, state)
 
-        total_tax = 0.1 * 1.0  # 10% of tau
+        total_tax = 0.1 * 1.5  # 10% of (surplus_est + tau)
         assert effect.cost_a == pytest.approx(total_tax * 0.7)
         assert effect.cost_b == pytest.approx(total_tax * 0.3)
 
@@ -129,14 +130,39 @@ class TestTransactionTaxLever:
 
         state = EnvState()
 
-        interaction_pos = SoftInteraction(tau=1.0)
-        interaction_neg = SoftInteraction(tau=-1.0)
+        interaction_pos = SoftInteraction(tau=1.0, accepted=True)
+        interaction_neg = SoftInteraction(tau=-1.0, accepted=True)
 
         effect_pos = lever.on_interaction(interaction_pos, state)
         effect_neg = lever.on_interaction(interaction_neg, state)
 
         assert effect_pos.cost_a == effect_neg.cost_a
         assert effect_pos.cost_b == effect_neg.cost_b
+
+    def test_no_tax_on_rejected_interaction(self):
+        """Rejected interactions should not be taxed."""
+        config = GovernanceConfig(transaction_tax_rate=0.1)
+        lever = TransactionTaxLever(config)
+
+        state = EnvState()
+        interaction = SoftInteraction(tau=1.0, accepted=False)
+        effect = lever.on_interaction(interaction, state)
+
+        assert effect.cost_a == 0.0
+        assert effect.cost_b == 0.0
+
+    def test_tax_with_zero_tau(self):
+        """Tax should still apply via surplus estimate even when tau is 0."""
+        config = GovernanceConfig(transaction_tax_rate=0.1, transaction_tax_split=0.5)
+        lever = TransactionTaxLever(config)
+
+        state = EnvState()
+        # p=0.7 → surplus_est = 0.7*2 - 0.3*1 = 1.1, tax_base = 1.1
+        interaction = SoftInteraction(tau=0.0, p=0.7, accepted=True)
+        effect = lever.on_interaction(interaction, state)
+
+        assert effect.cost_a > 0
+        assert effect.cost_b > 0
 
 
 class TestReputationDecayLever:
@@ -423,7 +449,7 @@ class TestGovernanceEngine:
         engine = GovernanceEngine(config)
 
         state = EnvState()
-        interaction = SoftInteraction(tau=1.0, p=0.7)
+        interaction = SoftInteraction(tau=1.0, p=0.7, accepted=True)
 
         effect = engine.apply_interaction(interaction, state)
 

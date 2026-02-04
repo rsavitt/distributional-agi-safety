@@ -25,7 +25,11 @@ class TransactionTaxLever(GovernanceLever):
         """
         Apply transaction tax to the interaction.
 
-        Tax is proportional to |tau| and split according to transaction_tax_split.
+        Tax is proportional to the interaction value and split according
+        to transaction_tax_split.  The tax base combines explicit transfers
+        (|tau|) with the estimated expected surplus derived from the
+        interaction's soft label p.  This ensures the tax is meaningful
+        even when agents do not use explicit transfers.
 
         Args:
             interaction: The completed interaction
@@ -37,8 +41,14 @@ class TransactionTaxLever(GovernanceLever):
         if self.config.transaction_tax_rate == 0.0:
             return LeverEffect(lever_name=self.name)
 
-        # Tax base is absolute value of transfer
-        tax_base = abs(interaction.tau)
+        if not interaction.accepted:
+            return LeverEffect(lever_name=self.name)
+
+        # Estimate expected surplus from the soft label p.
+        # Uses PayoffConfig defaults (s_plus=2, s_minus=1) for the estimate;
+        # only the positive part is taxed (no rebate for negative surplus).
+        surplus_estimate = interaction.p * 2.0 - (1 - interaction.p) * 1.0
+        tax_base = max(surplus_estimate, 0.0) + abs(interaction.tau)
         total_tax = self.config.transaction_tax_rate * tax_base
 
         # Split between parties

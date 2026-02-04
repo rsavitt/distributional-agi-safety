@@ -836,7 +836,13 @@ class Orchestrator:
         proposal: InteractionProposal,
         accepted: bool,
     ) -> ProxyObservables:
-        """Generate observable signals for an interaction."""
+        """Generate observable signals for an interaction.
+
+        Observables are based on the initiator's agent type and modulated
+        by the initiator's current reputation.  This creates a feedback
+        loop: reputation decay degrades observable quality, which lowers
+        the soft label p, which in turn reduces payoffs and welfare.
+        """
         # Base observables depend on agent types
         initiator_state = self.state.get_agent(proposal.initiator_id)
         counterparty_state = self.state.get_agent(proposal.counterparty_id)
@@ -869,6 +875,14 @@ class Orchestrator:
             rejections = random.randint(1, 2)
             misuse = random.randint(0, 1)
             engagement = random.uniform(-0.5, -0.1)
+
+        # Modulate by initiator reputation: agents with higher reputation
+        # produce better observable signals.  Maps reputation from [-1, 1]
+        # to a factor in [0.5, 1.0] so the effect is meaningful but bounded.
+        rep = initiator_state.reputation if initiator_state else 0.0
+        rep_factor = 0.75 + 0.25 * max(min(rep, 1.0), -1.0)  # [0.5, 1.0]
+        task_progress *= rep_factor
+        engagement *= rep_factor
 
         # Modify if not accepted
         if not accepted:
