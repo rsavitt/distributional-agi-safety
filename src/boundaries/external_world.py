@@ -4,10 +4,10 @@ This module models the external environment that agents in the sandbox
 may interact with, including external services, data sources, and entities.
 """
 
+import random
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Callable, Dict, List, Optional, Set
-import random
+from typing import Any, Dict, List, Optional
 
 
 class ExternalEntityType(Enum):

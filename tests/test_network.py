@@ -5,7 +5,6 @@ import pytest
 
 from src.env.network import AgentNetwork, NetworkConfig, NetworkTopology
 
-
 # =============================================================================
 # Fixtures
 # =============================================================================
@@ -599,7 +598,7 @@ class TestOrchestratorIntegration:
         for i in range(4):
             orchestrator.register_agent(HonestAgent(f"agent_{i}"))
 
-        metrics = orchestrator.run()
+        orchestrator.run()
 
         # Edges should have decayed
         network = orchestrator.network

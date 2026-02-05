@@ -5,7 +5,6 @@ from typing import Dict, List, Optional
 
 from src.agents.base import (
     Action,
-    ActionType,
     BaseAgent,
     InteractionProposal,
     Observation,

@@ -2,13 +2,11 @@
 
 import random
 
-import pytest
-
-from src.agents.base import Action, ActionType, BaseAgent, Observation, Role
+from src.agents.adversarial import AdversarialAgent
+from src.agents.base import Action, ActionType, Observation, Role
+from src.agents.deceptive import DeceptiveAgent
 from src.agents.honest import HonestAgent
 from src.agents.opportunistic import OpportunisticAgent
-from src.agents.deceptive import DeceptiveAgent
-from src.agents.adversarial import AdversarialAgent
 from src.models.agent import AgentState, AgentType
 from src.models.interaction import InteractionType, SoftInteraction
 

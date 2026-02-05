@@ -4,11 +4,11 @@ This module tracks all information crossing the sandbox boundary,
 enabling analysis of what data enters and leaves the system.
 """
 
+import hashlib
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Any, Dict, List, Optional, Set
-import hashlib
+from typing import Any, Dict, List, Optional
 
 
 class FlowDirection(Enum):

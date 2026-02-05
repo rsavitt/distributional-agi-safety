@@ -2,7 +2,7 @@
 
 import random
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional
 
 from src.agents.base import Action, ActionType, Observation, Role
 

@@ -325,7 +325,7 @@ class Orchestrator:
         ))
 
         # Main loop
-        for epoch in range(self.config.n_epochs):
+        for _epoch in range(self.config.n_epochs):
             epoch_metrics = self._run_epoch()
             self._epoch_metrics.append(epoch_metrics)
 
@@ -355,7 +355,7 @@ class Orchestrator:
             )
             self._apply_governance_effect(gov_effect)
 
-        for step in range(self.config.steps_per_epoch):
+        for _step in range(self.config.steps_per_epoch):
             if self.state.is_paused:
                 break
 
@@ -551,7 +551,7 @@ class Orchestrator:
                 return False
 
             try:
-                post = self.feed.create_post(
+                self.feed.create_post(
                     author_id=agent_id,
                     content=action.content[:self.config.max_content_length],
                 )
@@ -565,7 +565,7 @@ class Orchestrator:
                 return False
 
             try:
-                post = self.feed.create_post(
+                self.feed.create_post(
                     author_id=agent_id,
                     content=action.content[:self.config.max_content_length],
                     parent_id=action.target_id,
@@ -1118,7 +1118,7 @@ class Orchestrator:
         ))
 
         # Main loop
-        for epoch in range(self.config.n_epochs):
+        for _epoch in range(self.config.n_epochs):
             epoch_metrics = await self._run_epoch_async()
             self._epoch_metrics.append(epoch_metrics)
 
@@ -1148,7 +1148,7 @@ class Orchestrator:
             )
             self._apply_governance_effect(gov_effect)
 
-        for step in range(self.config.steps_per_epoch):
+        for _step in range(self.config.steps_per_epoch):
             if self.state.is_paused:
                 break
 
@@ -1274,7 +1274,7 @@ class Orchestrator:
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
         # Process results
-        for proposal, result in zip(proposals, results):
+        for proposal, result in zip(proposals, results, strict=False):
             if isinstance(result, Exception) or result is None:
                 continue
 

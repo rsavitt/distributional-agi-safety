@@ -1,6 +1,6 @@
 """Moderator role for content moderation."""
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Dict, List, Optional, Set
 
 from src.agents.base import Action, ActionType, Observation, Role
@@ -219,7 +219,7 @@ class ModeratorRole:
         """
         # Review flagged content
         if self._flagged_content:
-            flagged = self._flagged_content[0]
+            self._flagged_content[0]
             # Would need to get content from feed
             # For now, just process flags
             actions = self.process_flagged_content()

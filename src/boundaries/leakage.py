@@ -4,12 +4,12 @@ This module detects potential data leakage through the sandbox boundary,
 including sensitive data exposure, credential leaks, and information exfiltration.
 """
 
+import hashlib
+import re
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Any, Callable, Dict, List, Optional, Pattern, Set
-import re
-import hashlib
+from typing import Any, Dict, List, Optional, Pattern, Set
 
 
 class LeakageType(Enum):
@@ -185,7 +185,6 @@ class LeakageDetector:
 
         # Check for duplicate content
         content_hash = hashlib.sha256(content_str.encode()).hexdigest()[:16]
-        is_duplicate = content_hash in self.seen_hashes
         if self.track_hashes:
             self.seen_hashes.add(content_hash)
 

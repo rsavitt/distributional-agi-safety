@@ -8,14 +8,10 @@ import pytest
 from src.governance import GovernanceConfig, GovernanceEngine
 from src.metrics.collusion import (
     CollusionDetector,
-    CollusionReport,
-    GroupMetrics,
-    PairMetrics,
     detect_vote_coordination,
     temporal_clustering_score,
 )
 from src.models.interaction import InteractionType, SoftInteraction
-
 
 # =============================================================================
 # Test Fixtures
@@ -228,7 +224,7 @@ class TestPairMetrics:
             create_interaction("a", "b"),
         ]
 
-        report = detector.analyze(interactions)
+        detector.analyze(interactions)
 
         # Find the a-b pair metrics
         for key, metrics in detector._group_by_pair(interactions).items():
@@ -391,7 +387,7 @@ class TestTemporalClustering:
         result = temporal_clustering_score(interactions, window_seconds=50)
 
         # Uniform spacing shouldn't show high clustering
-        for agent, score in result.items():
+        for _agent, score in result.items():
             assert score < 0.5
 
     def test_bursty_timing(self):
@@ -590,17 +586,17 @@ class TestCollusionPenaltyLever:
         """Create a CollusionPenaltyLever with sensible test defaults."""
         from src.governance.collusion import CollusionPenaltyLever
 
-        defaults = dict(
-            collusion_detection_enabled=True,
-            collusion_frequency_threshold=1.5,
-            collusion_correlation_threshold=0.7,
-            collusion_min_interactions=3,
-            collusion_score_threshold=0.3,
-            collusion_penalty_multiplier=1.0,
-            collusion_realtime_penalty=False,
-            collusion_realtime_rate=0.1,
-            collusion_clear_history_on_epoch=False,
-        )
+        defaults = {
+            "collusion_detection_enabled": True,
+            "collusion_frequency_threshold": 1.5,
+            "collusion_correlation_threshold": 0.7,
+            "collusion_min_interactions": 3,
+            "collusion_score_threshold": 0.3,
+            "collusion_penalty_multiplier": 1.0,
+            "collusion_realtime_penalty": False,
+            "collusion_realtime_rate": 0.1,
+            "collusion_clear_history_on_epoch": False,
+        }
         defaults.update(overrides)
         config = GovernanceConfig(**defaults)
         return CollusionPenaltyLever(config)
@@ -666,9 +662,9 @@ class TestCollusionPenaltyLever:
 
         # If agents were flagged, penalties should be applied
         if effect.reputation_deltas:
-            for agent_id, delta in effect.reputation_deltas.items():
+            for _agent_id, delta in effect.reputation_deltas.items():
                 assert delta < 0  # Penalties are negative
-            for agent_id, delta in effect.resource_deltas.items():
+            for _agent_id, delta in effect.resource_deltas.items():
                 assert delta < 0
 
     def test_on_epoch_start_clear_after_detection(self):

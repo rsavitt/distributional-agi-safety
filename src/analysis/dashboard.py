@@ -11,9 +11,9 @@ Or programmatically:
     create_dashboard(orchestrator)
 """
 
-from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, List, Optional, Tuple
 import json
+from dataclasses import dataclass
+from typing import Any, Dict, List, Optional, Tuple
 
 
 @dataclass
@@ -236,7 +236,7 @@ def extract_agent_snapshots(orchestrator: Any) -> List[AgentSnapshot]:
     """
     snapshots = []
 
-    for agent_id, agent in orchestrator._agents.items():
+    for agent_id, _agent in orchestrator._agents.items():
         agent_state = orchestrator.state.get_agent(agent_id)
         if agent_state:
             # Calculate total interactions from initiated + received
@@ -652,7 +652,6 @@ def run_dashboard(
     """
     import subprocess
     import sys
-    from pathlib import Path
 
     # Create the dashboard file
     dashboard_path = create_dashboard_file()

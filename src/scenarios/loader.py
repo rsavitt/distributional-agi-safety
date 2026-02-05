@@ -205,8 +205,8 @@ def parse_network_config(data: Dict[str, Any]) -> Optional[NetworkConfig]:
     topology_str = data.get("topology", "complete").lower()
     try:
         topology = NetworkTopology(topology_str)
-    except ValueError:
-        raise ValueError(f"Unknown network topology: {topology_str}")
+    except ValueError as err:
+        raise ValueError(f"Unknown network topology: {topology_str}") from err
 
     # Parse params (may be nested under 'params' key or flat)
     params = data.get("params", {})
@@ -320,7 +320,7 @@ def load_scenario(path: Path) -> ScenarioConfig:
     )
 
 
-def parse_llm_config(data: Dict[str, Any]) -> "LLMConfig":
+def parse_llm_config(data: Dict[str, Any]) -> Any:
     """
     Parse LLM configuration from YAML.
 
@@ -339,15 +339,15 @@ def parse_llm_config(data: Dict[str, Any]) -> "LLMConfig":
     provider_str = data.get("provider", "anthropic").lower()
     try:
         provider = LLMProvider(provider_str)
-    except ValueError:
-        raise ValueError(f"Unknown LLM provider: {provider_str}")
+    except ValueError as err:
+        raise ValueError(f"Unknown LLM provider: {provider_str}") from err
 
     # Parse persona
     persona_str = data.get("persona", "open").lower()
     try:
         persona = PersonaType(persona_str)
-    except ValueError:
-        raise ValueError(f"Unknown persona type: {persona_str}")
+    except ValueError as err:
+        raise ValueError(f"Unknown persona type: {persona_str}") from err
 
     return LLMConfig(
         provider=provider,

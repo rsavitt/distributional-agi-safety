@@ -7,12 +7,9 @@ for the dashboard and analysis notebooks.
 from typing import Any, Dict, List, Optional, Tuple
 
 from src.analysis.aggregation import (
-    AgentSnapshot,
     EpochSnapshot,
     SimulationHistory,
-    TimeSeriesPoint,
 )
-
 
 # Type alias for plot data that can be used by multiple backends
 PlotData = Dict[str, Any]
@@ -443,7 +440,7 @@ def plotly_heatmap(
         hoverongaps=False,
     ))
 
-    metric_name = data.get("metric", "Value").replace("_", " ").title()
+    data.get("metric", "Value").replace("_", " ").title()
     fig.update_layout(
         title=title,
         xaxis_title="Agent",
@@ -581,8 +578,8 @@ def plotly_network(
         Plotly Figure object
     """
     try:
-        import plotly.graph_objects as go
         import numpy as np
+        import plotly.graph_objects as go
     except ImportError:
         return None
 

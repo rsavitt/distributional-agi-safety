@@ -1,18 +1,19 @@
 """Tests for the dashboard module."""
 
-import pytest
 import json
-from pathlib import Path
 import tempfile
+from pathlib import Path
+
+import pytest
 
 from src.analysis.dashboard import (
+    AgentSnapshot,
     DashboardConfig,
     DashboardState,
     MetricSnapshot,
-    AgentSnapshot,
-    extract_metrics_from_orchestrator,
-    extract_agent_snapshots,
     create_dashboard_file,
+    extract_agent_snapshots,
+    extract_metrics_from_orchestrator,
 )
 
 
@@ -241,8 +242,8 @@ class TestOrchestratorExtraction:
 
     def test_extract_agent_snapshots(self):
         """Test extracting agent snapshots."""
-        from src.core.orchestrator import Orchestrator, OrchestratorConfig
         from src.agents.honest import HonestAgent
+        from src.core.orchestrator import Orchestrator, OrchestratorConfig
 
         config = OrchestratorConfig()
         orchestrator = Orchestrator(config)
@@ -294,9 +295,9 @@ class TestDashboardIntegration:
 
     def test_full_integration(self):
         """Test full integration with a running orchestrator."""
-        from src.core.orchestrator import Orchestrator, OrchestratorConfig
-        from src.agents.honest import HonestAgent
         from src.agents.adversarial import AdversarialAgent
+        from src.agents.honest import HonestAgent
+        from src.core.orchestrator import Orchestrator, OrchestratorConfig
 
         config = OrchestratorConfig(
             n_epochs=3,
