@@ -255,7 +255,7 @@ Detailed documentation for each subsystem:
 
 | Topic | Description |
 |-------|-------------|
-| [Theoretical Foundations](docs/theory.md) | Market microstructure theory, Kyle/Glosten-Milgrom models, references |
+| [Whitepaper + Theoretical Foundations](docs/whitepaper_theory.md) | Problem framing, market microstructure theory, Kyle/Glosten-Milgrom models, and references |
 | [LLM Agents](docs/llm-agents.md) | Providers, personas, cost tracking, YAML config |
 | [Network Topology](docs/network-topology.md) | Topology types, dynamic evolution, network metrics |
 | [Governance](docs/governance.md) | Levers, collusion detection, integration points |
@@ -267,7 +267,6 @@ Detailed documentation for each subsystem:
 | [Incoherence Metric Contract](docs/incoherence_metric_contract.md) | Definitions and edge-case semantics for `D`, `E`, and `I` |
 | [Incoherence Scaling Analysis](docs/analysis/incoherence_scaling.md) | Replay-sweep artifact and upgrade path to decision-level replay metrics |
 | [Incoherence Governance Transferability](docs/transferability/incoherence_governance.md) | Deployment caveats and assumptions for incoherence interventions |
-| [Whitepaper (Short)](docs/whitepaper.md) | Problem framing, method, and citation-friendly summary |
 
 ## Directory Structure
 
