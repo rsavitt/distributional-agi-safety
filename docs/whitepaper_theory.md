@@ -1,6 +1,6 @@
 # Distributional AGI Safety Sandbox
 
-## Unified Whitepaper and Theory Reference
+## Whitepaper and Theoretical Foundations
 
 Author: Raeli Savitt (with AI assistance)  
 Version: 0.1.0  
@@ -17,9 +17,7 @@ This document combines the project whitepaper and theoretical foundations in one
 
 ## Part I: Whitepaper Overview
 
-### A Short Whitepaper-Style Overview
-
-## Abstract
+### Abstract
 
 The Distributional AGI Safety Sandbox is a simulation framework for analyzing
 safety in multi-agent AI systems under distribution shift, strategic behavior,
@@ -27,7 +25,7 @@ and governance constraints. The project uses probabilistic (soft) labels,
 replay-based incoherence metrics, and configurable governance interventions to
 evaluate trade-offs between harm reduction and system welfare.
 
-## The Problem
+### Problem Statement
 
 AGI safety work often struggles to connect:
 
@@ -37,7 +35,7 @@ AGI safety work often struggles to connect:
 This repository addresses that gap by making failure modes measurable and
 policy levers testable under controlled, repeatable simulation settings.
 
-## Method Summary
+### Method Summary
 
 The framework combines:
 
@@ -51,19 +49,19 @@ The framework combines:
    incoherence-targeted interventions).
 5. Scenario sweeps and replay analysis to compare safety and welfare outcomes.
 
-## Why It Matters
+### Why It Matters
 
 - Supports rapid prototyping of AGI safety mechanisms.
 - Makes intervention trade-offs explicit (harm reduction vs. welfare impact).
 - Encourages communication of evidence beyond anecdotal demos.
 
-## Known Limits
+### Known Limits
 
 - Results are simulation-based and depend on scenario design.
 - Replay representativeness can break under novel real-world behaviors.
 - Policy conclusions are conditional and require external validation.
 
-## Citation
+### Citation
 
 For machine-readable metadata, use `CITATION.cff` at repo root.
 
@@ -89,13 +87,11 @@ BibTeX:
 
 ## Part II: Theoretical Foundations
 
-This theory note is also included in `docs/whitepaper_theory.md`.
-
 The sandbox draws on **market microstructure theory** to model information asymmetry and adverse selection in multi-agent systems. All formulas below are implemented in `src/core/`.
 
 ---
 
-## 1. Proxy Computation
+### 1. Proxy Computation
 
 Observable signals from each interaction are combined into a raw proxy score:
 
@@ -113,7 +109,7 @@ This gives us a **soft label** --- a probability that the interaction is benefic
 
 ---
 
-## 2. Soft Payoff Structure
+### 2. Soft Payoff Structure
 
 Given a soft label $p$, the expected surplus and externality are:
 
@@ -136,7 +132,7 @@ This payoff decomposition draws on mechanism design principles [3] and the distr
 
 ---
 
-## 3. Acceptance Threshold
+### 3. Acceptance Threshold
 
 An interaction is **accepted** into the ecosystem when $p \geq \bar{p}$, where $\bar{p}$ is the acceptance threshold (default 0.5; distinct from the surplus-split parameter $\theta$ in Section 2). Rejected interactions still generate payoffs for the participants but are excluded from the "official" ecosystem metrics.
 
@@ -144,7 +140,7 @@ This creates a natural tension: agents may exploit borderline interactions that 
 
 ---
 
-## 4. Safety Metrics
+### 4. Safety Metrics
 
 **Toxicity rate** measures expected harm among accepted interactions [4]:
 
@@ -164,7 +160,7 @@ Since transfers cancel in aggregate ($T_a + T_b = 0$), total welfare reduces to 
 
 ---
 
-## 5. Kyle Model: Informed vs Uninformed Agents
+### 5. Kyle Model: Informed vs Uninformed Agents
 
 In Kyle's (1985) continuous auction model [1], *informed traders* possess private information and strategically exploit it through their trading volume. The sandbox maps this to:
 
@@ -174,7 +170,7 @@ In Kyle's (1985) continuous auction model [1], *informed traders* possess privat
 
 Deceptive agents, like informed traders, can profit by selectively engaging when they have private knowledge that an interaction will benefit them at others' expense.
 
-## 6. Glosten-Milgrom Model: Acceptance as Information
+### 6. Glosten-Milgrom Model: Acceptance as Information
 
 Glosten & Milgrom (1985) [2] showed that the *willingness to trade reveals information*. A counterparty eager to transact may signal adverse private information. The sandbox captures this through:
 
@@ -189,7 +185,7 @@ Glosten & Milgrom (1985) [2] showed that the *willingness to trade reveals infor
 
 ---
 
-## 7. Governance Levers
+### 7. Governance Levers
 
 These levers are inspired by economic mechanism design [3] --- creating incentive structures where truthful, cooperative behaviour is the dominant strategy.
 
@@ -204,7 +200,7 @@ These levers are inspired by economic mechanism design [3] --- creating incentiv
 
 ---
 
-## 8. Agent Behavioural Types
+### 8. Agent Behavioural Types
 
 The agent taxonomy maps to the informed-vs-uninformed trader framework from Kyle [1]:
 
@@ -220,7 +216,7 @@ Deceptive agents, like Kyle's informed traders [1], profit by selectively engagi
 
 ---
 
-## 9. Semi-Permeable Boundaries
+### 9. Semi-Permeable Boundaries
 
 The boundary module models information flow between the sandbox and external world [5]:
 
@@ -236,7 +232,7 @@ The **leakage detector** scans outbound content for PII, credentials, and code p
 
 ---
 
-## 10. Incoherence as Variance-Dominated Failure ("Hot Mess" Theory)
+### 10. Incoherence as Variance-Dominated Failure ("Hot Mess" Theory)
 
 Anthropic's "hot mess" framing models difficult reasoning failures as rising
 variance across sampled trajectories, not only systematic bias [6]. This maps
@@ -252,7 +248,7 @@ capability remains unchanged.
 
 ---
 
-## References
+### References
 
 1. Kyle, A.S. (1985). *Continuous Auctions and Insider Trading*. Econometrica, 53(6), 1315–1335.
 2. Glosten, L.R. & Milgrom, P.R. (1985). *Bid, Ask and Transaction Prices in a Specialist Market with Heterogeneously Informed Traders*. Journal of Financial Economics, 14(1), 71–100.
