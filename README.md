@@ -29,7 +29,7 @@ If you care about AGI safety research, this repo gives you a practical way to:
 
 ## Start Here (Researcher Path)
 
-- Read the framing: [Whitepaper + Theoretical Foundations](docs/whitepaper_theory.md)
+- Read the framing: [Whitepaper + Theoretical Foundations](docs/whitepaper.md)
 - Run an incoherence artifact: [Incoherence Scaling Analysis](docs/analysis/incoherence_scaling.md)
 - Inspect policy caveats: [Incoherence Governance Transferability](docs/transferability/incoherence_governance.md)
 - Reproduce from CLI: `python -m src run scenarios/baseline.yaml`
@@ -37,7 +37,7 @@ If you care about AGI safety research, this repo gives you a practical way to:
 ## Cite This Work
 
 - Machine-readable citation metadata: [`CITATION.cff`](CITATION.cff)
-- Combined whitepaper and theory overview: [`docs/whitepaper_theory.md`](docs/whitepaper_theory.md)
+- Combined whitepaper and theory overview: [`docs/whitepaper.md`](docs/whitepaper.md)
 
 ## Overview
 
@@ -255,7 +255,7 @@ Detailed documentation for each subsystem:
 
 | Topic | Description |
 |-------|-------------|
-| [Whitepaper + Theoretical Foundations](docs/whitepaper_theory.md) | Problem framing, market microstructure theory, Kyle/Glosten-Milgrom models, and references |
+| [Whitepaper + Theoretical Foundations](docs/whitepaper.md) | Problem framing, market microstructure theory, Kyle/Glosten-Milgrom models, and references |
 | [LLM Agents](docs/llm-agents.md) | Providers, personas, cost tracking, YAML config |
 | [Network Topology](docs/network-topology.md) | Topology types, dynamic evolution, network metrics |
 | [Governance](docs/governance.md) | Levers, collusion detection, integration points |
