@@ -5,13 +5,9 @@ from pathlib import Path
 import pytest
 
 from src.agents.adversarial import AdversarialAgent
-from src.agents.deceptive import DeceptiveAgent
 from src.agents.honest import HonestAgent
-from src.agents.opportunistic import OpportunisticAgent
 from src.core.orchestrator import EpochMetrics, Orchestrator, OrchestratorConfig
-from src.core.payoff import PayoffConfig
-from src.governance.config import GovernanceConfig
-from src.scenarios.loader import build_orchestrator, load_scenario
+from src.scenarios.loader import ScenarioConfig, build_orchestrator, load_scenario
 
 SCENARIOS_DIR = Path(__file__).parent.parent / "scenarios"
 
@@ -25,10 +21,8 @@ def _avg(values: list[float]) -> float:
     return sum(values) / len(values) if values else 0.0
 
 
-def _run_scenario(name: str) -> tuple["ScenarioConfig", list[EpochMetrics]]:
+def _run_scenario(name: str) -> tuple[ScenarioConfig, list[EpochMetrics]]:
     """Load a YAML scenario, run it, return (config, metrics)."""
-    from src.scenarios.loader import ScenarioConfig
-
     scenario = load_scenario(SCENARIOS_DIR / f"{name}.yaml")
     orch = build_orchestrator(scenario)
     metrics = orch.run()
@@ -137,7 +131,7 @@ class TestDeterminism:
         _, metrics_b = _run_scenario("baseline")
 
         assert len(metrics_a) == len(metrics_b)
-        for a, b in zip(metrics_a, metrics_b):
+        for a, b in zip(metrics_a, metrics_b, strict=True):
             assert a.total_interactions == b.total_interactions
             assert a.accepted_interactions == b.accepted_interactions
             assert a.toxicity_rate == pytest.approx(b.toxicity_rate)

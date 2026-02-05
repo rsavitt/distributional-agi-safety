@@ -1,4 +1,4 @@
-.PHONY: install install-dev lint typecheck test coverage clean
+.PHONY: install install-dev lint lint-fix typecheck test coverage ci clean
 
 install:
 	pip install -e .
@@ -22,6 +22,8 @@ test:
 
 coverage:
 	pytest tests/ --cov=src --cov-report=term-missing --cov-report=html
+
+ci: lint typecheck coverage
 
 clean:
 	rm -rf .mypy_cache .pytest_cache .ruff_cache htmlcov .coverage
