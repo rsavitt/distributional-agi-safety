@@ -20,7 +20,6 @@ from src.metrics.security import (
 )
 from src.models.interaction import InteractionType, SoftInteraction
 
-
 # =============================================================================
 # Test Fixtures
 # =============================================================================
@@ -855,19 +854,19 @@ class TestSecurityLeverEpochStart:
 
     def _make_lever(self, **overrides):
         """Create a SecurityLever with test defaults."""
-        defaults = dict(
-            security_enabled=True,
-            security_injection_threshold=0.3,
-            security_manipulation_threshold=0.5,
-            security_contagion_velocity=2.0,
-            security_min_chain_length=3,
-            security_min_interactions=5,
-            security_penalty_threshold=0.3,
-            security_quarantine_threshold=0.7,
-            security_penalty_multiplier=1.0,
-            security_realtime_penalty=False,
-            security_clear_history_on_epoch=False,
-        )
+        defaults = {
+            "security_enabled": True,
+            "security_injection_threshold": 0.3,
+            "security_manipulation_threshold": 0.5,
+            "security_contagion_velocity": 2.0,
+            "security_min_chain_length": 3,
+            "security_min_interactions": 5,
+            "security_penalty_threshold": 0.3,
+            "security_quarantine_threshold": 0.7,
+            "security_penalty_multiplier": 1.0,
+            "security_realtime_penalty": False,
+            "security_clear_history_on_epoch": False,
+        }
         defaults.update(overrides)
         config = GovernanceConfig(**defaults)
         return SecurityLever(config, seed=42)
@@ -921,7 +920,7 @@ class TestSecurityLeverEpochStart:
         effect = lever.on_epoch_start(state, epoch=1)
 
         assert lever.get_report() is not None
-        report = lever.get_report()
+        lever.get_report()
 
         # Check if penalties were applied to flagged agents
         if effect.reputation_deltas:
@@ -951,12 +950,12 @@ class TestSecurityLeverRealtimeThreat:
     """Tests for _compute_realtime_threat_score and _identify_threat_type."""
 
     def _make_lever(self, **overrides):
-        defaults = dict(
-            security_enabled=True,
-            security_realtime_penalty=True,
-            security_realtime_threshold=0.3,
-            security_realtime_rate=0.5,
-        )
+        defaults = {
+            "security_enabled": True,
+            "security_realtime_penalty": True,
+            "security_realtime_threshold": 0.3,
+            "security_realtime_rate": 0.5,
+        }
         defaults.update(overrides)
         config = GovernanceConfig(**defaults)
         return SecurityLever(config, seed=42)
@@ -992,7 +991,7 @@ class TestSecurityLeverRealtimeThreat:
     def test_threat_score_already_flagged_initiator(self):
         """Previously flagged initiator adds to score."""
         lever = self._make_lever()
-        state = self._make_state(["attacker", "v1", "v2"])
+        self._make_state(["attacker", "v1", "v2"])
         lever.set_agent_ids(["attacker", "v1", "v2"])
 
         # Build report with attacker flagged

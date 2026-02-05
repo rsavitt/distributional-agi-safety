@@ -1,17 +1,15 @@
 """Tests for the Orchestrator simulation engine."""
 
-import pytest
 import tempfile
 from pathlib import Path
 
+import pytest
+
+from src.agents.adversarial import AdversarialAgent
+from src.agents.deceptive import DeceptiveAgent
 from src.agents.honest import HonestAgent
 from src.agents.opportunistic import OpportunisticAgent
-from src.agents.deceptive import DeceptiveAgent
-from src.agents.adversarial import AdversarialAgent
-from src.core.orchestrator import Orchestrator, OrchestratorConfig, EpochMetrics
-from src.core.payoff import PayoffConfig
-from src.env.state import EnvState
-from src.models.agent import AgentType
+from src.core.orchestrator import EpochMetrics, Orchestrator, OrchestratorConfig
 
 
 class TestOrchestratorBasics:
@@ -368,7 +366,7 @@ class TestOrchestratorIntegration:
             for i in range(3):
                 orchestrator.register_agent(HonestAgent(agent_id=f"agent_{i}"))
 
-            original_metrics = orchestrator.run()
+            orchestrator.run()
 
             # Reconstruct interactions from log
             reconstructed = orchestrator.event_log.to_interactions()

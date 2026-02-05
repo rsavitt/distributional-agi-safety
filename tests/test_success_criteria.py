@@ -5,21 +5,20 @@ Tests are split into two classes:
 - TestMVPv1: Economics & governance criteria
 """
 
-import copy
 from pathlib import Path
 
-import pytest
-
-from src.agents import HonestAgent, OpportunisticAgent, DeceptiveAgent, AdversarialAgent
-from src.analysis.dashboard import DashboardConfig, MetricSnapshot, AgentSnapshot, DashboardState
+from src.agents import DeceptiveAgent, HonestAgent, OpportunisticAgent
+from src.analysis.dashboard import (
+    AgentSnapshot,
+    DashboardConfig,
+    DashboardState,
+    MetricSnapshot,
+)
 from src.analysis.sweep import SweepConfig, SweepParameter, SweepRunner
 from src.core.orchestrator import EpochMetrics, Orchestrator, OrchestratorConfig
-from src.core.payoff import PayoffConfig
 from src.governance.config import GovernanceConfig
 from src.logging.event_log import EventLog
-from src.models.agent import AgentType
 from src.scenarios.loader import ScenarioConfig, build_orchestrator, load_scenario
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -119,7 +118,7 @@ class TestMVPv0:
             seed=42,
             log_path=log_path,
         )
-        metrics = orch.run()
+        orch.run()
 
         # Event log should exist and contain events
         assert log_path.exists()

@@ -6,33 +6,33 @@ potential leakage of sensitive data.
 """
 
 from src.boundaries.external_world import (
+    ExternalDataSource,
     ExternalEntity,
     ExternalEntityType,
     ExternalService,
-    ExternalDataSource,
     ExternalWorld,
 )
 from src.boundaries.information_flow import (
     FlowDirection,
+    FlowSummary,
+    FlowTracker,
     FlowType,
     InformationFlow,
-    FlowTracker,
-    FlowSummary,
-)
-from src.boundaries.policies import (
-    CrossingDecision,
-    BoundaryPolicy,
-    RateLimitPolicy,
-    ContentFilterPolicy,
-    SensitivityPolicy,
-    CompositePolicy,
-    PolicyEngine,
 )
 from src.boundaries.leakage import (
-    LeakageType,
-    LeakageEvent,
     LeakageDetector,
+    LeakageEvent,
     LeakageReport,
+    LeakageType,
+)
+from src.boundaries.policies import (
+    BoundaryPolicy,
+    CompositePolicy,
+    ContentFilterPolicy,
+    CrossingDecision,
+    PolicyEngine,
+    RateLimitPolicy,
+    SensitivityPolicy,
 )
 
 __all__ = [

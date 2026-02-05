@@ -2,17 +2,16 @@
 
 import pytest
 
-from src.governance.config import GovernanceConfig
-from src.governance.levers import LeverEffect
-from src.governance.taxes import TransactionTaxLever
-from src.governance.reputation import ReputationDecayLever, VoteNormalizationLever
-from src.governance.admission import StakingLever
-from src.governance.circuit_breaker import CircuitBreakerLever
-from src.governance.audits import RandomAuditLever
-from src.governance.engine import GovernanceEngine, GovernanceEffect
-from src.models.interaction import SoftInteraction, InteractionType
 from src.env.state import EnvState
-from src.models.agent import AgentType
+from src.governance.admission import StakingLever
+from src.governance.audits import RandomAuditLever
+from src.governance.circuit_breaker import CircuitBreakerLever
+from src.governance.config import GovernanceConfig
+from src.governance.engine import GovernanceEffect, GovernanceEngine
+from src.governance.levers import LeverEffect
+from src.governance.reputation import ReputationDecayLever, VoteNormalizationLever
+from src.governance.taxes import TransactionTaxLever
+from src.models.interaction import SoftInteraction
 
 
 class TestGovernanceConfig:
@@ -511,7 +510,6 @@ class TestOrchestratorIntegration:
     def test_orchestrator_with_governance(self):
         """Orchestrator should integrate governance engine."""
         from src.core.orchestrator import Orchestrator, OrchestratorConfig
-        from src.agents.honest import HonestAgent
 
         gov_config = GovernanceConfig(
             transaction_tax_rate=0.1,
@@ -530,8 +528,8 @@ class TestOrchestratorIntegration:
 
     def test_governance_costs_applied_to_interaction(self):
         """Governance costs should be added to c_a and c_b."""
-        from src.core.orchestrator import Orchestrator, OrchestratorConfig
         from src.agents.honest import HonestAgent
+        from src.core.orchestrator import Orchestrator, OrchestratorConfig
 
         gov_config = GovernanceConfig(
             transaction_tax_rate=0.1,
@@ -557,14 +555,13 @@ class TestOrchestratorIntegration:
         orchestrator.run()
 
         # Check that some interactions have governance costs
-        interactions = orchestrator.state.completed_interactions
         # At minimum, tax should apply to interactions with non-zero tau
         # The test is that the code runs without error
 
     def test_reputation_decay_at_epoch_start(self):
         """Reputation should decay at epoch boundaries."""
-        from src.core.orchestrator import Orchestrator, OrchestratorConfig
         from src.agents.honest import HonestAgent
+        from src.core.orchestrator import Orchestrator, OrchestratorConfig
 
         gov_config = GovernanceConfig(
             reputation_decay_rate=0.5,  # Aggressive decay for testing

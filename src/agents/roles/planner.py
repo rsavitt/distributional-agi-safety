@@ -3,7 +3,7 @@
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 
-from src.agents.base import Action, ActionType, Observation, Role
+from src.agents.base import Action, Observation, Role
 
 
 @dataclass
@@ -124,7 +124,7 @@ class PlannerRole:
             return assignments
 
         # Round-robin assignment
-        for i, step in enumerate(steps):
+        for i, _step in enumerate(steps):
             agent = collaborators[i % len(collaborators)]
             if agent not in assignments:
                 assignments[agent] = []

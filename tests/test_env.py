@@ -1,11 +1,11 @@
 """Tests for environment modules (state, feed, tasks)."""
 
-import pytest
-from datetime import datetime, timedelta
 
-from src.env.state import EnvState, RateLimits, RateLimitState, InteractionProposal
-from src.env.feed import Feed, Post, Vote, VoteType
-from src.env.tasks import Task, TaskPool, TaskStatus, TaskDifficulty
+import pytest
+
+from src.env.feed import Feed, VoteType
+from src.env.state import EnvState, InteractionProposal, RateLimits, RateLimitState
+from src.env.tasks import Task, TaskDifficulty, TaskPool, TaskStatus
 from src.models.agent import AgentType
 
 
@@ -191,7 +191,7 @@ class TestFeed:
         assert post.upvotes == 1
 
         # Change vote
-        vote2 = feed.vote(post.post_id, "voter_1", VoteType.DOWNVOTE)
+        feed.vote(post.post_id, "voter_1", VoteType.DOWNVOTE)
         assert post.upvotes == 0
         assert post.downvotes == 1
 
@@ -223,7 +223,7 @@ class TestFeed:
         """Test getting ranked posts."""
         feed = Feed()
 
-        post1 = feed.create_post("author_1", "Low engagement")
+        feed.create_post("author_1", "Low engagement")
         post2 = feed.create_post("author_2", "High engagement")
 
         # Add votes to post2
@@ -250,8 +250,8 @@ class TestFeed:
         """Test getting a thread."""
         feed = Feed()
         root = feed.create_post("author_1", "Root")
-        reply1 = feed.create_post("author_2", "Reply 1", parent_id=root.post_id)
-        reply2 = feed.create_post("author_3", "Reply 2", parent_id=root.post_id)
+        feed.create_post("author_2", "Reply 1", parent_id=root.post_id)
+        feed.create_post("author_3", "Reply 2", parent_id=root.post_id)
 
         thread = feed.get_thread(root.post_id)
         assert len(thread) == 3
@@ -565,7 +565,7 @@ class TestTaskPoolAdditional:
         """get_stats returns correct aggregations."""
         pool = TaskPool()
         t1 = pool.create_task(prompt="Task 1", bounty=10.0)
-        t2 = pool.create_task(prompt="Task 2", bounty=20.0)
+        pool.create_task(prompt="Task 2", bounty=20.0)
 
         # Claim and complete one
         pool.claim_task(t1.task_id, "agent_1", agent_reputation=0.0)

@@ -1,7 +1,6 @@
 """Tests for LLM-backed agents."""
 
-import json
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -19,7 +18,6 @@ from src.agents.llm_prompts import (
     format_observation,
 )
 from src.models.agent import AgentState, AgentType
-
 
 # =============================================================================
 # Fixtures
@@ -604,8 +602,8 @@ class TestAsyncOrchestrator:
     @pytest.mark.asyncio
     async def test_run_async_with_scripted_agents(self):
         """Test async run with only scripted agents."""
-        from src.core.orchestrator import Orchestrator, OrchestratorConfig
         from src.agents.honest import HonestAgent
+        from src.core.orchestrator import Orchestrator, OrchestratorConfig
 
         config = OrchestratorConfig(n_epochs=2, steps_per_epoch=3)
         orchestrator = Orchestrator(config)

@@ -226,11 +226,11 @@ class SecurityAnalyzer:
             return SecurityReport()
 
         if agent_ids is None:
-            agent_ids = list(set(
+            agent_ids = list({
                 i.initiator for i in interactions
-            ) | set(
+            } | {
                 i.counterparty for i in interactions
-            ))
+            })
 
         report = SecurityReport()
 
@@ -246,7 +246,7 @@ class SecurityAnalyzer:
             injection_indicators +
             exfil_indicators +
             [self._pattern_to_indicator(m) for m in manipulation_patterns] +
-            [self._laundering_to_indicator(l) for l in laundering_paths] +
+            [self._laundering_to_indicator(lp) for lp in laundering_paths] +
             [self._contagion_to_indicator(c) for c in contagion_chains]
         )
 
@@ -612,7 +612,7 @@ class SecurityAnalyzer:
         agent_ids: List[str],
     ) -> Dict[str, float]:
         """Compute per-agent threat scores."""
-        scores: Dict[str, float] = {aid: 0.0 for aid in agent_ids}
+        scores: Dict[str, float] = dict.fromkeys(agent_ids, 0.0)
 
         for indicator in indicators:
             # Source agent gets full risk score

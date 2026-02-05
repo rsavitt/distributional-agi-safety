@@ -18,9 +18,7 @@ from src.env.composite_tasks import (
     CapabilityType,
     CompositeTask,
     CompositeTaskStatus,
-    SubtaskStatus,
 )
-from src.models.interaction import SoftInteraction
 
 
 @dataclass
@@ -223,7 +221,7 @@ class CapabilityAnalyzer:
             # Count subtasks that could run in parallel (same depth in DAG)
             depths = self._compute_subtask_depths(task)
             if depths:
-                max_depth = max(depths.values())
+                max(depths.values())
                 n_subtasks = len(task.subtasks)
                 # Perfect parallelization = all at depth 0
                 # Sequential = depths 0,1,2,...,n-1
@@ -297,7 +295,7 @@ class CapabilityAnalyzer:
             return 0.0
 
         complementarity_scores = []
-        for task_id, agent_ids in self._team_compositions:
+        for _task_id, agent_ids in self._team_compositions:
             if len(agent_ids) < 2:
                 continue
 

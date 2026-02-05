@@ -1,15 +1,14 @@
 
 """Streamlit dashboard for distributional AGI safety sandbox."""
 
-import streamlit as st
+import json
+import time
+
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
+import streamlit as st
 from plotly.subplots import make_subplots
-import time
-import json
-from pathlib import Path
-from typing import Optional
 
 # Page config
 st.set_page_config(
@@ -140,13 +139,13 @@ def main():
 
             fig.add_trace(
                 go.Scatter(x=metrics_df["epoch"], y=metrics_df["toxicity_rate"],
-                          mode="lines+markers", name="Toxicity", line=dict(color="red")),
+                          mode="lines+markers", name="Toxicity", line={"color": "red"}),
                 row=1, col=1
             )
 
             fig.add_trace(
                 go.Scatter(x=metrics_df["epoch"], y=metrics_df["quality_gap"],
-                          mode="lines+markers", name="Quality Gap", line=dict(color="blue")),
+                          mode="lines+markers", name="Quality Gap", line={"color": "blue"}),
                 row=2, col=1
             )
 

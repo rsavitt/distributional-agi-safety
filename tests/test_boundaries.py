@@ -1,38 +1,33 @@
 """Tests for semi-permeable boundaries module."""
 
-import pytest
-from datetime import datetime, timedelta
+from datetime import datetime
 
 from src.boundaries.external_world import (
+    ExternalDataSource,
     ExternalEntity,
     ExternalEntityType,
     ExternalService,
-    ExternalDataSource,
     ExternalWorld,
 )
 from src.boundaries.information_flow import (
     FlowDirection,
+    FlowTracker,
     FlowType,
     InformationFlow,
-    FlowTracker,
-    FlowSummary,
-)
-from src.boundaries.policies import (
-    CrossingDecision,
-    BoundaryPolicy,
-    RateLimitPolicy,
-    ContentFilterPolicy,
-    SensitivityPolicy,
-    CompositePolicy,
-    PolicyEngine,
 )
 from src.boundaries.leakage import (
-    LeakageType,
-    LeakageEvent,
     LeakageDetector,
-    LeakageReport,
+    LeakageEvent,
+    LeakageType,
 )
-
+from src.boundaries.policies import (
+    CompositePolicy,
+    ContentFilterPolicy,
+    CrossingDecision,
+    PolicyEngine,
+    RateLimitPolicy,
+    SensitivityPolicy,
+)
 
 # =============================================================================
 # External World Tests
@@ -364,7 +359,7 @@ class TestFlowTracker:
         tracker = FlowTracker()
 
         # Create excessive outbound flow
-        for i in range(10):
+        for _i in range(10):
             tracker.record_flow(InformationFlow.create(
                 direction=FlowDirection.OUTBOUND,
                 flow_type=FlowType.DATA,
@@ -819,8 +814,6 @@ class TestBoundaryIntegration:
     def test_orchestrator_boundary_interaction(self):
         """Test orchestrator boundary interaction methods."""
         from src.core.orchestrator import Orchestrator, OrchestratorConfig
-        from src.agents.base import BaseAgent
-        from src.models.agent import AgentType
 
         config = OrchestratorConfig(
             enable_boundaries=True,

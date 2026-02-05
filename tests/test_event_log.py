@@ -2,12 +2,9 @@
 
 from datetime import datetime, timedelta
 
-import pytest
-
 from src.logging.event_log import EventLog
 from src.models.events import Event, EventType
 from src.models.interaction import InteractionType
-
 
 # =============================================================================
 # Helpers
@@ -157,7 +154,7 @@ class TestReplay:
 
         events = list(log.replay())
         assert len(events) == 5
-        for i, e in enumerate(events):
+        for _i, e in enumerate(events):
             assert e.event_type == EventType.INTERACTION_PROPOSED
 
     def test_replay_preserves_fields(self, tmp_path):

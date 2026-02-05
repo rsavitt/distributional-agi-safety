@@ -4,34 +4,33 @@ import pytest
 
 from src.agents.adaptive_adversary import (
     AdaptiveAdversary,
+    AdversaryMemory,
     AttackStrategy,
     StrategyPerformance,
-    AdversaryMemory,
 )
 from src.agents.base import Action, ActionType, Observation
 from src.redteam.attacks import (
-    AttackScenario,
-    AttackResult,
-    AttackLibrary,
     AttackCategory,
     AttackDifficulty,
-)
-from src.redteam.metrics import (
-    EvasionMetrics,
-    GovernanceEffectiveness,
-    AdversaryPerformance,
-    compute_evasion_rate,
-    compute_detection_latency,
-    compute_damage_before_detection,
-    compute_governance_effectiveness,
+    AttackLibrary,
+    AttackResult,
+    AttackScenario,
 )
 from src.redteam.evaluator import (
-    RedTeamEvaluator,
     GovernanceRobustness,
+    RedTeamEvaluator,
     Vulnerability,
     VulnerabilityReport,
 )
-
+from src.redteam.metrics import (
+    AdversaryPerformance,
+    EvasionMetrics,
+    GovernanceEffectiveness,
+    compute_damage_before_detection,
+    compute_detection_latency,
+    compute_evasion_rate,
+    compute_governance_effectiveness,
+)
 
 # =============================================================================
 # Adaptive Adversary Tests
@@ -624,7 +623,7 @@ class TestIntegration:
 
     def test_notify_adversary_detection(self):
         """Test notifying adversary of detection."""
-        from src.core.orchestrator import Orchestrator, OrchestratorConfig
+        from src.core.orchestrator import Orchestrator
 
         orchestrator = Orchestrator()
         adversary = AdaptiveAdversary("adaptive_1")

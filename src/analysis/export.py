@@ -130,8 +130,8 @@ def export_to_csv(
     """
     try:
         import pandas as pd
-    except ImportError:
-        raise ImportError("pandas required for CSV export. Install with: pip install pandas")
+    except ImportError as err:
+        raise ImportError("pandas required for CSV export. Install with: pip install pandas") from err
 
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -173,8 +173,8 @@ def export_to_parquet(
     """
     try:
         import pandas as pd
-    except ImportError:
-        raise ImportError("pandas required for Parquet export. Install with: pip install pandas pyarrow")
+    except ImportError as err:
+        raise ImportError("pandas required for Parquet export. Install with: pip install pandas pyarrow") from err
 
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -336,8 +336,8 @@ def load_from_csv(
     """
     try:
         import pandas as pd
-    except ImportError:
-        raise ImportError("pandas required for CSV import. Install with: pip install pandas")
+    except ImportError as err:
+        raise ImportError("pandas required for CSV import. Install with: pip install pandas") from err
 
     epochs_path = Path(epochs_path)
     epochs_df = pd.read_csv(epochs_path)
@@ -406,7 +406,7 @@ def generate_summary_report(
         f"Ended: {history.ended_at}",
         f"Duration: {(history.ended_at - history.started_at) if history.started_at and history.ended_at else 'N/A'}",
         "",
-        f"Configuration:",
+        "Configuration:",
         f"  Epochs: {history.n_epochs}",
         f"  Steps per epoch: {history.steps_per_epoch}",
         f"  Agents: {history.n_agents}",

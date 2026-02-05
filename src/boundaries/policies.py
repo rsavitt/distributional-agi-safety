@@ -5,12 +5,11 @@ cross the sandbox boundary, including rate limiting, content filtering,
 and sensitivity-based access control.
 """
 
+import re
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
-from enum import Enum
-from typing import Any, Callable, Dict, List, Optional, Set
-import re
+from typing import Any, Dict, List, Optional, Set
 
 
 @dataclass

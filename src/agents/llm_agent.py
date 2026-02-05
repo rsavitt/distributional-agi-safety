@@ -15,7 +15,7 @@ from src.agents.base import (
     Observation,
     Role,
 )
-from src.agents.llm_config import LLMConfig, LLMProvider, LLMUsageStats, PersonaType
+from src.agents.llm_config import LLMConfig, LLMProvider, LLMUsageStats
 from src.agents.llm_prompts import build_accept_prompt, build_action_prompt
 from src.models.agent import AgentType
 from src.models.interaction import InteractionType
@@ -81,11 +81,11 @@ class LLMAgent(BaseAgent):
                     api_key=self._api_key,
                     timeout=self.llm_config.timeout,
                 )
-            except ImportError:
+            except ImportError as err:
                 raise ImportError(
                     "anthropic package not installed. "
                     "Install with: pip install anthropic"
-                )
+                ) from err
         return self._anthropic_client
 
     def _get_openai_client(self):
@@ -97,11 +97,11 @@ class LLMAgent(BaseAgent):
                     api_key=self._api_key,
                     timeout=self.llm_config.timeout,
                 )
-            except ImportError:
+            except ImportError as err:
                 raise ImportError(
                     "openai package not installed. "
                     "Install with: pip install openai"
-                )
+                ) from err
         return self._openai_client
 
     async def _call_llm_async(
@@ -235,11 +235,11 @@ class LLMAgent(BaseAgent):
         """Call Ollama API."""
         try:
             import httpx
-        except ImportError:
+        except ImportError as err:
             raise ImportError(
                 "httpx package not installed. "
                 "Install with: pip install httpx"
-            )
+            ) from err
 
         base_url = self.llm_config.base_url or "http://localhost:11434"
         url = f"{base_url}/api/chat"
@@ -334,7 +334,7 @@ class LLMAgent(BaseAgent):
         try:
             return json.loads(json_str)
         except json.JSONDecodeError as e:
-            raise ValueError(f"Invalid JSON: {e}")
+            raise ValueError(f"Invalid JSON: {e}") from e
 
     def _action_dict_to_action(self, action_dict: Dict[str, Any]) -> Action:
         """

@@ -145,11 +145,11 @@ class CollusionDetector:
 
         # Discover agents from interactions if not provided
         if agent_ids is None:
-            agent_ids = list(set(
+            agent_ids = list({
                 i.initiator for i in interactions
-            ) | set(
+            } | {
                 i.counterparty for i in interactions
-            ))
+            })
 
         # Build interaction matrices
         pair_interactions = self._group_by_pair(interactions)
@@ -454,7 +454,7 @@ class CollusionDetector:
         groups: List[GroupMetrics],
     ) -> Dict[str, float]:
         """Compute per-agent collusion risk score."""
-        risk: Dict[str, float] = {aid: 0.0 for aid in agent_ids}
+        risk: Dict[str, float] = dict.fromkeys(agent_ids, 0.0)
 
         # Contribution from pair scores
         for (a, b), metrics in pair_metrics.items():

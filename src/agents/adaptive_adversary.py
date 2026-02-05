@@ -5,14 +5,18 @@ based on what behaviors get detected and penalized. They use reinforcement
 learning-style updates to evolve more effective attack strategies.
 """
 
+import random
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import TYPE_CHECKING, Dict, List, Optional, Set, Tuple
-import random
+from typing import TYPE_CHECKING, Dict, List, Optional, Set
 
-import numpy as np
-
-from src.agents.base import BaseAgent, Action, ActionType, Observation, InteractionProposal
+from src.agents.base import (
+    Action,
+    ActionType,
+    BaseAgent,
+    InteractionProposal,
+    Observation,
+)
 from src.models.agent import AgentType
 from src.models.interaction import InteractionType
 

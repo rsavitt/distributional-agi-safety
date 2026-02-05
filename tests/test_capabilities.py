@@ -1,9 +1,6 @@
 """Tests for composite tasks and emergent capability measurement."""
 
-from datetime import datetime, timedelta
 
-import numpy as np
-import pytest
 
 from src.env.composite_tasks import (
     CapabilityType,
@@ -23,7 +20,6 @@ from src.metrics.capabilities import (
     analyze_capability_distribution,
     compute_collective_intelligence_score,
 )
-
 
 # =============================================================================
 # Subtask Tests

@@ -1,14 +1,19 @@
 """Tests for the marketplace module."""
 
-import pytest
 from pathlib import Path
-from unittest.mock import MagicMock
 
+import pytest
+
+from src.agents.base import ActionType
+from src.agents.honest import HonestAgent
+from src.agents.opportunistic import OpportunisticAgent
+from src.core.orchestrator import Orchestrator, OrchestratorConfig
+from src.core.payoff import PayoffConfig
 from src.env.marketplace import (
-    Bounty,
-    BountyStatus,
     Bid,
     BidStatus,
+    Bounty,
+    BountyStatus,
     Dispute,
     DisputeStatus,
     Escrow,
@@ -16,17 +21,8 @@ from src.env.marketplace import (
     Marketplace,
     MarketplaceConfig,
 )
-from src.agents.base import ActionType, Observation
-from src.agents.honest import HonestAgent
-from src.agents.opportunistic import OpportunisticAgent
-from src.agents.adversarial import AdversarialAgent
-from src.agents.deceptive import DeceptiveAgent
-from src.core.orchestrator import Orchestrator, OrchestratorConfig
-from src.core.payoff import PayoffConfig
 from src.env.state import RateLimits, RateLimitState
 from src.governance.config import GovernanceConfig
-from src.models.events import EventType
-
 
 # ===========================================================================
 # Model Tests
@@ -138,7 +134,7 @@ class TestBountyLifecycle:
         b1 = self.marketplace.post_bounty(
             "a1", "t1", 10.0, deadline_epoch=5
         )
-        b2 = self.marketplace.post_bounty("a2", "t2", 15.0)
+        self.marketplace.post_bounty("a2", "t2", 15.0)
 
         expired = self.marketplace.expire_bounties(current_epoch=5)
         assert len(expired) == 1
@@ -297,7 +293,7 @@ class TestEscrowLifecycle:
         assert result == {}
 
     def test_escrow_amount_matches_bid(self):
-        bid2 = self.marketplace.place_bid(
+        self.marketplace.place_bid(
             self.bounty.bounty_id, "worker2", 5.0
         )
         # This bid won't work because bounty is still open but we already have a bid
@@ -468,7 +464,7 @@ class TestOrchestratorIntegration:
 
     def test_post_bounty_action(self):
         orch = self._make_orchestrator()
-        from src.agents.base import Action, ActionType
+        from src.agents.base import Action
 
         action = Action(
             action_type=ActionType.POST_BOUNTY,
@@ -491,7 +487,7 @@ class TestOrchestratorIntegration:
 
     def test_post_bounty_insufficient_resources(self):
         orch = self._make_orchestrator()
-        from src.agents.base import Action, ActionType
+        from src.agents.base import Action
 
         action = Action(
             action_type=ActionType.POST_BOUNTY,
@@ -506,7 +502,7 @@ class TestOrchestratorIntegration:
 
     def test_place_bid_action(self):
         orch = self._make_orchestrator()
-        from src.agents.base import Action, ActionType
+        from src.agents.base import Action
 
         # Post bounty first
         orch.state.get_agent("h1").resources = 100.0
@@ -536,7 +532,7 @@ class TestOrchestratorIntegration:
 
     def test_accept_bid_action(self):
         orch = self._make_orchestrator()
-        from src.agents.base import Action, ActionType
+        from src.agents.base import Action
 
         # Setup: post bounty, place bid
         orch.state.get_agent("h1").resources = 100.0
@@ -573,7 +569,7 @@ class TestOrchestratorIntegration:
     def test_full_bounty_lifecycle(self):
         """Test complete flow: post -> bid -> accept -> settle."""
         orch = self._make_orchestrator()
-        from src.agents.base import Action, ActionType
+        from src.agents.base import Action
 
         # Post bounty
         orch.state.get_agent("h1").resources = 100.0
@@ -617,7 +613,7 @@ class TestOrchestratorIntegration:
     def test_settle_with_governance_taxes(self):
         """Test that settlement creates taxable interaction."""
         orch = self._make_orchestrator(with_governance=True)
-        from src.agents.base import Action, ActionType
+        from src.agents.base import Action
 
         orch.state.get_agent("h1").resources = 100.0
         orch.state.get_agent("h2").resources = 100.0
@@ -646,7 +642,7 @@ class TestOrchestratorIntegration:
             metadata={"bid_id": bid.bid_id},
         ))
 
-        h1_before = orch.state.get_agent("h1").resources
+        h1_before = orch.state.get_agent("h1").resources  # noqa: F841
         h2_before = orch.state.get_agent("h2").resources
 
         result = orch.settle_marketplace_task(bounty.task_id, success=True, quality_score=0.9)
@@ -659,7 +655,7 @@ class TestOrchestratorIntegration:
 
     def test_observation_includes_marketplace(self):
         orch = self._make_orchestrator()
-        from src.agents.base import Action, ActionType
+        from src.agents.base import Action
 
         # Post a bounty
         orch.state.get_agent("h1").resources = 100.0
@@ -697,7 +693,7 @@ class TestOrchestratorIntegration:
     def test_epoch_maintenance_refunds_resources(self):
         """Test that orchestrator refunds bounty funds on expiry."""
         orch = self._make_orchestrator()
-        from src.agents.base import Action, ActionType
+        from src.agents.base import Action
 
         orch.state.get_agent("h1").resources = 100.0
         orch._execute_action(Action(
@@ -721,7 +717,7 @@ class TestOrchestratorIntegration:
 
     def test_file_dispute_action(self):
         orch = self._make_orchestrator()
-        from src.agents.base import Action, ActionType
+        from src.agents.base import Action
 
         # Setup: bounty -> bid -> accept -> escrow
         orch.state.get_agent("h1").resources = 100.0
@@ -796,7 +792,7 @@ class TestScenarioLoader:
         assert config is None
 
     def test_load_marketplace_scenario(self):
-        from src.scenarios.loader import load_scenario, build_orchestrator
+        from src.scenarios.loader import build_orchestrator, load_scenario
 
         path = Path("scenarios/marketplace_economy.yaml")
         if not path.exists():
