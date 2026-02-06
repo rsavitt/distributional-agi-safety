@@ -5,7 +5,7 @@ from swarm.core.payoff import PayoffConfig, SoftPayoffEngine
 from swarm.core.proxy import ProxyComputer, ProxyObservables, ProxyWeights
 from swarm.metrics.reporters import MetricsReporter
 from swarm.metrics.soft_metrics import SoftMetrics
-from swarm.models.agent import AgentState, AgentType
+from swarm.models.agent import AgentState, AgentStatus, AgentType
 from swarm.models.interaction import InteractionType, SoftInteraction
 
 __all__ = [
@@ -13,6 +13,7 @@ __all__ = [
     "SoftInteraction",
     "InteractionType",
     "AgentType",
+    "AgentStatus",
     "AgentState",
     # Core
     "SoftPayoffEngine",

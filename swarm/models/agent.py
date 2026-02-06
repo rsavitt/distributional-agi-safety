@@ -14,6 +14,13 @@ class AgentType(Enum):
     ADVERSARIAL = "adversarial"
 
 
+class AgentStatus(Enum):
+    """Operational status for an agent."""
+
+    ACTIVE = "active"
+    FROZEN = "frozen"
+
+
 @dataclass
 class AgentState:
     """
