@@ -1,5 +1,13 @@
 {
   "buildCommand": "uv pip install --system mkdocs-material 'mkdocstrings[python]' pymdown-extensions && mkdocs build",
   "outputDirectory": "site",
-  "framework": null
+  "framework": null,
+  "functions": {
+    "api/*.py": {
+      "runtime": "python3.12"
+    }
+  },
+  "rewrites": [
+    { "source": "/api/(.*)", "destination": "/api/$1" }
+  ]
 }
