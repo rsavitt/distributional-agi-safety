@@ -1,5 +1,6 @@
 """Tests for the Orchestrator simulation engine."""
 
+import json
 import tempfile
 from pathlib import Path
 
@@ -69,6 +70,14 @@ class TestOrchestratorBasics:
         assert orchestrator.config.n_epochs == 5
         assert orchestrator.config.steps_per_epoch == 5
         assert orchestrator.config.seed == 42
+
+    def test_config_model_dump_json(self):
+        """Config should expose a Pydantic-like JSON dump helper."""
+        config = OrchestratorConfig(n_epochs=2, steps_per_epoch=3)
+        dumped = json.loads(config.model_dump_json(indent=2))
+
+        assert dumped["n_epochs"] == 2
+        assert dumped["steps_per_epoch"] == 3
 
     def test_invalid_observation_noise_probability_raises(self):
         """Observation noise probability must be in [0, 1]."""

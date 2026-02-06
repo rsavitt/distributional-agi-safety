@@ -1,8 +1,9 @@
 """Orchestrator for running the multi-agent simulation."""
 
 import asyncio
+import json
 import random
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
@@ -100,6 +101,18 @@ class OrchestratorConfig:
     # Stress-test knobs
     observation_noise_probability: float = 0.0
     observation_noise_std: float = 0.0
+
+    def model_dump(self) -> Dict[str, Any]:
+        """Return a JSON-serializable dict of config values."""
+        return asdict(self)
+
+    def model_dump_json(self, *, indent: Optional[int] = None) -> str:
+        """
+        Return a JSON string of the config.
+
+        Mirrors Pydantic's model_dump_json for convenience.
+        """
+        return json.dumps(self.model_dump(), indent=indent, default=str)
 
 
 @dataclass
