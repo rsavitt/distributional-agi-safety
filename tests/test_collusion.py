@@ -4,6 +4,7 @@ from datetime import datetime, timedelta
 
 import numpy as np
 import pytest
+from pydantic import ValidationError
 
 from swarm.governance import GovernanceConfig, GovernanceEngine
 from swarm.metrics.collusion import (
@@ -431,16 +432,14 @@ class TestCollusionGovernance:
             collusion_frequency_threshold=2.0,
             collusion_correlation_threshold=0.7,
         )
-        config.validate()  # Should not raise
+        assert config is not None  # Pydantic auto-validates on creation
 
         # Invalid threshold
-        with pytest.raises(ValueError):
-            config = GovernanceConfig(collusion_frequency_threshold=-1.0)
-            config.validate()
+        with pytest.raises(ValidationError):
+            GovernanceConfig(collusion_frequency_threshold=-1.0)
 
-        with pytest.raises(ValueError):
-            config = GovernanceConfig(collusion_correlation_threshold=1.5)
-            config.validate()
+        with pytest.raises(ValidationError):
+            GovernanceConfig(collusion_correlation_threshold=1.5)
 
     def test_engine_creates_collusion_lever(self):
         """GovernanceEngine should create collusion lever."""

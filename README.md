@@ -81,8 +81,8 @@ config = OrchestratorConfig(
 orchestrator = Orchestrator(config=config)
 
 # Register agents
-orchestrator.register_agent(HonestAgent(agent_id="honest_1"))
-orchestrator.register_agent(HonestAgent(agent_id="honest_2"))
+orchestrator.register_agent(HonestAgent(agent_id="honest_1", name="Alice"))
+orchestrator.register_agent(HonestAgent(agent_id="honest_2", name="Bob"))
 orchestrator.register_agent(OpportunisticAgent(agent_id="opp_1"))
 orchestrator.register_agent(DeceptiveAgent(agent_id="dec_1"))
 
@@ -181,7 +181,7 @@ Observables -> ProxyComputer -> v_hat -> sigmoid -> p -> SoftPayoffEngine -> pay
 ```
 swarm/
 ├── swarm/
-│   ├── models/          # SoftInteraction, AgentState, event schema
+│   ├── models/          # SoftInteraction, AgentState/AgentStatus, event schema
 │   ├── core/            # PayoffEngine, ProxyComputer, sigmoid, orchestrator
 │   ├── agents/          # Honest, opportunistic, deceptive, adversarial, LLM, adaptive
 │   ├── env/             # EnvState, feed, tasks, network, composite tasks

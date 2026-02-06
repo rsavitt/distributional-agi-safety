@@ -1,10 +1,9 @@
 """Configuration dataclass for governance levers."""
 
-from dataclasses import dataclass
+from pydantic import BaseModel, model_validator
 
 
-@dataclass
-class GovernanceConfig:
+class GovernanceConfig(BaseModel):
     """
     Configuration for all governance levers.
 
@@ -106,7 +105,12 @@ class GovernanceConfig:
     moderator_penalty_multiplier: float = 1.0  # Penalty scaling factor
     moderator_threshold_p: float = 0.5  # Threshold for penalty
 
-    def validate(self) -> None:
+    @model_validator(mode="after")
+    def _run_validation(self) -> "GovernanceConfig":
+        self._check_values()
+        return self
+
+    def _check_values(self) -> None:
         """Validate configuration values."""
         if not 0.0 <= self.transaction_tax_rate <= 1.0:
             raise ValueError("transaction_tax_rate must be in [0, 1]")

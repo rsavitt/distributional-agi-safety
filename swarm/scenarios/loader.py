@@ -144,8 +144,7 @@ def parse_governance_config(data: Dict[str, Any]) -> GovernanceConfig:
         adaptive_incoherence_threshold=data.get("adaptive_incoherence_threshold", 0.5),
         adaptive_use_behavioral_features=data.get("adaptive_use_behavioral_features", False),
     )
-
-    config.validate()
+    # Pydantic auto-validates
     return config
 
 
@@ -171,8 +170,7 @@ def parse_payoff_config(data: Dict[str, Any]) -> PayoffConfig:
         rho_b=data.get("rho_b", 0.0),
         w_rep=data.get("w_rep", 1.0),
     )
-
-    config.validate()
+    # Pydantic auto-validates
     return config
 
 
@@ -244,8 +242,7 @@ def parse_network_config(data: Dict[str, Any]) -> Optional[NetworkConfig]:
         # Reputation-based
         reputation_disconnect_threshold=data.get("reputation_disconnect_threshold"),
     )
-
-    config.validate()
+    # Pydantic auto-validates
     return config
 
 
@@ -275,8 +272,7 @@ def parse_marketplace_config(data: Dict[str, Any]) -> Optional[MarketplaceConfig
         auto_expire_bounties=data.get("auto_expire_bounties", True),
         dispute_default_split=data.get("dispute_default_split", 0.5),
     )
-
-    config.validate()
+    # Pydantic auto-validates
     return config
 
 
@@ -401,6 +397,7 @@ def create_agents(agent_specs: List[Dict[str, Any]]) -> List[BaseAgent]:
     for spec in agent_specs:
         agent_type = spec.get("type", "honest")
         count = spec.get("count", 1)
+        base_name = spec.get("name")
 
         # Handle LLM agents
         if agent_type == "llm":
@@ -411,10 +408,14 @@ def create_agents(agent_specs: List[Dict[str, Any]]) -> List[BaseAgent]:
                 # Generate unique ID
                 counters["llm"] = counters.get("llm", 0) + 1
                 agent_id = f"llm_{counters['llm']}"
+                agent_name = (
+                    f"{base_name}_{counters['llm']}" if base_name and count > 1 else base_name
+                )
 
                 agent = LLMAgent(
                     agent_id=agent_id,
                     llm_config=llm_config,
+                    name=agent_name,
                 )
                 agents.append(agent)
 
@@ -426,9 +427,12 @@ def create_agents(agent_specs: List[Dict[str, Any]]) -> List[BaseAgent]:
                 # Generate unique ID
                 counters[agent_type] = counters.get(agent_type, 0) + 1
                 agent_id = f"{agent_type}_{counters[agent_type]}"
+                agent_name = (
+                    f"{base_name}_{counters[agent_type]}" if base_name and count > 1 else base_name
+                )
 
                 # Create agent with optional config
-                agent = agent_class(agent_id=agent_id)  # type: ignore[call-arg]
+                agent = agent_class(agent_id=agent_id, name=agent_name)  # type: ignore[call-arg]
                 agents.append(agent)
 
         else:

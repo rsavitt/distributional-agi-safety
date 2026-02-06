@@ -5,6 +5,8 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Dict, List, Optional
 
+from pydantic import BaseModel, model_validator
+
 
 class BountyStatus(Enum):
     """Status of a bounty."""
@@ -152,8 +154,7 @@ class Dispute:
         }
 
 
-@dataclass
-class MarketplaceConfig:
+class MarketplaceConfig(BaseModel):
     """Configuration for the marketplace."""
 
     enabled: bool = True
@@ -165,7 +166,12 @@ class MarketplaceConfig:
     auto_expire_bounties: bool = True
     dispute_default_split: float = 0.5
 
-    def validate(self) -> None:
+    @model_validator(mode="after")
+    def _run_validation(self) -> "MarketplaceConfig":
+        self._check_values()
+        return self
+
+    def _check_values(self) -> None:
         """Validate configuration."""
         if self.escrow_fee_rate < 0 or self.escrow_fee_rate > 1:
             raise ValueError("escrow_fee_rate must be in [0, 1]")
@@ -191,7 +197,7 @@ class Marketplace:
 
     def __init__(self, config: Optional[MarketplaceConfig] = None):
         """Initialize marketplace."""
-        self.config = config or MarketplaceConfig()
+        self.config = MarketplaceConfig() if config is None else config
 
         self._bounties: Dict[str, Bounty] = {}
         self._bids: Dict[str, Bid] = {}
