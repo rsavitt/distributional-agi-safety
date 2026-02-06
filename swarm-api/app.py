@@ -31,6 +31,16 @@ def verify_signature(payload: bytes, signature: str, secret: str) -> bool:
 
 def get_jwt_token() -> str:
     """Generate a JWT for GitHub App authentication."""
+    if not GITHUB_APP_ID:
+        raise ValueError("GITHUB_APP_ID not set")
+    if not GITHUB_PRIVATE_KEY:
+        raise ValueError("GITHUB_PRIVATE_KEY not set")
+
+    # Debug: log key format (first 50 chars only for security)
+    print(f"DEBUG: App ID = {GITHUB_APP_ID}")
+    print(f"DEBUG: Key starts with = {GITHUB_PRIVATE_KEY[:50]}...")
+    print(f"DEBUG: Key length = {len(GITHUB_PRIVATE_KEY)}")
+
     now = int(time.time())
     payload = {
         "iat": now - 60,  # Issued 60 seconds ago
@@ -164,7 +174,10 @@ def webhook():
                         installation.get("id"),
                     )
                 except Exception as e:
-                    return jsonify({"error": str(e)}), 500
+                    import traceback
+                    print(f"ERROR: {e}")
+                    print(traceback.format_exc())
+                    return jsonify({"error": str(e), "type": type(e).__name__}), 500
 
         return jsonify({"event": "issue_comment", "action": action, "status": "processed"})
 
