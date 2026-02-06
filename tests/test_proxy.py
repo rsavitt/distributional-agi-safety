@@ -3,8 +3,8 @@
 
 import pytest
 
-from src.core.proxy import ProxyComputer, ProxyObservables, ProxyWeights
-from src.core.sigmoid import (
+from swarm.core.proxy import ProxyComputer, ProxyObservables, ProxyWeights
+from swarm.core.sigmoid import (
     calibrated_sigmoid,
     effective_uncertainty_band,
     inverse_sigmoid,
@@ -146,7 +146,7 @@ class TestProxyObservables:
 
     def test_from_interaction(self):
         """Should extract observables from interaction."""
-        from src.models.interaction import SoftInteraction
+        from swarm.models.interaction import SoftInteraction
 
         interaction = SoftInteraction(
             task_progress_delta=0.7,

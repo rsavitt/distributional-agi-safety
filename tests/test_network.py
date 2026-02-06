@@ -3,7 +3,7 @@
 import numpy as np
 import pytest
 
-from src.env.network import AgentNetwork, NetworkConfig, NetworkTopology
+from swarm.env.network import AgentNetwork, NetworkConfig, NetworkTopology
 
 # =============================================================================
 # Fixtures
@@ -513,8 +513,8 @@ class TestOrchestratorIntegration:
 
     def test_network_initialization(self, agent_ids):
         """Test network is initialized when orchestrator runs."""
-        from src.agents.honest import HonestAgent
-        from src.core.orchestrator import Orchestrator, OrchestratorConfig
+        from swarm.agents.honest import HonestAgent
+        from swarm.core.orchestrator import Orchestrator, OrchestratorConfig
 
         config = OrchestratorConfig(
             n_epochs=1,
@@ -534,8 +534,8 @@ class TestOrchestratorIntegration:
 
     def test_network_constrains_interactions(self):
         """Test agents can only interact with neighbors."""
-        from src.agents.honest import HonestAgent
-        from src.core.orchestrator import Orchestrator, OrchestratorConfig
+        from swarm.agents.honest import HonestAgent
+        from swarm.core.orchestrator import Orchestrator, OrchestratorConfig
 
         # Star network: only hub can interact with everyone
         config = OrchestratorConfig(
@@ -559,8 +559,8 @@ class TestOrchestratorIntegration:
 
     def test_network_metrics_in_epoch(self):
         """Test network metrics are included in epoch metrics."""
-        from src.agents.honest import HonestAgent
-        from src.core.orchestrator import Orchestrator, OrchestratorConfig
+        from swarm.agents.honest import HonestAgent
+        from swarm.core.orchestrator import Orchestrator, OrchestratorConfig
 
         config = OrchestratorConfig(
             n_epochs=2,
@@ -580,8 +580,8 @@ class TestOrchestratorIntegration:
 
     def test_dynamic_network_decay(self):
         """Test network edges decay over epochs."""
-        from src.agents.honest import HonestAgent
-        from src.core.orchestrator import Orchestrator, OrchestratorConfig
+        from swarm.agents.honest import HonestAgent
+        from swarm.core.orchestrator import Orchestrator, OrchestratorConfig
 
         config = OrchestratorConfig(
             n_epochs=5,
@@ -618,7 +618,7 @@ class TestScenarioLoaderNetwork:
 
     def test_parse_network_config_complete(self):
         """Test parsing complete network config."""
-        from src.scenarios.loader import parse_network_config
+        from swarm.scenarios.loader import parse_network_config
 
         data = {
             "topology": "complete",
@@ -631,7 +631,7 @@ class TestScenarioLoaderNetwork:
 
     def test_parse_network_config_small_world(self):
         """Test parsing small-world network config."""
-        from src.scenarios.loader import parse_network_config
+        from swarm.scenarios.loader import parse_network_config
 
         data = {
             "topology": "small_world",
@@ -654,7 +654,7 @@ class TestScenarioLoaderNetwork:
 
     def test_parse_network_config_disabled(self):
         """Test parsing disabled network."""
-        from src.scenarios.loader import parse_network_config
+        from swarm.scenarios.loader import parse_network_config
 
         data = {"enabled": False}
 
@@ -664,7 +664,7 @@ class TestScenarioLoaderNetwork:
 
     def test_parse_network_config_empty(self):
         """Test parsing empty network config."""
-        from src.scenarios.loader import parse_network_config
+        from swarm.scenarios.loader import parse_network_config
 
         config = parse_network_config({})
 
@@ -672,7 +672,7 @@ class TestScenarioLoaderNetwork:
 
     def test_parse_network_config_invalid_topology(self):
         """Test parsing invalid topology raises error."""
-        from src.scenarios.loader import parse_network_config
+        from swarm.scenarios.loader import parse_network_config
 
         with pytest.raises(ValueError, match="Unknown network topology"):
             parse_network_config({"topology": "invalid_topology"})

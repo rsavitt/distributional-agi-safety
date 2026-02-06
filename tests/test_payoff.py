@@ -2,8 +2,8 @@
 
 import pytest
 
-from src.core.payoff import PayoffConfig, SoftPayoffEngine
-from src.models.interaction import SoftInteraction
+from swarm.core.payoff import PayoffConfig, SoftPayoffEngine
+from swarm.models.interaction import SoftInteraction
 
 
 class TestPayoffConfig:

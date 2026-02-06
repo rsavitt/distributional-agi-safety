@@ -1,0 +1,165 @@
+---
+hide:
+  - navigation
+  - toc
+---
+
+<style>
+.md-content__button {
+  display: none;
+}
+.hero {
+  text-align: center;
+  padding: 4rem 1rem;
+}
+.hero h1 {
+  font-size: 3rem;
+  font-weight: 800;
+  margin-bottom: 1rem;
+}
+.hero .tagline {
+  font-size: 1.5rem;
+  opacity: 0.8;
+  margin-bottom: 2rem;
+}
+.hero-buttons {
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+.hero-buttons a {
+  padding: 0.75rem 1.5rem;
+  border-radius: 0.5rem;
+  font-weight: 600;
+  text-decoration: none;
+}
+.hero-buttons .primary {
+  background: linear-gradient(135deg, #00d4ff 0%, #7b61ff 100%);
+  color: white;
+}
+.hero-buttons .secondary {
+  border: 2px solid currentColor;
+}
+.features {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 2rem;
+  padding: 2rem 0;
+}
+.feature {
+  padding: 1.5rem;
+  border-radius: 0.5rem;
+  background: var(--md-code-bg-color);
+}
+.feature h3 {
+  margin-top: 0;
+}
+.insight-box {
+  background: linear-gradient(135deg, rgba(0, 212, 255, 0.1) 0%, rgba(123, 97, 255, 0.1) 100%);
+  border-left: 4px solid #00d4ff;
+  padding: 1.5rem;
+  margin: 2rem 0;
+  border-radius: 0 0.5rem 0.5rem 0;
+}
+</style>
+
+<div class="hero">
+  <h1>SWARM</h1>
+  <p class="tagline">System-Wide Assessment of Risk in Multi-agent systems</p>
+  <p style="font-size: 1.25rem; max-width: 600px; margin: 0 auto 2rem;">
+    Study how intelligence swarms—and where it fails.
+  </p>
+  <div class="hero-buttons">
+    <a href="getting-started/quickstart/" class="primary">Get Started</a>
+    <a href="https://github.com/swarm-ai-safety/swarm" class="secondary">View on GitHub</a>
+  </div>
+</div>
+
+<div class="insight-box">
+  <strong>The Core Insight:</strong> AGI-level risks don't require AGI-level agents.
+  Catastrophic failures can emerge from the <em>interaction</em> of many sub-AGI agents—even
+  when none are individually dangerous.
+</div>
+
+## What is SWARM?
+
+SWARM is a research framework for studying emergent risks in multi-agent AI systems. Rather than focusing on single misaligned agents, SWARM reveals how harmful dynamics emerge from:
+
+- **Information asymmetry** between agents
+- **Adverse selection** (system accepts lower-quality interactions)
+- **Variance amplification** across decision horizons
+- **Governance latency** and illegibility
+
+SWARM makes these interaction-level risks **observable, measurable, and governable**.
+
+<div class="features">
+  <div class="feature">
+    <h3>Measure</h3>
+    <p>Soft probabilistic labels capture uncertainty. Four key metrics—toxicity, quality gap, conditional loss, and incoherence—reveal hidden risks.</p>
+  </div>
+  <div class="feature">
+    <h3>Govern</h3>
+    <p>Transaction taxes, circuit breakers, reputation decay, staking, and collusion detection. Test interventions before deployment.</p>
+  </div>
+  <div class="feature">
+    <h3>Validate</h3>
+    <p>Integrate with real systems via bridges: Concordia for LLM agents, Gas Town for production data, AgentXiv for research mapping.</p>
+  </div>
+</div>
+
+## Quick Start
+
+```bash
+pip install swarm-safety
+```
+
+```python
+from swarm.agents.honest import HonestAgent
+from swarm.agents.deceptive import DeceptiveAgent
+from swarm.core.orchestrator import Orchestrator, OrchestratorConfig
+
+# Configure and run
+config = OrchestratorConfig(n_epochs=10, steps_per_epoch=10, seed=42)
+orchestrator = Orchestrator(config=config)
+
+orchestrator.register_agent(HonestAgent(agent_id="honest_1"))
+orchestrator.register_agent(DeceptiveAgent(agent_id="dec_1"))
+
+metrics = orchestrator.run()
+
+for m in metrics:
+    print(f"Epoch {m.epoch}: toxicity={m.toxicity_rate:.3f}")
+```
+
+## Architecture
+
+```
+Observables → ProxyComputer → v_hat → sigmoid → p → SoftPayoffEngine → payoffs
+                                                 ↓
+                                            SoftMetrics → toxicity, quality gap, etc.
+```
+
+## Learn More
+
+<div class="features">
+  <div class="feature">
+    <h3><a href="concepts/">Core Concepts</a></h3>
+    <p>Understand soft labels, metrics, and the theory behind SWARM.</p>
+  </div>
+  <div class="feature">
+    <h3><a href="guides/scenarios/">Writing Scenarios</a></h3>
+    <p>Create custom experiments with YAML scenario definitions.</p>
+  </div>
+  <div class="feature">
+    <h3><a href="research/theory/">Research</a></h3>
+    <p>Dive into the theoretical foundations and academic context.</p>
+  </div>
+</div>
+
+---
+
+<p style="text-align: center; opacity: 0.7;">
+  MIT License · <a href="https://github.com/swarm-ai-safety/swarm">GitHub</a> ·
+  <a href="https://discord.gg/swarm-ai">Discord</a>
+</p>

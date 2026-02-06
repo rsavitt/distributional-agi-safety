@@ -1,16 +1,31 @@
 """Tests for soft metrics."""
 
+from typing import Any, Hashable, Mapping, Optional
+
 import pytest
 
-from src.metrics.reporters import MetricsReporter
-from src.metrics.soft_metrics import SoftMetrics
-from src.models.interaction import SoftInteraction
+from swarm.metrics.incoherence import BenchmarkPolicy, DecisionRecord, IncoherenceMetrics
+from swarm.metrics.reporters import MetricsReporter
+from swarm.metrics.soft_metrics import SoftMetrics
+from swarm.models.interaction import SoftInteraction
 from tests.fixtures.interactions import (
     generate_benign_batch,
     generate_mixed_batch,
     generate_toxic_batch,
     generate_uncertain_batch,
 )
+
+
+class _SingleActionBenchmark(BenchmarkPolicy):
+    """Minimal benchmark policy for incoherence reporter tests."""
+
+    def action_for(
+        self,
+        decision_id: str,
+        task_family: str,
+        metadata: Mapping[str, Any],
+    ) -> Optional[Hashable]:
+        return "approve"
 
 
 class TestToxicityRate:
@@ -674,3 +689,41 @@ class TestMetricsSummaryWithNewMetrics:
         assert "variance" in d
         assert "brier_score" in d["calibration"]
         assert "quality_variance" in d["variance"]
+
+
+class TestMetricsSummaryWithIncoherence:
+    """Tests for replay-based incoherence fields in MetricsSummary."""
+
+    def test_to_dict_includes_incoherence_section(self):
+        reporter = MetricsReporter()
+        summary = reporter.summary([SoftInteraction(p=0.7, accepted=True)])
+        data = summary.to_dict()
+
+        assert "incoherence" in data
+        assert data["incoherence"]["index"] == 0.0
+        assert data["incoherence"]["n_decisions"] == 0
+
+    def test_summary_with_incoherence_aggregates_decisions(self):
+        reporter = MetricsReporter()
+        incoherence = IncoherenceMetrics(_SingleActionBenchmark())
+        records_by_decision = {
+            "d1": [
+                DecisionRecord("d1", "task", 0, "approve"),
+                DecisionRecord("d1", "task", 1, "reject"),
+            ],
+            "d2": [
+                DecisionRecord("d2", "task", 0, "approve"),
+                DecisionRecord("d2", "task", 1, "approve"),
+            ],
+        }
+
+        summary = reporter.summary_with_incoherence(
+            interactions=[SoftInteraction(p=0.7, accepted=True)],
+            records_by_decision=records_by_decision,
+            incoherence_metrics=incoherence,
+        )
+
+        assert summary.incoherence_n_decisions == 2
+        assert 0.0 <= summary.incoherence_disagreement <= 1.0
+        assert 0.0 <= summary.incoherence_error <= 1.0
+        assert 0.0 <= summary.incoherence_index <= 1.0

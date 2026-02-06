@@ -1,0 +1,84 @@
+# Related Papers
+
+Research papers relevant to SWARM's approach to multi-agent safety.
+
+## Core References
+
+### Market Microstructure
+
+**Kyle (1985)** - *Continuous Auctions and Insider Trading*
+
+The foundational model of how informed traders affect market prices. SWARM's concept of information asymmetry between agents draws directly from this work.
+
+**Glosten & Milgrom (1985)** - *Bid, Ask and Transaction Prices in a Specialist Market with Heterogeneously Informed Traders*
+
+Explains how adverse selection creates bid-ask spreads. SWARM's "quality gap" metric is analogous to this spread.
+
+**Akerlof (1970)** - *The Market for "Lemons": Quality Uncertainty and the Market Mechanism*
+
+The original adverse selection paper. Shows how information asymmetry can cause market collapse—a failure mode SWARM is designed to detect and prevent.
+
+### AI Safety
+
+**Distributional Safety in Agentic Systems** (2025)
+[arXiv:2512.16856](https://arxiv.org/abs/2512.16856)
+
+Introduces the distributional approach to AI safety that SWARM implements. Key contribution: system-level risks from sub-AGI agent interactions.
+
+**The Hot Mess Theory of AI** (2026)
+[Anthropic Alignment Forum](https://alignment.anthropic.com/2026/hot-mess-of-ai/)
+
+Argues that AGI risk may emerge from chaotic multi-agent dynamics rather than single superintelligent agents. SWARM provides empirical tools to test this hypothesis.
+
+### Multi-Agent Systems
+
+**Hammond et al. (2025)** - *Multi-Agent Market Dynamics*
+[arXiv:2502.14143](https://arxiv.org/abs/2502.14143)
+
+Studies emergent behavior in multi-agent market settings. Validated using SWARM-AgentXiv.
+
+## Papers Using SWARM
+
+*This section will be updated as research using SWARM is published.*
+
+To submit a paper for inclusion, open a PR adding your reference.
+
+## Related Work
+
+### Simulation Frameworks
+
+- **Concordia** (Google DeepMind) - Generative agent simulation
+- **AgentBench** - Benchmark for LLM agent capabilities
+- **MARL benchmarks** - Multi-agent reinforcement learning
+
+### Safety Frameworks
+
+- **METR** - Model evaluation and threat research
+- **ARC Evals** - Dangerous capability evaluations
+- **Inspect** (UK AISI) - AI system inspection tools
+
+### Economic Models
+
+- **Agent-based computational economics** - Simulation of market dynamics
+- **Mechanism design** - Designing incentive-compatible systems
+
+## Reading List
+
+For those new to the field, suggested reading order:
+
+1. **Start with Akerlof (1970)** - Understand adverse selection
+2. **Read the SWARM theory doc** - [Theoretical Foundations](theory.md)
+3. **Skim Kyle (1985)** - Market microstructure details
+4. **Read "Distributional Safety"** - The full argument
+5. **Explore SWARM code** - Hands-on understanding
+
+## Contribute
+
+Know a relevant paper we're missing? [Open an issue](https://github.com/swarm-ai-safety/swarm/issues) or submit a PR.
+
+We're particularly interested in:
+
+- Multi-agent coordination failures
+- Emergent behavior in AI systems
+- Governance mechanism design
+- Information asymmetry in AI deployment

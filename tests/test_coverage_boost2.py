@@ -5,17 +5,17 @@ from unittest.mock import patch
 
 import pytest
 
-from src.agents.adaptive_adversary import (
+from swarm.agents.adaptive_adversary import (
     AdaptiveAdversary,
     AdversaryMemory,
     AttackStrategy,
     StrategyPerformance,
 )
-from src.agents.base import ActionType, InteractionProposal, Observation
-from src.agents.llm_agent import LLMAgent
-from src.agents.llm_config import LLMConfig, LLMProvider, PersonaType
-from src.models.agent import AgentState, AgentType
-from src.models.interaction import InteractionType, SoftInteraction
+from swarm.agents.base import ActionType, InteractionProposal, Observation
+from swarm.agents.llm_agent import LLMAgent
+from swarm.agents.llm_config import LLMConfig, LLMProvider, PersonaType
+from swarm.models.agent import AgentState, AgentType
+from swarm.models.interaction import InteractionType, SoftInteraction
 
 # ---------------------------------------------------------------------------
 # Helper

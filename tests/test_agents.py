@@ -2,13 +2,13 @@
 
 import random
 
-from src.agents.adversarial import AdversarialAgent
-from src.agents.base import Action, ActionType, Observation, Role
-from src.agents.deceptive import DeceptiveAgent
-from src.agents.honest import HonestAgent
-from src.agents.opportunistic import OpportunisticAgent
-from src.models.agent import AgentState, AgentType
-from src.models.interaction import InteractionType, SoftInteraction
+from swarm.agents.adversarial import AdversarialAgent
+from swarm.agents.base import Action, ActionType, Observation, Role
+from swarm.agents.deceptive import DeceptiveAgent
+from swarm.agents.honest import HonestAgent
+from swarm.agents.opportunistic import OpportunisticAgent
+from swarm.models.agent import AgentState, AgentType
+from swarm.models.interaction import InteractionType, SoftInteraction
 
 
 def create_test_observation(**kwargs) -> Observation:
@@ -136,7 +136,7 @@ class TestHonestAgent:
             )
             agent._interaction_history.append(interaction)
 
-        from src.agents.base import InteractionProposal
+        from swarm.agents.base import InteractionProposal
 
         proposal = InteractionProposal(
             initiator_id="trusted_agent",
@@ -181,7 +181,7 @@ class TestOpportunisticAgent:
         """Test opportunistic agent accepts profitable proposals."""
         agent = OpportunisticAgent(agent_id="opp_1")
 
-        from src.agents.base import InteractionProposal
+        from swarm.agents.base import InteractionProposal
 
         # Proposal with transfer to us
         proposal = InteractionProposal(
@@ -231,7 +231,7 @@ class TestDeceptiveAgent:
         random.seed(42)
         agent = DeceptiveAgent(agent_id="dec_1")
 
-        from src.agents.base import InteractionProposal
+        from swarm.agents.base import InteractionProposal
 
         # Early interactions should be accepted (trust building)
         proposal = InteractionProposal(
@@ -255,7 +255,7 @@ class TestDeceptiveAgent:
         """Test deceptive agent tracks interaction counts."""
         agent = DeceptiveAgent(agent_id="dec_1")
 
-        from src.agents.base import InteractionProposal
+        from swarm.agents.base import InteractionProposal
 
         proposal = InteractionProposal(
             initiator_id="target",
@@ -318,7 +318,7 @@ class TestAdversarialAgent:
         agent = AdversarialAgent(agent_id="adv_1")
         agent._known_allies.add("ally_1")
 
-        from src.agents.base import InteractionProposal
+        from swarm.agents.base import InteractionProposal
 
         proposal = InteractionProposal(
             initiator_id="ally_1",

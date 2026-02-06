@@ -27,12 +27,12 @@ from pathlib import Path
 # Add src to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from src.agents.honest import HonestAgent
-from src.agents.llm_agent import LLMAgent
-from src.agents.llm_config import LLMConfig, LLMProvider, PersonaType
-from src.core.orchestrator import Orchestrator, OrchestratorConfig
-from src.core.payoff import PayoffConfig
-from src.governance.config import GovernanceConfig
+from swarm.agents.honest import HonestAgent
+from swarm.agents.llm_agent import LLMAgent
+from swarm.agents.llm_config import LLMConfig, LLMProvider, PersonaType
+from swarm.core.orchestrator import Orchestrator, OrchestratorConfig
+from swarm.core.payoff import PayoffConfig
+from swarm.governance.config import GovernanceConfig
 
 
 def create_demo_orchestrator(

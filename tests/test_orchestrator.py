@@ -5,11 +5,38 @@ from pathlib import Path
 
 import pytest
 
-from src.agents.adversarial import AdversarialAgent
-from src.agents.deceptive import DeceptiveAgent
-from src.agents.honest import HonestAgent
-from src.agents.opportunistic import OpportunisticAgent
-from src.core.orchestrator import EpochMetrics, Orchestrator, OrchestratorConfig
+from swarm.agents.adversarial import AdversarialAgent
+from swarm.agents.base import Action, ActionType, BaseAgent, InteractionProposal, Observation
+from swarm.agents.deceptive import DeceptiveAgent
+from swarm.agents.honest import HonestAgent
+from swarm.agents.opportunistic import OpportunisticAgent
+from swarm.core.orchestrator import EpochMetrics, Orchestrator, OrchestratorConfig
+from swarm.governance.config import GovernanceConfig
+from swarm.models.agent import AgentType
+
+
+class _AlternatingAgent(BaseAgent):
+    """Agent that alternates actions to exercise ensemble majority vote."""
+
+    def __init__(self, agent_id: str):
+        super().__init__(agent_id=agent_id, agent_type=AgentType.HONEST)
+        self._counter = 0
+
+    def act(self, observation: Observation) -> Action:
+        self._counter += 1
+        if self._counter % 2 == 0:
+            return Action(action_type=ActionType.REPLY, agent_id=self.agent_id, content="b")
+        return Action(action_type=ActionType.POST, agent_id=self.agent_id, content="a")
+
+    def accept_interaction(self, proposal: InteractionProposal, observation: Observation) -> bool:
+        return False
+
+    def propose_interaction(
+        self,
+        observation: Observation,
+        counterparty_id: str,
+    ) -> InteractionProposal | None:
+        return None
 
 
 class TestOrchestratorBasics:
@@ -36,6 +63,16 @@ class TestOrchestratorBasics:
         assert orchestrator.config.n_epochs == 5
         assert orchestrator.config.steps_per_epoch == 5
         assert orchestrator.config.seed == 42
+
+    def test_invalid_observation_noise_probability_raises(self):
+        """Observation noise probability must be in [0, 1]."""
+        with pytest.raises(ValueError, match="observation_noise_probability"):
+            Orchestrator(OrchestratorConfig(observation_noise_probability=1.5))
+
+    def test_negative_observation_noise_std_raises(self):
+        """Observation noise std must be non-negative."""
+        with pytest.raises(ValueError, match="observation_noise_std"):
+            Orchestrator(OrchestratorConfig(observation_noise_std=-0.1))
 
     def test_register_agent(self):
         """Test agent registration."""
@@ -239,6 +276,29 @@ class TestOrchestratorEventLogging:
             assert "simulation_started" in event_types
             assert "simulation_ended" in event_types
 
+    def test_events_include_replay_metadata(self):
+        """Events should include configured scenario/replay metadata."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_path = Path(tmpdir) / "events.jsonl"
+            config = OrchestratorConfig(
+                n_epochs=1,
+                steps_per_epoch=1,
+                log_path=log_path,
+                log_events=True,
+                seed=123,
+                scenario_id="baseline",
+                replay_k=4,
+            )
+            orchestrator = Orchestrator(config=config)
+            orchestrator.register_agent(HonestAgent(agent_id="agent_1"))
+            orchestrator.run()
+
+            events = list(orchestrator.event_log.replay())
+            assert len(events) > 0
+            assert all(event.scenario_id == "baseline" for event in events)
+            assert all(event.replay_k == 4 for event in events)
+            assert all(event.seed == 123 for event in events)
+
 
 class TestOrchestratorCallbacks:
     """Tests for callback functionality."""
@@ -294,6 +354,60 @@ class TestOrchestratorCallbacks:
             for data in interaction_data:
                 assert 0 <= data["p"] <= 1
                 assert isinstance(data["accepted"], bool)
+
+
+class TestObservationNoise:
+    """Tests for observation-noise stress knob behavior."""
+
+    def test_same_seed_produces_same_noisy_observation(self):
+        config = OrchestratorConfig(
+            n_epochs=1,
+            steps_per_epoch=1,
+            seed=123,
+            observation_noise_probability=1.0,
+            observation_noise_std=0.25,
+        )
+        a = Orchestrator(config=config)
+        b = Orchestrator(config=OrchestratorConfig(**config.__dict__))
+
+        a.register_agent(HonestAgent(agent_id="agent_1"))
+        a.register_agent(HonestAgent(agent_id="agent_2"))
+        b.register_agent(HonestAgent(agent_id="agent_1"))
+        b.register_agent(HonestAgent(agent_id="agent_2"))
+
+        obs_a = a._build_observation("agent_1")
+        obs_b = b._build_observation("agent_1")
+
+        assert obs_a.visible_agents == obs_b.visible_agents
+        eco_a = dict(obs_a.ecosystem_metrics)
+        eco_b = dict(obs_b.ecosystem_metrics)
+        eco_a.pop("simulation_id", None)
+        eco_b.pop("simulation_id", None)
+        assert eco_a == eco_b
+
+
+class TestGovernanceEnsembleSelection:
+    """Tests for action ensembling in orchestrator selection."""
+
+    def test_select_action_uses_majority_vote_when_enabled(self):
+        config = OrchestratorConfig(
+            governance_config=GovernanceConfig(
+                self_ensemble_enabled=True,
+                self_ensemble_samples=3,
+            ),
+        )
+        orchestrator = Orchestrator(config=config)
+        agent = _AlternatingAgent("agent_1")
+        peer = HonestAgent("agent_2")
+        orchestrator.register_agent(agent)
+        orchestrator.register_agent(peer)
+
+        observation = orchestrator._build_observation("agent_1")
+        action = orchestrator._select_action(agent, observation)
+
+        # Sequence is POST, REPLY, POST => POST majority.
+        assert action.action_type == ActionType.POST
+        assert action.metadata.get("ensemble_samples") == 3
 
 
 class TestOrchestratorIntegration:

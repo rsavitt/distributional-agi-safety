@@ -5,14 +5,14 @@ from tempfile import TemporaryDirectory
 
 import pytest
 
-from src.analysis import (
+from swarm.analysis import (
     SweepConfig,
     SweepParameter,
     SweepResult,
     SweepRunner,
     quick_sweep,
 )
-from src.scenarios import load_scenario
+from swarm.scenarios import load_scenario
 
 
 @pytest.fixture

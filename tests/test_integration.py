@@ -4,10 +4,10 @@ from pathlib import Path
 
 import pytest
 
-from src.agents.adversarial import AdversarialAgent
-from src.agents.honest import HonestAgent
-from src.core.orchestrator import EpochMetrics, Orchestrator, OrchestratorConfig
-from src.scenarios.loader import ScenarioConfig, build_orchestrator, load_scenario
+from swarm.agents.adversarial import AdversarialAgent
+from swarm.agents.honest import HonestAgent
+from swarm.core.orchestrator import EpochMetrics, Orchestrator, OrchestratorConfig
+from swarm.scenarios.loader import ScenarioConfig, build_orchestrator, load_scenario
 
 SCENARIOS_DIR = Path(__file__).parent.parent / "scenarios"
 

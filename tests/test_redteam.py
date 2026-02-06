@@ -2,27 +2,27 @@
 
 import pytest
 
-from src.agents.adaptive_adversary import (
+from swarm.agents.adaptive_adversary import (
     AdaptiveAdversary,
     AdversaryMemory,
     AttackStrategy,
     StrategyPerformance,
 )
-from src.agents.base import Action, ActionType, Observation
-from src.redteam.attacks import (
+from swarm.agents.base import Action, ActionType, Observation
+from swarm.redteam.attacks import (
     AttackCategory,
     AttackDifficulty,
     AttackLibrary,
     AttackResult,
     AttackScenario,
 )
-from src.redteam.evaluator import (
+from swarm.redteam.evaluator import (
     GovernanceRobustness,
     RedTeamEvaluator,
     Vulnerability,
     VulnerabilityReport,
 )
-from src.redteam.metrics import (
+from swarm.redteam.metrics import (
     AdversaryPerformance,
     EvasionMetrics,
     GovernanceEffectiveness,
@@ -563,9 +563,9 @@ class TestIntegration:
 
     def test_adaptive_adversary_in_simulation(self):
         """Test running adaptive adversary in orchestrator."""
-        from src.agents.honest import HonestAgent
-        from src.core.orchestrator import Orchestrator, OrchestratorConfig
-        from src.governance.config import GovernanceConfig
+        from swarm.agents.honest import HonestAgent
+        from swarm.core.orchestrator import Orchestrator, OrchestratorConfig
+        from swarm.governance.config import GovernanceConfig
 
         config = OrchestratorConfig(
             n_epochs=3,
@@ -586,8 +586,8 @@ class TestIntegration:
 
     def test_get_adaptive_adversary_reports(self):
         """Test getting reports from adaptive adversaries."""
-        from src.agents.honest import HonestAgent
-        from src.core.orchestrator import Orchestrator, OrchestratorConfig
+        from swarm.agents.honest import HonestAgent
+        from swarm.core.orchestrator import Orchestrator, OrchestratorConfig
 
         config = OrchestratorConfig(n_epochs=2, steps_per_epoch=3)
         orchestrator = Orchestrator(config=config)
@@ -605,8 +605,8 @@ class TestIntegration:
 
     def test_get_evasion_metrics(self):
         """Test getting evasion metrics from orchestrator."""
-        from src.agents.honest import HonestAgent
-        from src.core.orchestrator import Orchestrator, OrchestratorConfig
+        from swarm.agents.honest import HonestAgent
+        from swarm.core.orchestrator import Orchestrator, OrchestratorConfig
 
         config = OrchestratorConfig(n_epochs=2, steps_per_epoch=3)
         orchestrator = Orchestrator(config=config)
@@ -623,7 +623,7 @@ class TestIntegration:
 
     def test_notify_adversary_detection(self):
         """Test notifying adversary of detection."""
-        from src.core.orchestrator import Orchestrator
+        from swarm.core.orchestrator import Orchestrator
 
         orchestrator = Orchestrator()
         adversary = AdaptiveAdversary("adaptive_1")

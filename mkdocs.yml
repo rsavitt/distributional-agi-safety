@@ -1,0 +1,127 @@
+site_name: SWARM
+site_description: System-Wide Assessment of Risk in Multi-agent systems
+site_url: https://swarm-ai.org
+repo_url: https://github.com/swarm-ai-safety/swarm
+repo_name: swarm-ai-safety/swarm
+
+theme:
+  name: material
+  custom_dir: docs/overrides
+  palette:
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: custom
+      accent: cyan
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: custom
+      accent: cyan
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+  font:
+    text: Inter
+    code: JetBrains Mono
+  features:
+    - navigation.instant
+    - navigation.tracking
+    - navigation.tabs
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+    - content.code.annotate
+  icon:
+    repo: fontawesome/brands/github
+  logo: assets/logo.svg
+
+extra_css:
+  - stylesheets/extra.css
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.tasklist:
+      custom_checkbox: true
+  - pymdownx.arithmatex:
+      generic: true
+  - tables
+  - attr_list
+  - md_in_html
+  - toc:
+      permalink: true
+
+extra_javascript:
+  - javascripts/mathjax.js
+  - https://polyfill.io/v3/polyfill.min.js?features=es6
+  - https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          paths: [.]
+          options:
+            show_source: true
+            show_root_heading: true
+            heading_level: 2
+
+nav:
+  - Home: index.md
+  - Getting Started:
+    - Installation: getting-started/installation.md
+    - Quick Start: getting-started/quickstart.md
+    - Your First Scenario: getting-started/first-scenario.md
+  - Concepts:
+    - Overview: concepts/index.md
+    - Soft Labels: concepts/soft-labels.md
+    - Metrics: concepts/metrics.md
+    - Governance: concepts/governance.md
+    - Emergence: concepts/emergence.md
+  - Guides:
+    - Writing Scenarios: guides/scenarios.md
+    - Custom Agents: guides/custom-agents.md
+    - Parameter Sweeps: guides/parameter-sweeps.md
+    - LLM Agents: guides/llm-agents.md
+    - Red Teaming: guides/red-teaming.md
+  - API Reference:
+    - Core: api/core.md
+    - Agents: api/agents.md
+    - Governance: api/governance.md
+    - Metrics: api/metrics.md
+  - Bridges:
+    - Overview: bridges/index.md
+    - Concordia: bridges/concordia.md
+    - OpenClaw: bridges/openclaw.md
+    - GasTown: bridges/gastown.md
+    - AgentXiv: bridges/agentxiv.md
+  - Research:
+    - Theoretical Foundations: research/theory.md
+    - Papers: research/papers.md
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/swarm-ai-safety/swarm
+    - icon: fontawesome/brands/discord
+      link: https://discord.gg/swarm-ai
+  generator: false

@@ -3,10 +3,10 @@
 
 import pytest
 
-from src.env.feed import Feed, VoteType
-from src.env.state import EnvState, InteractionProposal, RateLimits, RateLimitState
-from src.env.tasks import Task, TaskDifficulty, TaskPool, TaskStatus
-from src.models.agent import AgentType
+from swarm.env.feed import Feed, VoteType
+from swarm.env.state import EnvState, InteractionProposal, RateLimits, RateLimitState
+from swarm.env.tasks import Task, TaskDifficulty, TaskPool, TaskStatus
+from swarm.models.agent import AgentType
 
 
 class TestEnvState:
@@ -630,7 +630,7 @@ class TestTaskTemplates:
 
     def test_create_research_task(self):
         """create_research_task sets expected fields."""
-        from src.env.tasks import create_research_task
+        from swarm.env.tasks import create_research_task
 
         task = create_research_task("AI safety", deadline_epoch=100, bounty=15.0)
 
@@ -647,7 +647,7 @@ class TestTaskTemplates:
 
     def test_create_planning_task(self):
         """create_planning_task sets expected fields."""
-        from src.env.tasks import create_planning_task
+        from swarm.env.tasks import create_planning_task
 
         task = create_planning_task(
             "Improve governance", collaborators_needed=3, bounty=20.0,
@@ -663,7 +663,7 @@ class TestTaskTemplates:
 
     def test_create_optimization_task(self):
         """create_optimization_task sets expected fields."""
-        from src.env.tasks import create_optimization_task
+        from swarm.env.tasks import create_optimization_task
 
         task = create_optimization_task(
             "memory < 1GB", deadline_epoch=50, bounty=12.0,

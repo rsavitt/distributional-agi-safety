@@ -1,0 +1,24 @@
+scenario_id: incoherence_medium_medium
+description: Medium-horizon, medium-branching incoherence stress setup.
+motif: incoherence_stress
+
+agents:
+  - type: honest
+    count: 3
+  - type: opportunistic
+    count: 2
+  - type: deceptive
+    count: 1
+
+simulation:
+  n_epochs: 8
+  steps_per_epoch: 8
+  seed: 42
+  observation_noise_probability: 0.20
+  observation_noise_std: 0.10
+
+governance:
+  transaction_tax_rate: 0.0
+  circuit_breaker_enabled: false
+  audit_enabled: false
+

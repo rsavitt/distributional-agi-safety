@@ -1,27 +1,30 @@
 cff-version: 1.2.0
 message: "If you use this project, please cite it using the metadata below."
-title: "Distributional AGI Safety Sandbox"
+title: "SWARM: System-Wide Assessment of Risk in Multi-agent systems"
 type: software
 authors:
-  - name: "Raeli Savitt (with AI assistance)"
-version: "0.1.0"
+  - name: "Raeli Savitt"
+version: "1.0.0"
 date-released: "2026-02-05"
 license: "MIT"
-url: "https://github.com/rsavitt/distributional-agi-safety"
-repository-code: "https://github.com/rsavitt/distributional-agi-safety"
+url: "https://swarm-ai.org"
+repository-code: "https://github.com/swarm-ai-safety/swarm"
 keywords:
-  - "AGI safety"
-  - "distributional safety"
   - "multi-agent systems"
-  - "simulation"
+  - "AI safety"
+  - "distributional safety"
+  - "emergence"
   - "governance"
+  - "simulation"
 abstract: >
-  A simulation framework for studying distributional AGI safety with soft labels,
-  replay-based incoherence metrics, and configurable governance interventions.
+  SWARM is a research framework for studying emergent risks in multi-agent AI systems.
+  It uses soft probabilistic labels, replay-based incoherence metrics, and configurable
+  governance interventions to reveal how catastrophic failures can emerge from the
+  interaction of many sub-AGI agents.
 preferred-citation:
-  type: report
+  type: software
   authors:
-    - name: "Raeli Savitt (with AI assistance)"
-  title: "Distributional AGI Safety Sandbox: A Practical Lab for AGI Safety Research"
+    - name: "Raeli Savitt"
+  title: "SWARM: System-Wide Assessment of Risk in Multi-agent systems"
   year: 2026
-  url: "https://github.com/rsavitt/distributional-agi-safety"
+  url: "https://github.com/swarm-ai-safety/swarm"

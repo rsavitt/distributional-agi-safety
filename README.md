@@ -1,16 +1,26 @@
-# Distributional AGI Safety Sandbox
+# SWARM: System-Wide Assessment of Risk in Multi-agent systems
 
-[![CI](https://github.com/rsavitt/distributional-agi-safety/actions/workflows/ci.yml/badge.svg)](https://github.com/rsavitt/distributional-agi-safety/actions/workflows/ci.yml)
+[![CI](https://github.com/swarm-ai-safety/swarm/actions/workflows/ci.yml/badge.svg)](https://github.com/swarm-ai-safety/swarm/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
 
-An open-source simulation lab for AGI safety research: model multi-agent
-failure modes, quantify distributional harm, and test governance interventions
-before deployment.
+**Study how intelligence swarms—and where it fails.**
+
+SWARM is a research framework for studying emergent risks in multi-agent AI systems. Rather than focusing on single misaligned agents, SWARM reveals how catastrophic failures can emerge from the *interaction* of many sub-AGI agents—even when none are individually dangerous.
+
+## The Core Insight
+
+**AGI-level risks don't require AGI-level agents.** Harmful dynamics can emerge from:
+- Information asymmetry between agents
+- Adverse selection (system accepts lower-quality interactions)
+- Variance amplification across decision horizons
+- Governance latency and illegibility
+
+SWARM makes these interaction-level risks **observable, measurable, and governable**.
 
 ## What Problem Does This Solve?
 
-If you care about AGI safety research, this repo gives you a practical way to:
+If you care about AGI safety research, SWARM gives you a practical way to:
 
 - Turn qualitative worries ("deception", "coordination failures", "policy lag")
   into measurable signals (`toxicity`, `quality_gap`, calibration, incoherence).
@@ -27,46 +37,13 @@ If you care about AGI safety research, this repo gives you a practical way to:
 - Which governance settings improve safety with the smallest welfare cost?
 - How robust are conclusions under delayed/noisy labels and task shifts?
 
-## Start Here (Researcher Path)
-
-- Read the framing: [Theoretical Foundations](docs/theory.md)
-- Run an incoherence artifact: [Incoherence Scaling Analysis](docs/analysis/incoherence_scaling.md)
-- Inspect policy caveats: [Incoherence Governance Transferability](docs/transferability/incoherence_governance.md)
-- Reproduce from CLI: `python -m src run scenarios/baseline.yaml`
-
-## Cite This Work
-
-- Machine-readable citation metadata: [`CITATION.cff`](CITATION.cff)
-- Theoretical + whitepaper-style overview (with citation section): [`docs/theory.md`](docs/theory.md)
-
-## Overview
-
-The system provides:
-
-**Foundation Layer:**
-- Core data models for interactions with probabilistic labels
-- Downstream proxy computation (v_hat → p via calibrated sigmoid)
-- Soft payoff engine
-- Metrics system (toxicity, conditional loss, calibration, variance)
-- Append-only event logging with replay
-
-**Runtime Layer (MVP v0):**
-- Agent behavioral policies (honest, opportunistic, deceptive, adversarial)
-- **LLM-backed agents** with Anthropic, OpenAI, and Ollama support ([docs](docs/llm-agents.md))
-- Environment state management with rate limits
-- Feed engine (posts, replies, voting, visibility ranking)
-- Task system (claiming, collaboration, verification)
-- Orchestrator for multi-agent simulation (sync and async)
-- **Network topology** with dynamic evolution ([docs](docs/network-topology.md))
-
-**Governance Layer:**
-- Configurable levers (taxes, reputation decay, staking, circuit breakers, audits) ([docs](docs/governance.md))
-- **Collusion detection** with pair-level and group-level analysis ([docs](docs/governance.md#collusion-detection))
-- **Incoherence-targeted interventions** (self-ensemble, incoherence breaker, decomposition checkpoints, dynamic friction) with replay calibration and transferability caveats ([notes](docs/transferability/incoherence_governance.md))
-- Integration with orchestrator via epoch and interaction hooks
-- Populates `c_a` and `c_b` governance costs on interactions
-
 ## Installation
+
+```bash
+pip install swarm-safety
+```
+
+Or install from source:
 
 ```bash
 # Install base dependencies
@@ -85,13 +62,13 @@ python -m pip install -e ".[llm]"
 python -m pip install -e ".[all]"
 ```
 
-## Quick Start: Running a Simulation
+## Quick Start
 
 ```python
-from src.agents.honest import HonestAgent
-from src.agents.opportunistic import OpportunisticAgent
-from src.agents.deceptive import DeceptiveAgent
-from src.core.orchestrator import Orchestrator, OrchestratorConfig
+from swarm.agents.honest import HonestAgent
+from swarm.agents.opportunistic import OpportunisticAgent
+from swarm.agents.deceptive import DeceptiveAgent
+from swarm.core.orchestrator import Orchestrator, OrchestratorConfig
 
 # Configure simulation
 config = OrchestratorConfig(
@@ -124,106 +101,50 @@ python examples/mvp_demo.py
 
 ## CLI Quick Start
 
-Run simulations directly from the package CLI:
+Run simulations directly from the command line:
 
 ```bash
 # List available scenarios
-python -m src list
+swarm list
 
 # Run a scenario
-python -m src run scenarios/baseline.yaml
+swarm run scenarios/baseline.yaml
 
 # Override simulation settings
-python -m src run scenarios/baseline.yaml --seed 42 --epochs 20 --steps 15
+swarm run scenarios/baseline.yaml --seed 42 --epochs 20 --steps 15
 
 # Export outputs
-python -m src run scenarios/baseline.yaml --export-json results.json --export-csv outputs/
-```
-
-## Quick Start: Computing Metrics
-
-```python
-from src.models.interaction import SoftInteraction, InteractionType
-from src.core.proxy import ProxyComputer, ProxyObservables
-from src.core.payoff import SoftPayoffEngine
-from src.metrics.reporters import MetricsReporter
-
-# Create an interaction with observables
-obs = ProxyObservables(
-    task_progress_delta=0.7,
-    rework_count=1,
-    verifier_rejections=0,
-    counterparty_engagement_delta=0.4,
-)
-
-# Compute soft labels
-proxy = ProxyComputer()
-v_hat, p = proxy.compute_labels(obs)
-
-# Create interaction
-interaction = SoftInteraction(
-    initiator="agent_1",
-    counterparty="agent_2",
-    interaction_type=InteractionType.COLLABORATION,
-    accepted=True,
-    v_hat=v_hat,
-    p=p,
-)
-
-# Compute payoffs
-engine = SoftPayoffEngine()
-payoff_a = engine.payoff_initiator(interaction)
-payoff_b = engine.payoff_counterparty(interaction)
-
-# Compute metrics on a batch
-from tests.fixtures.interactions import generate_mixed_batch
-
-interactions = generate_mixed_batch(count=100, toxic_fraction=0.3)
-reporter = MetricsReporter()
-print(reporter.format_report(interactions, verbose=True))
+swarm run scenarios/baseline.yaml --export-json results.json --export-csv outputs/
 ```
 
 ## Core Concepts
 
-### Soft Labels
+### Soft Probabilistic Labels
 
 Instead of binary labels (good/bad), interactions carry a probability `p = P(v = +1)` representing the likelihood of a beneficial outcome:
 
-1. **Proxy signals** are combined into a raw score `v_hat ∈ [-1, +1]`
+1. **Proxy signals** are combined into a raw score `v_hat in [-1, +1]`
 2. **Calibrated sigmoid** converts to probability: `p = 1 / (1 + exp(-k * v_hat))`
 
-### Proxy Computation
-
-The `ProxyComputer` combines observable signals:
-
-| Signal | Weight | Description |
-|--------|--------|-------------|
-| task_progress | 0.4 | Forward progress on task |
-| rework_penalty | 0.2 | Quality signal from rework cycles |
-| verifier_penalty | 0.2 | Safety signal from rejections |
-| engagement_signal | 0.2 | Counterparty response |
-
-### Soft Payoff Engine
-
-```
-π_a = θ * S_soft - τ - c_a - ρ_a * E_soft + w_rep * r_a
-π_b = (1-θ) * S_soft + τ - c_b - ρ_b * E_soft + w_rep * r_b
-```
-
-Where:
-- `S_soft = p * s_plus - (1-p) * s_minus` (expected surplus)
-- `E_soft = (1-p) * h` (expected harm externality)
-
-### Key Metrics
+### Four Key Metrics
 
 | Metric | Formula | Interpretation |
 |--------|---------|----------------|
-| Toxicity rate | `E[1-p \| accepted]` | Expected harm among accepted |
-| Quality gap | `E[p \| accepted] - E[p \| rejected]` | Adverse selection indicator |
-| Conditional loss | `E[π \| accepted] - E[π]` | Selection effect on payoffs |
-| Brier score | `E[(p - v)²]` | Calibration quality |
+| **Toxicity rate** | `E[1-p \| accepted]` | Expected harm among accepted |
+| **Quality gap** | `E[p \| accepted] - E[p \| rejected]` | Adverse selection indicator (negative = bad) |
+| **Conditional loss** | `E[pi \| accepted] - E[pi]` | Selection effect on payoffs |
+| **Incoherence** | `Var[decision] / E[error]` | Variance-to-error ratio across replays |
 
-## Agent Policies
+### Governance Levers
+
+- **Transaction Taxes** - Reduce exploitation, cost welfare
+- **Reputation Decay** - Punish bad actors, erode honest standing
+- **Circuit Breakers** - Freeze toxic agents quickly
+- **Random Audits** - Deter hidden exploitation
+- **Staking** - Filter undercapitalized agents
+- **Collusion Detection** - Catch coordinated attacks
+
+### Agent Policies
 
 | Type | Behavior |
 |------|----------|
@@ -233,46 +154,33 @@ Where:
 | **Adversarial** | Targets honest agents, coordinates with allies, disrupts ecosystem |
 | **LLM** | Behavior determined by LLM with configurable persona ([details](docs/llm-agents.md)) |
 
-## Running Tests
+## Architecture
 
-```bash
-# Run all tests
-pytest tests/ -v
-
-# Run with coverage
-pytest tests/ --cov=src --cov-report=html
-
-# Run specific test file
-pytest tests/test_orchestrator.py -v
-
-# Run CI checks (lint, type-checking, tests)
-make ci
+```
+SWARM Core
++------------------------------------------------------------+
+|                                                            |
+|  ProxyComputer --> SoftInteraction --> Metrics             |
+|       |                  |                |                |
+|       |                  |                |                |
+|  Observable          Payoff          Governance            |
+|  Extraction          Engine          Engine                |
+|                                                            |
++------------------------------------------------------------+
 ```
 
-## Documentation
-
-Detailed documentation for each subsystem:
-
-| Topic | Description |
-|-------|-------------|
-| [Theoretical Foundations](docs/theory.md) | Formal model, whitepaper-style summary, and citation section |
-| [LLM Agents](docs/llm-agents.md) | Providers, personas, cost tracking, YAML config |
-| [Network Topology](docs/network-topology.md) | Topology types, dynamic evolution, network metrics |
-| [Governance](docs/governance.md) | Levers, collusion detection, integration points |
-| [Emergent Capabilities](docs/emergent-capabilities.md) | Composite tasks, capability types, emergent metrics |
-| [Red-Teaming](docs/red-teaming.md) | Adaptive adversaries, attack strategies, evaluation results |
-| [Scenarios & Sweeps](docs/scenarios.md) | YAML scenarios, scenario comparison, parameter sweeps |
-| [Boundaries](docs/boundaries.md) | External world simulation, flow tracking, leakage detection |
-| [Dashboard](docs/dashboard.md) | Streamlit dashboard setup and features |
-| [Incoherence Metric Contract](docs/incoherence_metric_contract.md) | Definitions and edge-case semantics for `D`, `E`, and `I` |
-| [Incoherence Scaling Analysis](docs/analysis/incoherence_scaling.md) | Replay-sweep artifact and upgrade path to decision-level replay metrics |
-| [Incoherence Governance Transferability](docs/transferability/incoherence_governance.md) | Deployment caveats and assumptions for incoherence interventions |
+**Data Flow:**
+```
+Observables -> ProxyComputer -> v_hat -> sigmoid -> p -> SoftPayoffEngine -> payoffs
+                                                    |
+                                               SoftMetrics -> toxicity, quality gap, etc.
+```
 
 ## Directory Structure
 
 ```
-distributional-agi-safety/
-├── src/
+swarm/
+├── swarm/
 │   ├── models/          # SoftInteraction, AgentState, event schema
 │   ├── core/            # PayoffEngine, ProxyComputer, sigmoid, orchestrator
 │   ├── agents/          # Honest, opportunistic, deceptive, adversarial, LLM, adaptive
@@ -286,21 +194,65 @@ distributional-agi-safety/
 │   ├── redteam/         # Attack scenarios, evaluator, evasion metrics
 │   ├── boundaries/      # External world, flow tracking, policies, leakage
 │   └── logging/         # Append-only JSONL logger
-├── tests/               # Test suite across core modules, governance, and analysis
-├── examples/            # mvp_demo, run_scenario, parameter_sweep, llm_demo, incoherence scaling
+├── tests/               # Test suite
+├── examples/            # Demo scripts
 ├── scenarios/           # YAML scenario definitions
-├── docs/                # Detailed documentation
+├── docs/                # Documentation
 └── pyproject.toml
 ```
 
-## Dependencies
+## Running Tests
 
-**Core:** numpy, pydantic |
-**Development:** pytest, pytest-cov, pytest-asyncio, mypy, ruff |
-**Analysis:** pandas, matplotlib, seaborn |
-**Runtime:** pyyaml |
-**LLM:** anthropic, openai, httpx |
-**Dashboard:** streamlit, plotly
+```bash
+# Run all tests
+pytest tests/ -v
+
+# Run with coverage
+pytest tests/ --cov=swarm --cov-report=html
+
+# Run specific test file
+pytest tests/test_orchestrator.py -v
+
+# Run CI checks (lint, type-checking, tests)
+make ci
+```
+
+## Documentation
+
+| Topic | Description |
+|-------|-------------|
+| [Theoretical Foundations](docs/theory.md) | Formal model, whitepaper-style summary, and citation section |
+| [LLM Agents](docs/llm-agents.md) | Providers, personas, cost tracking, YAML config |
+| [Network Topology](docs/network-topology.md) | Topology types, dynamic evolution, network metrics |
+| [Governance](docs/governance.md) | Levers, collusion detection, integration points |
+| [Emergent Capabilities](docs/emergent-capabilities.md) | Composite tasks, capability types, emergent metrics |
+| [Red-Teaming](docs/red-teaming.md) | Adaptive adversaries, attack strategies, evaluation results |
+| [Scenarios & Sweeps](docs/scenarios.md) | YAML scenarios, scenario comparison, parameter sweeps |
+| [Boundaries](docs/boundaries.md) | External world simulation, flow tracking, leakage detection |
+| [Dashboard](docs/dashboard.md) | Streamlit dashboard setup and features |
+| [Incoherence Metric Contract](docs/incoherence_metric_contract.md) | Definitions and edge-case semantics |
+| [Incoherence Scaling Analysis](docs/analysis/incoherence_scaling.md) | Replay-sweep artifact and upgrade path |
+| [Incoherence Governance Transferability](docs/transferability/incoherence_governance.md) | Deployment caveats and assumptions |
+
+## Start Here (Researcher Path)
+
+- Read the framing: [Theoretical Foundations](docs/theory.md)
+- Run an incoherence artifact: [Incoherence Scaling Analysis](docs/analysis/incoherence_scaling.md)
+- Inspect policy caveats: [Incoherence Governance Transferability](docs/transferability/incoherence_governance.md)
+- Reproduce from CLI: `swarm run scenarios/baseline.yaml`
+
+## Citation
+
+```bibtex
+@software{swarm2026,
+  title = {SWARM: System-Wide Assessment of Risk in Multi-agent systems},
+  author = {Savitt, Raeli},
+  year = {2026},
+  url = {https://github.com/swarm-ai-safety/swarm}
+}
+```
+
+Machine-readable citation metadata: [`CITATION.cff`](CITATION.cff)
 
 ## References
 
@@ -310,3 +262,7 @@ distributional-agi-safety/
 - [Multi-Agent Market Dynamics](https://arxiv.org/abs/2502.14143)
 - [The Hot Mess Theory of AI](https://alignment.anthropic.com/2026/hot-mess-of-ai/)
 - [Moltbook](https://moltbook.com) | [@sebkrier](https://x.com/sebkrier/status/2017993948132774232)
+
+## License
+
+MIT License - See [LICENSE](LICENSE) for details.

@@ -5,9 +5,9 @@ from datetime import datetime, timedelta
 import numpy as np
 import pytest
 
-from src.governance import GovernanceConfig, GovernanceEngine
-from src.governance.security import SecurityLever
-from src.metrics.security import (
+from swarm.governance import GovernanceConfig, GovernanceEngine
+from swarm.governance.security import SecurityLever
+from swarm.metrics.security import (
     ContagionChain,
     LaunderingPath,
     ManipulationPattern,
@@ -18,7 +18,7 @@ from src.metrics.security import (
     compute_containment_effectiveness,
     compute_threat_trend,
 )
-from src.models.interaction import InteractionType, SoftInteraction
+from swarm.models.interaction import InteractionType, SoftInteraction
 
 # =============================================================================
 # Test Fixtures
@@ -548,7 +548,7 @@ class TestSecurityLever:
 
     def test_disabled_returns_empty_effect(self):
         """Test that disabled lever returns empty effect."""
-        from src.env.state import EnvState
+        from swarm.env.state import EnvState
 
         config = GovernanceConfig(security_enabled=False)
         lever = SecurityLever(config)
@@ -565,7 +565,7 @@ class TestSecurityLever:
         config = GovernanceConfig(security_enabled=True)
         lever = SecurityLever(config)
 
-        from src.env.state import EnvState
+        from swarm.env.state import EnvState
 
         state = EnvState()
         state.add_agent("a")
@@ -582,7 +582,7 @@ class TestSecurityLever:
         config = GovernanceConfig(security_enabled=True)
         lever = SecurityLever(config)
 
-        from src.env.state import EnvState
+        from swarm.env.state import EnvState
 
         state = EnvState()
         state.add_agent("agent_1")
@@ -612,7 +612,7 @@ class TestSecurityLever:
         )
         lever = SecurityLever(config)
 
-        from src.env.state import EnvState
+        from swarm.env.state import EnvState
 
         state = EnvState()
         state.add_agent("a")
@@ -636,7 +636,7 @@ class TestSecurityLever:
         config = GovernanceConfig(security_enabled=True)
         lever = SecurityLever(config)
 
-        from src.env.state import EnvState
+        from swarm.env.state import EnvState
 
         state = EnvState()
         state.add_agent("a")
@@ -873,7 +873,7 @@ class TestSecurityLeverEpochStart:
 
     def _make_state(self, agent_ids=None, reputations=None):
         """Create an EnvState with agents."""
-        from src.env.state import EnvState
+        from swarm.env.state import EnvState
 
         state = EnvState()
         reputations = reputations or {}
@@ -961,7 +961,7 @@ class TestSecurityLeverRealtimeThreat:
         return SecurityLever(config, seed=42)
 
     def _make_state(self, agent_ids=None):
-        from src.env.state import EnvState
+        from swarm.env.state import EnvState
         state = EnvState()
         for aid in (agent_ids or ["a", "b"]):
             state.add_agent(aid)
@@ -1054,7 +1054,7 @@ class TestSecurityLeverCanAgentAct:
         config = GovernanceConfig(security_enabled=False)
         lever = SecurityLever(config)
 
-        from src.env.state import EnvState
+        from swarm.env.state import EnvState
         state = EnvState()
 
         assert lever.can_agent_act("any_agent", state) is True
@@ -1064,7 +1064,7 @@ class TestSecurityLeverCanAgentAct:
         config = GovernanceConfig(security_enabled=True)
         lever = SecurityLever(config)
 
-        from src.env.state import EnvState
+        from swarm.env.state import EnvState
         state = EnvState()
 
         assert lever.can_agent_act("free_agent", state) is True
@@ -1126,7 +1126,7 @@ class TestSecurityLeverSetters:
         config = GovernanceConfig(security_enabled=True)
         lever = SecurityLever(config)
 
-        from src.env.state import EnvState
+        from swarm.env.state import EnvState
         state = EnvState()
         state.add_agent("a")
         state.add_agent("b")

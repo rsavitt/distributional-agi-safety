@@ -7,18 +7,18 @@ Tests are split into two classes:
 
 from pathlib import Path
 
-from src.agents import DeceptiveAgent, HonestAgent, OpportunisticAgent
-from src.analysis.dashboard import (
+from swarm.agents import DeceptiveAgent, HonestAgent, OpportunisticAgent
+from swarm.analysis.dashboard import (
     AgentSnapshot,
     DashboardConfig,
     DashboardState,
     MetricSnapshot,
 )
-from src.analysis.sweep import SweepConfig, SweepParameter, SweepRunner
-from src.core.orchestrator import EpochMetrics, Orchestrator, OrchestratorConfig
-from src.governance.config import GovernanceConfig
-from src.logging.event_log import EventLog
-from src.scenarios.loader import ScenarioConfig, build_orchestrator, load_scenario
+from swarm.analysis.sweep import SweepConfig, SweepParameter, SweepRunner
+from swarm.core.orchestrator import EpochMetrics, Orchestrator, OrchestratorConfig
+from swarm.governance.config import GovernanceConfig
+from swarm.logging.event_log import EventLog
+from swarm.scenarios.loader import ScenarioConfig, build_orchestrator, load_scenario
 
 # ---------------------------------------------------------------------------
 # Helpers

@@ -9,16 +9,16 @@ PROJECT_ROOT = Path(__file__).parent.parent.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from src.core.orchestrator import EpochMetrics, Orchestrator, OrchestratorConfig
-from src.core.payoff import PayoffConfig
-from src.governance.config import GovernanceConfig
-from src.scenarios.loader import (
+from swarm.core.orchestrator import EpochMetrics, Orchestrator, OrchestratorConfig
+from swarm.core.payoff import PayoffConfig
+from swarm.governance.config import GovernanceConfig
+from swarm.scenarios.loader import (
     ScenarioConfig,
     build_orchestrator,
     load_scenario,
     parse_governance_config,
 )
-from src.analysis.aggregation import MetricsAggregator, SimulationHistory
+from swarm.analysis.aggregation import MetricsAggregator, SimulationHistory
 
 
 SCENARIOS_DIR = PROJECT_ROOT / "scenarios"
@@ -197,10 +197,10 @@ def run_custom(
         if val > MAX_AGENTS_PER_TYPE:
             raise ValueError(f"{name} ({val}) exceeds max ({MAX_AGENTS_PER_TYPE})")
 
-    from src.agents.honest import HonestAgent
-    from src.agents.opportunistic import OpportunisticAgent
-    from src.agents.deceptive import DeceptiveAgent
-    from src.agents.adversarial import AdversarialAgent
+    from swarm.agents.honest import HonestAgent
+    from swarm.agents.opportunistic import OpportunisticAgent
+    from swarm.agents.deceptive import DeceptiveAgent
+    from swarm.agents.adversarial import AdversarialAgent
 
     governance_config = GovernanceConfig(
         transaction_tax_rate=tax_rate,

@@ -5,8 +5,8 @@ import uuid
 from datetime import datetime, timedelta
 from typing import List, Optional
 
-from src.core.proxy import ProxyComputer, ProxyObservables
-from src.models.interaction import InteractionType, SoftInteraction
+from swarm.core.proxy import ProxyComputer, ProxyObservables
+from swarm.models.interaction import InteractionType, SoftInteraction
 
 
 def generate_benign_batch(

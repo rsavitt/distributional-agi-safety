@@ -7,7 +7,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from src.analysis.dashboard import (
+from swarm.analysis.dashboard import (
     AgentSnapshot,
     DashboardConfig,
     DashboardState,
@@ -239,7 +239,7 @@ class TestOrchestratorExtraction:
 
     def test_extract_metrics(self):
         """Test extracting metrics from orchestrator."""
-        from src.core.orchestrator import Orchestrator, OrchestratorConfig
+        from swarm.core.orchestrator import Orchestrator, OrchestratorConfig
 
         config = OrchestratorConfig(n_epochs=2, steps_per_epoch=2)
         orchestrator = Orchestrator(config)
@@ -252,8 +252,8 @@ class TestOrchestratorExtraction:
 
     def test_extract_agent_snapshots(self):
         """Test extracting agent snapshots."""
-        from src.agents.honest import HonestAgent
-        from src.core.orchestrator import Orchestrator, OrchestratorConfig
+        from swarm.agents.honest import HonestAgent
+        from swarm.core.orchestrator import Orchestrator, OrchestratorConfig
 
         config = OrchestratorConfig()
         orchestrator = Orchestrator(config)
@@ -330,9 +330,9 @@ class TestIncoherenceDashboardHelpers:
 
     def test_extract_incoherence_agent_profiles(self):
         """Agent profile extraction should compute per-initiator incoherence means."""
-        from src.env.state import EnvState
-        from src.models.agent import AgentType
-        from src.models.interaction import SoftInteraction
+        from swarm.env.state import EnvState
+        from swarm.models.agent import AgentType
+        from swarm.models.interaction import SoftInteraction
 
         state = EnvState()
         state.add_agent("a1", AgentType.HONEST)
@@ -396,9 +396,9 @@ class TestDashboardIntegration:
 
     def test_full_integration(self):
         """Test full integration with a running orchestrator."""
-        from src.agents.adversarial import AdversarialAgent
-        from src.agents.honest import HonestAgent
-        from src.core.orchestrator import Orchestrator, OrchestratorConfig
+        from swarm.agents.adversarial import AdversarialAgent
+        from swarm.agents.honest import HonestAgent
+        from swarm.core.orchestrator import Orchestrator, OrchestratorConfig
 
         config = OrchestratorConfig(
             n_epochs=3,

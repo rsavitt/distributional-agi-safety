@@ -15,8 +15,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from src.analysis import SweepConfig, SweepParameter, SweepRunner
-from src.scenarios import load_scenario
+from swarm.analysis import SweepConfig, SweepParameter, SweepRunner
+from swarm.scenarios import load_scenario
 
 
 def progress(current: int, total: int, params: dict) -> None:
