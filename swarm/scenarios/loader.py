@@ -129,6 +129,17 @@ def parse_governance_config(data: Dict[str, Any]) -> GovernanceConfig:
         collusion_realtime_rate=data.get("collusion_realtime_rate", 0.1),
         collusion_clear_history_on_epoch=data.get("collusion_clear_history_on_epoch", False),
 
+        # Transparency ledger
+        transparency_enabled=data.get("transparency_enabled", False),
+        transparency_bonus_rate=data.get("transparency_bonus_rate", 0.1),
+        transparency_threshold_p=data.get("transparency_threshold_p", 0.5),
+
+        # Moderator
+        moderator_enabled=data.get("moderator_enabled", False),
+        moderator_review_probability=data.get("moderator_review_probability", 0.3),
+        moderator_penalty_multiplier=data.get("moderator_penalty_multiplier", 1.5),
+        moderator_threshold_p=data.get("moderator_threshold_p", 0.4),
+
         # Variance-aware governance
         self_ensemble_enabled=data.get("self_ensemble_enabled", False),
         self_ensemble_samples=data.get("self_ensemble_samples", 5),

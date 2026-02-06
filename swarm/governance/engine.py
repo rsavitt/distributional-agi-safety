@@ -12,11 +12,14 @@ from swarm.governance.config import GovernanceConfig
 from swarm.governance.decomposition import DecompositionLever
 from swarm.governance.dynamic_friction import IncoherenceFrictionLever
 from swarm.governance.ensemble import SelfEnsembleLever
+from swarm.governance.identity_lever import SybilDetectionLever
 from swarm.governance.incoherence_breaker import IncoherenceCircuitBreakerLever
 from swarm.governance.levers import GovernanceLever, LeverEffect
+from swarm.governance.moderator_lever import ModeratorLever
 from swarm.governance.reputation import ReputationDecayLever, VoteNormalizationLever
 from swarm.governance.security import SecurityLever
 from swarm.governance.taxes import TransactionTaxLever
+from swarm.governance.transparency import TransparencyLever
 from swarm.models.interaction import SoftInteraction
 
 
@@ -97,6 +100,9 @@ class GovernanceEngine:
             RandomAuditLever(self.config, seed=seed),
             CollusionPenaltyLever(self.config),
             SecurityLever(self.config, seed=seed),
+            SybilDetectionLever(self.config),
+            TransparencyLever(self.config),
+            ModeratorLever(self.config, seed=seed),
         ]
         # Variance-aware levers (scaffold registration; behavior in #35)
         if self.config.self_ensemble_enabled:

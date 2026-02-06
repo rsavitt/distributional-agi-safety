@@ -8,12 +8,12 @@ Reference: "Virtual Agent Economies" (arXiv 2509.10147) - Tomasev et al.
 
 from typing import TYPE_CHECKING, Dict, List, Set
 
-from src.governance.levers import GovernanceLever, LeverEffect
+from swarm.governance.levers import GovernanceLever, LeverEffect
 
 if TYPE_CHECKING:
-    from src.env.state import EnvState
-    from src.governance.config import GovernanceConfig
-    from src.models.interaction import SoftInteraction
+    from swarm.env.state import EnvState
+    from swarm.governance.config import GovernanceConfig
+    from swarm.models.interaction import SoftInteraction
 
 
 class SybilDetectionLever(GovernanceLever):
