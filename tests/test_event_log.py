@@ -2,9 +2,9 @@
 
 from datetime import datetime, timedelta
 
-from src.logging.event_log import EventLog
-from src.models.events import Event, EventType
-from src.models.interaction import InteractionType
+from swarm.logging.event_log import EventLog
+from swarm.models.events import Event, EventType
+from swarm.models.interaction import InteractionType
 
 # =============================================================================
 # Helpers
@@ -169,6 +169,9 @@ class TestReplay:
             payload={"tau": 1.5, "components": {"c_a": 0.1}},
             epoch=3,
             step=7,
+            scenario_id="baseline",
+            replay_k=2,
+            seed=42,
         )
         log.append(original)
 
@@ -181,6 +184,28 @@ class TestReplay:
         assert replayed.payload["tau"] == 1.5
         assert replayed.epoch == 3
         assert replayed.step == 7
+        assert replayed.scenario_id == "baseline"
+        assert replayed.replay_k == 2
+        assert replayed.seed == 42
+
+    def test_from_dict_backwards_compatible_without_replay_fields(self):
+        """Older event payloads without replay metadata should still parse."""
+        raw = {
+            "event_id": "evt-1",
+            "timestamp": datetime.now().isoformat(),
+            "event_type": EventType.SIMULATION_STARTED.value,
+            "interaction_id": None,
+            "agent_id": None,
+            "initiator_id": None,
+            "counterparty_id": None,
+            "payload": {},
+            "epoch": 0,
+            "step": 0,
+        }
+        event = Event.from_dict(raw)
+        assert event.scenario_id is None
+        assert event.replay_k is None
+        assert event.seed is None
 
 
 # =============================================================================

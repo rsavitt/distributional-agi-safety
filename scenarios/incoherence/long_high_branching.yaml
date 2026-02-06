@@ -1,0 +1,26 @@
+scenario_id: incoherence_long_high
+description: Long-horizon, high-branching incoherence stress setup.
+motif: incoherence_stress
+
+agents:
+  - type: honest
+    count: 5
+  - type: opportunistic
+    count: 3
+  - type: deceptive
+    count: 1
+  - type: adversarial
+    count: 1
+
+simulation:
+  n_epochs: 8
+  steps_per_epoch: 20
+  seed: 42
+  observation_noise_probability: 0.30
+  observation_noise_std: 0.15
+
+governance:
+  transaction_tax_rate: 0.0
+  circuit_breaker_enabled: false
+  audit_enabled: false
+

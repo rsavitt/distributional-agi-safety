@@ -2,17 +2,17 @@
 
 import random
 
-from src.agents.base import (
+from swarm.agents.base import (
     Action,
     ActionType,
     InteractionProposal,
     Observation,
 )
-from src.agents.deceptive import DeceptiveAgent
-from src.agents.honest import HonestAgent
-from src.agents.opportunistic import OpportunisticAgent
-from src.models.agent import AgentState
-from src.models.interaction import InteractionType, SoftInteraction
+from swarm.agents.deceptive import DeceptiveAgent
+from swarm.agents.honest import HonestAgent
+from swarm.agents.opportunistic import OpportunisticAgent
+from swarm.models.agent import AgentState
+from swarm.models.interaction import InteractionType, SoftInteraction
 
 
 def obs(**kwargs) -> Observation:

@@ -5,13 +5,13 @@ from datetime import datetime, timedelta
 import numpy as np
 import pytest
 
-from src.governance import GovernanceConfig, GovernanceEngine
-from src.metrics.collusion import (
+from swarm.governance import GovernanceConfig, GovernanceEngine
+from swarm.metrics.collusion import (
     CollusionDetector,
     detect_vote_coordination,
     temporal_clustering_score,
 )
-from src.models.interaction import InteractionType, SoftInteraction
+from swarm.models.interaction import InteractionType, SoftInteraction
 
 # =============================================================================
 # Test Fixtures
@@ -480,7 +480,7 @@ class TestCollusionScenarioLoader:
 
     def test_parse_collusion_governance_config(self):
         """Should parse collusion settings from governance config."""
-        from src.scenarios.loader import parse_governance_config
+        from swarm.scenarios.loader import parse_governance_config
 
         data = {
             "collusion_detection_enabled": True,
@@ -500,7 +500,7 @@ class TestCollusionScenarioLoader:
 
     def test_default_collusion_config(self):
         """Should use defaults when not specified."""
-        from src.scenarios.loader import parse_governance_config
+        from swarm.scenarios.loader import parse_governance_config
 
         config = parse_governance_config({})
 
@@ -584,7 +584,7 @@ class TestCollusionPenaltyLever:
 
     def _make_lever(self, **overrides):
         """Create a CollusionPenaltyLever with sensible test defaults."""
-        from src.governance.collusion import CollusionPenaltyLever
+        from swarm.governance.collusion import CollusionPenaltyLever
 
         defaults = {
             "collusion_detection_enabled": True,
@@ -603,7 +603,7 @@ class TestCollusionPenaltyLever:
 
     def _make_state(self, agent_ids=None):
         """Create an EnvState with agents."""
-        from src.env.state import EnvState
+        from swarm.env.state import EnvState
 
         state = EnvState()
         for aid in (agent_ids or ["a", "b", "c"]):

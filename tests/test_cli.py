@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from src.__main__ import main
+from swarm.__main__ import main
 
 BASELINE_SCENARIO = "scenarios/baseline.yaml"
 FAST_FLAGS = ["--seed", "42", "--epochs", "2", "--steps", "2"]

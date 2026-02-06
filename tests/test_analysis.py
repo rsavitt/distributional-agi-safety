@@ -6,23 +6,26 @@ from types import SimpleNamespace
 
 import pytest
 
-from src.analysis.aggregation import (
+from swarm.analysis.aggregation import (
     AgentSnapshot,
     EpochSnapshot,
     MetricsAggregator,
     SimulationHistory,
     TimeSeriesPoint,
+    aggregate_incoherence_scaling,
+    build_scaling_curve_points,
     compute_rolling_average,
     compute_trend,
 )
-from src.analysis.export import (
+from swarm.analysis.plots import create_incoherence_scaling_data
+from swarm.analysis.export import (
     export_to_json,
     generate_summary_report,
     history_to_agent_records,
     history_to_epoch_records,
     load_from_json,
 )
-from src.models.interaction import SoftInteraction
+from swarm.models.interaction import SoftInteraction
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -628,7 +631,7 @@ class TestCsvExportImport:
 
     def test_csv_round_trip(self, tmp_path):
         pytest.importorskip("pandas")
-        from src.analysis.export import export_to_csv, load_from_csv
+        from swarm.analysis.export import export_to_csv, load_from_csv
 
         h = _make_history_with_two_epochs()
         paths = export_to_csv(h, tmp_path, prefix="test")
@@ -647,7 +650,7 @@ class TestCsvExportImport:
 
     def test_csv_epochs_only(self, tmp_path):
         pytest.importorskip("pandas")
-        from src.analysis.export import export_to_csv, load_from_csv
+        from swarm.analysis.export import export_to_csv, load_from_csv
 
         h = _make_history_with_two_epochs()
         paths = export_to_csv(h, tmp_path, prefix="ep_only")
@@ -658,7 +661,7 @@ class TestCsvExportImport:
 
     def test_csv_creates_output_dir(self, tmp_path):
         pytest.importorskip("pandas")
-        from src.analysis.export import export_to_csv
+        from swarm.analysis.export import export_to_csv
 
         h = _make_history_with_two_epochs()
         output_dir = tmp_path / "new_sub_dir"
@@ -668,7 +671,7 @@ class TestCsvExportImport:
 
     def test_csv_empty_history(self, tmp_path):
         pytest.importorskip("pandas")
-        from src.analysis.export import export_to_csv
+        from swarm.analysis.export import export_to_csv
 
         h = SimulationHistory()
         paths = export_to_csv(h, tmp_path, prefix="empty")
@@ -776,3 +779,63 @@ class TestMetricsAggregatorOptionalReports:
         assert snapshot.avg_coordination_score == pytest.approx(0.8)
         assert snapshot.avg_synergy_score == pytest.approx(0.6)
         assert snapshot.tasks_completed == 12
+
+
+class TestIncoherenceScalingAggregation:
+
+    def test_aggregate_incoherence_scaling_groups_rows(self):
+        rows = [
+            {
+                "horizon_tier": "short",
+                "branching_tier": "low",
+                "incoherence_index": 0.2,
+                "error_rate": 0.3,
+                "disagreement_rate": 0.1,
+            },
+            {
+                "horizon_tier": "short",
+                "branching_tier": "low",
+                "incoherence_index": 0.4,
+                "error_rate": 0.5,
+                "disagreement_rate": 0.3,
+            },
+        ]
+        summary = aggregate_incoherence_scaling(rows)
+        assert len(summary) == 1
+        assert summary[0]["n_runs"] == 2
+        assert summary[0]["mean_incoherence_index"] == pytest.approx(0.3)
+
+    def test_build_scaling_curve_points_filters_and_orders(self):
+        aggregated_rows = [
+            {
+                "horizon_tier": "medium",
+                "branching_tier": "low",
+                "mean_incoherence_index": 0.4,
+                "mean_error_rate": 0.5,
+                "mean_disagreement_rate": 0.2,
+            },
+            {
+                "horizon_tier": "short",
+                "branching_tier": "low",
+                "mean_incoherence_index": 0.2,
+                "mean_error_rate": 0.3,
+                "mean_disagreement_rate": 0.1,
+            },
+        ]
+        points = build_scaling_curve_points(aggregated_rows, x_axis="horizon", fixed_tier="low")
+        assert points["x_labels"] == ["medium", "short"] or points["x_labels"] == ["short", "medium"]
+        assert len(points["incoherence_index"]) == 2
+
+    def test_create_incoherence_scaling_data(self):
+        rows = [
+            {
+                "horizon_tier": "short",
+                "branching_tier": "low",
+                "mean_incoherence_index": 0.2,
+                "mean_error_rate": 0.3,
+                "mean_disagreement_rate": 0.1,
+            }
+        ]
+        plot_data = create_incoherence_scaling_data(rows)
+        assert plot_data["labels"] == ["short|low"]
+        assert plot_data["incoherence_index"] == [0.2]

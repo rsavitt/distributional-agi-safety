@@ -2,16 +2,30 @@
 
 import pytest
 
-from src.env.state import EnvState
-from src.governance.admission import StakingLever
-from src.governance.audits import RandomAuditLever
-from src.governance.circuit_breaker import CircuitBreakerLever
-from src.governance.config import GovernanceConfig
-from src.governance.engine import GovernanceEffect, GovernanceEngine
-from src.governance.levers import LeverEffect
-from src.governance.reputation import ReputationDecayLever, VoteNormalizationLever
-from src.governance.taxes import TransactionTaxLever
-from src.models.interaction import SoftInteraction
+from swarm.env.state import EnvState
+from swarm.governance.admission import StakingLever
+from swarm.governance.audits import RandomAuditLever
+from swarm.governance.circuit_breaker import CircuitBreakerLever
+from swarm.governance.config import GovernanceConfig
+from swarm.governance.decomposition import DecompositionLever
+from swarm.governance.dynamic_friction import IncoherenceFrictionLever
+from swarm.governance.ensemble import SelfEnsembleLever
+from swarm.governance.engine import GovernanceEffect, GovernanceEngine
+from swarm.governance.incoherence_breaker import IncoherenceCircuitBreakerLever
+from swarm.governance.levers import LeverEffect
+from swarm.governance.reputation import ReputationDecayLever, VoteNormalizationLever
+from swarm.governance.taxes import TransactionTaxLever
+from swarm.models.interaction import SoftInteraction
+
+
+class _DummyForecaster:
+    """Tiny stub forecaster for adaptive-governance tests."""
+
+    def __init__(self, probability: float):
+        self.probability = probability
+
+    def predict_proba(self, feature_row):
+        return self.probability
 
 
 class TestGovernanceConfig:
@@ -43,6 +57,19 @@ class TestGovernanceConfig:
         config = GovernanceConfig(audit_probability=2.0)
         with pytest.raises(ValueError, match="audit_probability"):
             config.validate()
+
+    def test_invalid_variance_aware_fields(self):
+        """Variance-aware config validation should reject invalid values."""
+        with pytest.raises(ValueError, match="self_ensemble_samples"):
+            GovernanceConfig(self_ensemble_samples=0).validate()
+        with pytest.raises(ValueError, match="incoherence_breaker_threshold"):
+            GovernanceConfig(incoherence_breaker_threshold=1.1).validate()
+        with pytest.raises(ValueError, match="decomposition_horizon_threshold"):
+            GovernanceConfig(decomposition_horizon_threshold=0).validate()
+        with pytest.raises(ValueError, match="incoherence_friction_rate"):
+            GovernanceConfig(incoherence_friction_rate=-0.1).validate()
+        with pytest.raises(ValueError, match="adaptive_incoherence_threshold"):
+            GovernanceConfig(adaptive_incoherence_threshold=1.5).validate()
 
 
 class TestLeverEffect:
@@ -484,6 +511,90 @@ class TestGovernanceEngine:
         assert engine.can_agent_act("rich", state)
         assert not engine.can_agent_act("poor", state)
 
+    def test_variance_aware_levers_register_conditionally(self):
+        """Engine should only register variance-aware levers when enabled."""
+        config = GovernanceConfig(
+            self_ensemble_enabled=True,
+            incoherence_breaker_enabled=True,
+            decomposition_enabled=True,
+            incoherence_friction_enabled=True,
+        )
+        engine = GovernanceEngine(config)
+        names = engine.get_active_lever_names()
+
+        assert "self_ensemble" in names
+        assert "incoherence_breaker" in names
+        assert "decomposition" in names
+        assert "incoherence_friction" in names
+
+    def test_variance_aware_levers_not_registered_by_default(self):
+        """Default config should preserve existing lever set."""
+        engine = GovernanceEngine(GovernanceConfig())
+        names = engine.get_active_lever_names()
+        assert "self_ensemble" not in names
+        assert "incoherence_breaker" not in names
+        assert "decomposition" not in names
+        assert "incoherence_friction" not in names
+
+    def test_adaptive_gating_disables_variance_levers_below_threshold(self):
+        """Adaptive mode should gate variance-aware levers when risk is low."""
+        config = GovernanceConfig(
+            self_ensemble_enabled=True,
+            incoherence_breaker_enabled=True,
+            decomposition_enabled=True,
+            incoherence_friction_enabled=True,
+            adaptive_governance_enabled=True,
+            adaptive_incoherence_threshold=0.6,
+        )
+        engine = GovernanceEngine(config)
+        engine.set_incoherence_forecaster(_DummyForecaster(probability=0.2))
+        risk = engine.update_adaptive_mode({"horizon_length": 5.0})
+        assert risk == pytest.approx(0.2)
+
+        active_names = engine.get_active_lever_names()
+        assert "self_ensemble" not in active_names
+        assert "incoherence_breaker" not in active_names
+        assert "decomposition" not in active_names
+        assert "incoherence_friction" not in active_names
+
+    def test_adaptive_gating_enables_variance_levers_above_threshold(self):
+        """Adaptive mode should activate variance-aware levers when risk is high."""
+        config = GovernanceConfig(
+            self_ensemble_enabled=True,
+            incoherence_breaker_enabled=True,
+            decomposition_enabled=True,
+            incoherence_friction_enabled=True,
+            adaptive_governance_enabled=True,
+            adaptive_incoherence_threshold=0.6,
+        )
+        engine = GovernanceEngine(config)
+        engine.set_incoherence_forecaster(_DummyForecaster(probability=0.9))
+        risk = engine.update_adaptive_mode({"horizon_length": 20.0})
+        assert risk == pytest.approx(0.9)
+
+        active_names = engine.get_active_lever_names()
+        assert "self_ensemble" in active_names
+        assert "incoherence_breaker" in active_names
+        assert "decomposition" in active_names
+        assert "incoherence_friction" in active_names
+
+    def test_apply_step_with_decomposition(self):
+        """Step-level hooks should aggregate decomposition effects."""
+        config = GovernanceConfig(
+            decomposition_enabled=True,
+            decomposition_horizon_threshold=4,
+        )
+        engine = GovernanceEngine(config)
+        state = EnvState(steps_per_epoch=8)
+        state.add_agent("agent_1")
+        st = state.get_agent("agent_1")
+        st.interactions_initiated = 3
+        st.interactions_accepted = 0
+        st.interactions_rejected = 3
+
+        effect = engine.apply_step(state, step=2)
+        assert "agent_1" in effect.reputation_deltas
+
 
 class TestGovernanceEffect:
     """Tests for GovernanceEffect aggregation."""
@@ -504,12 +615,88 @@ class TestGovernanceEffect:
         assert len(result.lever_effects) == 3
 
 
+class TestVarianceAwareLevers:
+    """Tests for new incoherence-targeted governance levers."""
+
+    def test_self_ensemble_lever_adds_compute_cost(self):
+        config = GovernanceConfig(
+            self_ensemble_enabled=True,
+            self_ensemble_samples=5,
+        )
+        lever = SelfEnsembleLever(config)
+        effect = lever.on_interaction(
+            SoftInteraction(p=0.6, accepted=True),
+            EnvState(),
+        )
+        assert effect.cost_a > 0
+        assert effect.cost_b > 0
+        assert effect.details["ensemble_samples"] == 5
+
+    def test_incoherence_breaker_freezes_on_high_uncertainty(self):
+        config = GovernanceConfig(
+            incoherence_breaker_enabled=True,
+            incoherence_breaker_threshold=0.8,
+            freeze_duration_epochs=2,
+        )
+        lever = IncoherenceCircuitBreakerLever(config)
+        state = EnvState()
+        state.add_agent("agent_1")
+
+        effect = lever.on_interaction(
+            SoftInteraction(initiator="agent_1", p=0.5, accepted=True),
+            state,
+        )
+        assert "agent_1" in effect.agents_to_freeze
+
+        # Unfreeze after freeze duration
+        unfreeze = lever.on_epoch_start(state, epoch=2)
+        assert "agent_1" in unfreeze.agents_to_unfreeze
+
+    def test_decomposition_lever_penalizes_low_acceptance_agents(self):
+        config = GovernanceConfig(
+            decomposition_enabled=True,
+            decomposition_horizon_threshold=6,
+        )
+        lever = DecompositionLever(config)
+        state = EnvState(steps_per_epoch=8)
+        state.add_agent("agent_1")
+        agent_state = state.get_agent("agent_1")
+        agent_state.interactions_initiated = 3
+        agent_state.interactions_accepted = 0
+        agent_state.interactions_rejected = 3
+
+        effect = lever.on_step(state, step=3)
+        assert "agent_1" in effect.reputation_deltas
+        assert effect.reputation_deltas["agent_1"] < 0
+
+    def test_incoherence_friction_scales_with_uncertainty(self):
+        config = GovernanceConfig(
+            incoherence_friction_enabled=True,
+            incoherence_friction_rate=0.2,
+            transaction_tax_split=0.25,
+        )
+        lever = IncoherenceFrictionLever(config)
+        state = EnvState()
+
+        high_uncertainty = lever.on_interaction(
+            SoftInteraction(p=0.5, tau=1.0, accepted=True),
+            state,
+        )
+        low_uncertainty = lever.on_interaction(
+            SoftInteraction(p=0.95, tau=1.0, accepted=True),
+            state,
+        )
+
+        assert high_uncertainty.cost_a > low_uncertainty.cost_a
+        assert high_uncertainty.cost_b > low_uncertainty.cost_b
+
+
 class TestOrchestratorIntegration:
     """Tests for governance integration with orchestrator."""
 
     def test_orchestrator_with_governance(self):
         """Orchestrator should integrate governance engine."""
-        from src.core.orchestrator import Orchestrator, OrchestratorConfig
+        from swarm.core.orchestrator import Orchestrator, OrchestratorConfig
 
         gov_config = GovernanceConfig(
             transaction_tax_rate=0.1,
@@ -528,8 +715,8 @@ class TestOrchestratorIntegration:
 
     def test_governance_costs_applied_to_interaction(self):
         """Governance costs should be added to c_a and c_b."""
-        from src.agents.honest import HonestAgent
-        from src.core.orchestrator import Orchestrator, OrchestratorConfig
+        from swarm.agents.honest import HonestAgent
+        from swarm.core.orchestrator import Orchestrator, OrchestratorConfig
 
         gov_config = GovernanceConfig(
             transaction_tax_rate=0.1,
@@ -560,8 +747,8 @@ class TestOrchestratorIntegration:
 
     def test_reputation_decay_at_epoch_start(self):
         """Reputation should decay at epoch boundaries."""
-        from src.agents.honest import HonestAgent
-        from src.core.orchestrator import Orchestrator, OrchestratorConfig
+        from swarm.agents.honest import HonestAgent
+        from swarm.core.orchestrator import Orchestrator, OrchestratorConfig
 
         gov_config = GovernanceConfig(
             reputation_decay_rate=0.5,  # Aggressive decay for testing

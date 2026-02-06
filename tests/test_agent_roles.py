@@ -4,12 +4,12 @@ import random
 
 import pytest
 
-from src.agents.base import Action, ActionType, Observation
-from src.agents.roles.moderator import ModerationAction, ModeratorRole
-from src.agents.roles.planner import Plan, PlannerRole
-from src.agents.roles.poster import ContentStrategy, PosterRole
-from src.agents.roles.verifier import VerificationResult, VerifierRole
-from src.agents.roles.worker import WorkerRole, WorkProgress
+from swarm.agents.base import Action, ActionType, Observation
+from swarm.agents.roles.moderator import ModerationAction, ModeratorRole
+from swarm.agents.roles.planner import Plan, PlannerRole
+from swarm.agents.roles.poster import ContentStrategy, PosterRole
+from swarm.agents.roles.verifier import VerificationResult, VerifierRole
+from swarm.agents.roles.worker import WorkerRole, WorkProgress
 
 # ---------------------------------------------------------------------------
 # Helpers

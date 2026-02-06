@@ -2,7 +2,7 @@
 
 
 
-from src.env.composite_tasks import (
+from swarm.env.composite_tasks import (
     CapabilityType,
     CompositeTask,
     CompositeTaskPool,
@@ -13,7 +13,7 @@ from src.env.composite_tasks import (
     create_problem_solving_task,
     create_research_synthesis_task,
 )
-from src.metrics.capabilities import (
+from swarm.metrics.capabilities import (
     AgentCapabilityProfile,
     CapabilityAnalyzer,
     EmergentCapabilityMetrics,
@@ -552,7 +552,7 @@ class TestOrchestratorIntegration:
 
     def test_orchestrator_composite_task_disabled(self):
         """Should work with composite tasks disabled."""
-        from src.core.orchestrator import Orchestrator, OrchestratorConfig
+        from swarm.core.orchestrator import Orchestrator, OrchestratorConfig
 
         config = OrchestratorConfig(enable_composite_tasks=False)
         orchestrator = Orchestrator(config=config)
@@ -562,7 +562,7 @@ class TestOrchestratorIntegration:
 
     def test_orchestrator_composite_task_enabled(self):
         """Should initialize composite task components."""
-        from src.core.orchestrator import Orchestrator, OrchestratorConfig
+        from swarm.core.orchestrator import Orchestrator, OrchestratorConfig
 
         config = OrchestratorConfig(enable_composite_tasks=True)
         orchestrator = Orchestrator(config=config)
@@ -572,7 +572,7 @@ class TestOrchestratorIntegration:
 
     def test_add_composite_task(self):
         """Should add composite tasks to pool."""
-        from src.core.orchestrator import Orchestrator, OrchestratorConfig
+        from swarm.core.orchestrator import Orchestrator, OrchestratorConfig
 
         config = OrchestratorConfig(enable_composite_tasks=True)
         orchestrator = Orchestrator(config=config)
@@ -585,7 +585,7 @@ class TestOrchestratorIntegration:
 
     def test_register_agent_capabilities(self):
         """Should register agent capabilities."""
-        from src.core.orchestrator import Orchestrator, OrchestratorConfig
+        from swarm.core.orchestrator import Orchestrator, OrchestratorConfig
 
         config = OrchestratorConfig(enable_composite_tasks=True)
         orchestrator = Orchestrator(config=config)
@@ -601,7 +601,7 @@ class TestOrchestratorIntegration:
 
     def test_get_capability_metrics(self):
         """Should return capability metrics."""
-        from src.core.orchestrator import Orchestrator, OrchestratorConfig
+        from swarm.core.orchestrator import Orchestrator, OrchestratorConfig
 
         config = OrchestratorConfig(enable_composite_tasks=True)
         orchestrator = Orchestrator(config=config)
@@ -613,8 +613,8 @@ class TestOrchestratorIntegration:
 
     def test_epoch_metrics_include_capabilities(self):
         """Epoch metrics should include capability metrics."""
-        from src.agents.honest import HonestAgent
-        from src.core.orchestrator import Orchestrator, OrchestratorConfig
+        from swarm.agents.honest import HonestAgent
+        from swarm.core.orchestrator import Orchestrator, OrchestratorConfig
 
         config = OrchestratorConfig(
             n_epochs=1,

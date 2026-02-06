@@ -12,12 +12,12 @@ import sys
 # Add src to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from src.agents.honest import HonestAgent
-from src.agents.opportunistic import OpportunisticAgent
-from src.agents.deceptive import DeceptiveAgent
-from src.agents.adversarial import AdversarialAgent
-from src.core.orchestrator import Orchestrator, OrchestratorConfig
-from src.core.payoff import PayoffConfig
+from swarm.agents.honest import HonestAgent
+from swarm.agents.opportunistic import OpportunisticAgent
+from swarm.agents.deceptive import DeceptiveAgent
+from swarm.agents.adversarial import AdversarialAgent
+from swarm.core.orchestrator import Orchestrator, OrchestratorConfig
+from swarm.core.payoff import PayoffConfig
 
 
 def main():

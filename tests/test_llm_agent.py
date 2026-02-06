@@ -4,20 +4,20 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from src.agents.base import ActionType, Observation
-from src.agents.llm_config import (
+from swarm.agents.base import ActionType, Observation
+from swarm.agents.llm_config import (
     LLMConfig,
     LLMProvider,
     LLMUsageStats,
     PersonaType,
 )
-from src.agents.llm_prompts import (
+from swarm.agents.llm_prompts import (
     PERSONA_PROMPTS,
     build_accept_prompt,
     build_action_prompt,
     format_observation,
 )
-from src.models.agent import AgentState, AgentType
+from swarm.models.agent import AgentState, AgentType
 
 # =============================================================================
 # Fixtures
@@ -296,7 +296,7 @@ class TestLLMAgent:
 
     def test_agent_creation(self, basic_llm_config):
         """Test creating an LLM agent."""
-        from src.agents.llm_agent import LLMAgent
+        from swarm.agents.llm_agent import LLMAgent
 
         agent = LLMAgent(
             agent_id="llm_1",
@@ -307,7 +307,7 @@ class TestLLMAgent:
 
     def test_agent_repr(self, basic_llm_config):
         """Test agent string representation."""
-        from src.agents.llm_agent import LLMAgent
+        from swarm.agents.llm_agent import LLMAgent
 
         agent = LLMAgent(agent_id="llm_1", llm_config=basic_llm_config)
         repr_str = repr(agent)
@@ -316,7 +316,7 @@ class TestLLMAgent:
 
     def test_parse_action_response_json(self, basic_llm_config):
         """Test parsing JSON action response."""
-        from src.agents.llm_agent import LLMAgent
+        from swarm.agents.llm_agent import LLMAgent
 
         agent = LLMAgent(agent_id="llm_1", llm_config=basic_llm_config)
 
@@ -327,7 +327,7 @@ class TestLLMAgent:
 
     def test_parse_action_response_markdown(self, basic_llm_config):
         """Test parsing JSON in markdown code block."""
-        from src.agents.llm_agent import LLMAgent
+        from swarm.agents.llm_agent import LLMAgent
 
         agent = LLMAgent(agent_id="llm_1", llm_config=basic_llm_config)
 
@@ -342,7 +342,7 @@ class TestLLMAgent:
 
     def test_parse_action_response_invalid(self, basic_llm_config):
         """Test parsing invalid response raises error."""
-        from src.agents.llm_agent import LLMAgent
+        from swarm.agents.llm_agent import LLMAgent
 
         agent = LLMAgent(agent_id="llm_1", llm_config=basic_llm_config)
 
@@ -351,7 +351,7 @@ class TestLLMAgent:
 
     def test_action_dict_to_action_noop(self, basic_llm_config):
         """Test converting NOOP action dict."""
-        from src.agents.llm_agent import LLMAgent
+        from swarm.agents.llm_agent import LLMAgent
 
         agent = LLMAgent(agent_id="llm_1", llm_config=basic_llm_config)
 
@@ -361,7 +361,7 @@ class TestLLMAgent:
 
     def test_action_dict_to_action_post(self, basic_llm_config):
         """Test converting POST action dict."""
-        from src.agents.llm_agent import LLMAgent
+        from swarm.agents.llm_agent import LLMAgent
 
         agent = LLMAgent(agent_id="llm_1", llm_config=basic_llm_config)
 
@@ -375,7 +375,7 @@ class TestLLMAgent:
 
     def test_action_dict_to_action_vote(self, basic_llm_config):
         """Test converting VOTE action dict."""
-        from src.agents.llm_agent import LLMAgent
+        from swarm.agents.llm_agent import LLMAgent
 
         agent = LLMAgent(agent_id="llm_1", llm_config=basic_llm_config)
 
@@ -390,7 +390,7 @@ class TestLLMAgent:
 
     def test_action_dict_to_action_unknown(self, basic_llm_config):
         """Test unknown action type defaults to NOOP."""
-        from src.agents.llm_agent import LLMAgent
+        from swarm.agents.llm_agent import LLMAgent
 
         agent = LLMAgent(agent_id="llm_1", llm_config=basic_llm_config)
 
@@ -401,7 +401,7 @@ class TestLLMAgent:
     @pytest.mark.asyncio
     async def test_act_async_with_mock(self, basic_llm_config, basic_observation):
         """Test async act method with mocked API."""
-        from src.agents.llm_agent import LLMAgent
+        from swarm.agents.llm_agent import LLMAgent
 
         agent = LLMAgent(agent_id="llm_1", llm_config=basic_llm_config)
 
@@ -418,7 +418,7 @@ class TestLLMAgent:
     @pytest.mark.asyncio
     async def test_act_async_fallback_on_error(self, basic_llm_config, basic_observation):
         """Test async act falls back to NOOP on error."""
-        from src.agents.llm_agent import LLMAgent
+        from swarm.agents.llm_agent import LLMAgent
 
         agent = LLMAgent(agent_id="llm_1", llm_config=basic_llm_config)
 
@@ -432,9 +432,9 @@ class TestLLMAgent:
     @pytest.mark.asyncio
     async def test_accept_interaction_async(self, basic_llm_config, basic_observation):
         """Test async accept_interaction method."""
-        from src.agents.base import InteractionProposal
-        from src.agents.llm_agent import LLMAgent
-        from src.models.interaction import InteractionType
+        from swarm.agents.base import InteractionProposal
+        from swarm.agents.llm_agent import LLMAgent
+        from swarm.models.interaction import InteractionType
 
         agent = LLMAgent(agent_id="llm_1", llm_config=basic_llm_config)
 
@@ -457,9 +457,9 @@ class TestLLMAgent:
     @pytest.mark.asyncio
     async def test_accept_interaction_async_reject(self, basic_llm_config, basic_observation):
         """Test async accept_interaction rejection."""
-        from src.agents.base import InteractionProposal
-        from src.agents.llm_agent import LLMAgent
-        from src.models.interaction import InteractionType
+        from swarm.agents.base import InteractionProposal
+        from swarm.agents.llm_agent import LLMAgent
+        from swarm.models.interaction import InteractionType
 
         agent = LLMAgent(agent_id="llm_1", llm_config=basic_llm_config)
 
@@ -481,7 +481,7 @@ class TestLLMAgent:
 
     def test_get_usage_stats(self, basic_llm_config):
         """Test getting usage statistics."""
-        from src.agents.llm_agent import LLMAgent
+        from swarm.agents.llm_agent import LLMAgent
 
         agent = LLMAgent(agent_id="llm_1", llm_config=basic_llm_config)
 
@@ -503,7 +503,7 @@ class TestScenarioLoaderLLM:
 
     def test_parse_llm_config(self):
         """Test parsing LLM config from YAML-like dict."""
-        from src.scenarios.loader import parse_llm_config
+        from swarm.scenarios.loader import parse_llm_config
 
         data = {
             "provider": "anthropic",
@@ -521,7 +521,7 @@ class TestScenarioLoaderLLM:
 
     def test_parse_llm_config_defaults(self):
         """Test parsing LLM config with defaults."""
-        from src.scenarios.loader import parse_llm_config
+        from swarm.scenarios.loader import parse_llm_config
 
         config = parse_llm_config({})
 
@@ -530,22 +530,22 @@ class TestScenarioLoaderLLM:
 
     def test_parse_llm_config_invalid_provider(self):
         """Test parsing with invalid provider raises error."""
-        from src.scenarios.loader import parse_llm_config
+        from swarm.scenarios.loader import parse_llm_config
 
         with pytest.raises(ValueError, match="Unknown LLM provider"):
             parse_llm_config({"provider": "invalid_provider"})
 
     def test_parse_llm_config_invalid_persona(self):
         """Test parsing with invalid persona raises error."""
-        from src.scenarios.loader import parse_llm_config
+        from swarm.scenarios.loader import parse_llm_config
 
         with pytest.raises(ValueError, match="Unknown persona type"):
             parse_llm_config({"persona": "invalid_persona"})
 
     def test_create_llm_agents(self):
         """Test creating LLM agents from specs."""
-        from src.agents.llm_agent import LLMAgent
-        from src.scenarios.loader import create_agents
+        from swarm.agents.llm_agent import LLMAgent
+        from swarm.scenarios.loader import create_agents
 
         specs = [
             {
@@ -568,9 +568,9 @@ class TestScenarioLoaderLLM:
 
     def test_create_mixed_agents(self):
         """Test creating mixed scripted and LLM agents."""
-        from src.agents.honest import HonestAgent
-        from src.agents.llm_agent import LLMAgent
-        from src.scenarios.loader import create_agents
+        from swarm.agents.honest import HonestAgent
+        from swarm.agents.llm_agent import LLMAgent
+        from swarm.scenarios.loader import create_agents
 
         specs = [
             {"type": "honest", "count": 2},
@@ -602,8 +602,8 @@ class TestAsyncOrchestrator:
     @pytest.mark.asyncio
     async def test_run_async_with_scripted_agents(self):
         """Test async run with only scripted agents."""
-        from src.agents.honest import HonestAgent
-        from src.core.orchestrator import Orchestrator, OrchestratorConfig
+        from swarm.agents.honest import HonestAgent
+        from swarm.core.orchestrator import Orchestrator, OrchestratorConfig
 
         config = OrchestratorConfig(n_epochs=2, steps_per_epoch=3)
         orchestrator = Orchestrator(config)
@@ -620,8 +620,8 @@ class TestAsyncOrchestrator:
     @pytest.mark.asyncio
     async def test_run_async_with_llm_agents(self, basic_llm_config):
         """Test async run with LLM agents (mocked)."""
-        from src.agents.llm_agent import LLMAgent
-        from src.core.orchestrator import Orchestrator, OrchestratorConfig
+        from swarm.agents.llm_agent import LLMAgent
+        from swarm.core.orchestrator import Orchestrator, OrchestratorConfig
 
         config = OrchestratorConfig(n_epochs=1, steps_per_epoch=2)
         orchestrator = Orchestrator(config)
@@ -639,9 +639,9 @@ class TestAsyncOrchestrator:
 
     def test_is_llm_agent(self, basic_llm_config):
         """Test LLM agent detection."""
-        from src.agents.honest import HonestAgent
-        from src.agents.llm_agent import LLMAgent
-        from src.core.orchestrator import Orchestrator, OrchestratorConfig
+        from swarm.agents.honest import HonestAgent
+        from swarm.agents.llm_agent import LLMAgent
+        from swarm.core.orchestrator import Orchestrator, OrchestratorConfig
 
         config = OrchestratorConfig()
         orchestrator = Orchestrator(config)
@@ -654,9 +654,9 @@ class TestAsyncOrchestrator:
 
     def test_get_llm_usage_stats(self, basic_llm_config):
         """Test getting LLM usage stats from orchestrator."""
-        from src.agents.honest import HonestAgent
-        from src.agents.llm_agent import LLMAgent
-        from src.core.orchestrator import Orchestrator, OrchestratorConfig
+        from swarm.agents.honest import HonestAgent
+        from swarm.agents.llm_agent import LLMAgent
+        from swarm.core.orchestrator import Orchestrator, OrchestratorConfig
 
         config = OrchestratorConfig()
         orchestrator = Orchestrator(config)

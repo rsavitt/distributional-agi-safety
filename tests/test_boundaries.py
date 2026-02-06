@@ -2,25 +2,25 @@
 
 from datetime import datetime
 
-from src.boundaries.external_world import (
+from swarm.boundaries.external_world import (
     ExternalDataSource,
     ExternalEntity,
     ExternalEntityType,
     ExternalService,
     ExternalWorld,
 )
-from src.boundaries.information_flow import (
+from swarm.boundaries.information_flow import (
     FlowDirection,
     FlowTracker,
     FlowType,
     InformationFlow,
 )
-from src.boundaries.leakage import (
+from swarm.boundaries.leakage import (
     LeakageDetector,
     LeakageEvent,
     LeakageType,
 )
-from src.boundaries.policies import (
+from swarm.boundaries.policies import (
     CompositePolicy,
     ContentFilterPolicy,
     CrossingDecision,
@@ -813,7 +813,7 @@ class TestBoundaryIntegration:
 
     def test_orchestrator_boundary_interaction(self):
         """Test orchestrator boundary interaction methods."""
-        from src.core.orchestrator import Orchestrator, OrchestratorConfig
+        from swarm.core.orchestrator import Orchestrator, OrchestratorConfig
 
         config = OrchestratorConfig(
             enable_boundaries=True,
@@ -830,7 +830,7 @@ class TestBoundaryIntegration:
 
     def test_request_external_interaction(self):
         """Test requesting external interaction."""
-        from src.core.orchestrator import Orchestrator, OrchestratorConfig
+        from swarm.core.orchestrator import Orchestrator, OrchestratorConfig
 
         config = OrchestratorConfig(
             enable_boundaries=True,
@@ -852,7 +852,7 @@ class TestBoundaryIntegration:
 
     def test_get_external_entities(self):
         """Test getting external entities."""
-        from src.core.orchestrator import Orchestrator, OrchestratorConfig
+        from swarm.core.orchestrator import Orchestrator, OrchestratorConfig
 
         config = OrchestratorConfig(enable_boundaries=True)
         orchestrator = Orchestrator(config)
@@ -864,7 +864,7 @@ class TestBoundaryIntegration:
 
     def test_get_boundary_metrics(self):
         """Test getting boundary metrics."""
-        from src.core.orchestrator import Orchestrator, OrchestratorConfig
+        from swarm.core.orchestrator import Orchestrator, OrchestratorConfig
 
         config = OrchestratorConfig(enable_boundaries=True)
         orchestrator = Orchestrator(config)
@@ -884,7 +884,7 @@ class TestBoundaryIntegration:
 
     def test_leakage_blocked(self):
         """Test that critical leakage is blocked."""
-        from src.core.orchestrator import Orchestrator, OrchestratorConfig
+        from swarm.core.orchestrator import Orchestrator, OrchestratorConfig
 
         config = OrchestratorConfig(enable_boundaries=True)
         orchestrator = Orchestrator(config)
@@ -902,7 +902,7 @@ class TestBoundaryIntegration:
 
     def test_boundaries_disabled(self):
         """Test that boundaries can be disabled."""
-        from src.core.orchestrator import Orchestrator, OrchestratorConfig
+        from swarm.core.orchestrator import Orchestrator, OrchestratorConfig
 
         config = OrchestratorConfig(enable_boundaries=False)
         orchestrator = Orchestrator(config)

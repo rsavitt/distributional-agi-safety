@@ -1,0 +1,22 @@
+scenario_id: incoherence_short_low
+description: Short-horizon, low-branching incoherence baseline.
+motif: incoherence_stress
+
+agents:
+  - type: honest
+    count: 2
+  - type: opportunistic
+    count: 1
+
+simulation:
+  n_epochs: 8
+  steps_per_epoch: 2
+  seed: 42
+  observation_noise_probability: 0.10
+  observation_noise_std: 0.05
+
+governance:
+  transaction_tax_rate: 0.0
+  circuit_breaker_enabled: false
+  audit_enabled: false
+

@@ -3,18 +3,18 @@
 import random
 from unittest.mock import MagicMock, patch
 
-from src.agents.base import Action, ActionType, Observation
-from src.agents.roles.poster import ContentStrategy, PosterRole
-from src.core.marketplace_handler import MarketplaceHandler
-from src.env.marketplace import (
+from swarm.agents.base import Action, ActionType, Observation
+from swarm.agents.roles.poster import ContentStrategy, PosterRole
+from swarm.core.marketplace_handler import MarketplaceHandler
+from swarm.env.marketplace import (
     DisputeStatus,
     Marketplace,
     MarketplaceConfig,
 )
-from src.env.state import EnvState
-from src.env.tasks import TaskPool
-from src.governance.engine import GovernanceEffect, GovernanceEngine
-from src.models.events import EventType
+from swarm.env.state import EnvState
+from swarm.env.tasks import TaskPool
+from swarm.governance.engine import GovernanceEffect, GovernanceEngine
+from swarm.models.events import EventType
 
 # ===================================================================
 # ContentStrategy & PosterRole tests
@@ -336,7 +336,7 @@ class TestDecidePostingAction:
         )
         # reply_priority=1.0 => random < 1.0 always True,
         # should_reply => engagement >= 3, random < 1.0 => True
-        with patch("src.agents.roles.poster.random") as mock_random:
+        with patch("swarm.agents.roles.poster.random") as mock_random:
             mock_random.random.return_value = 0.1
             mock_random.choice.side_effect = lambda x: x[0]
             result = poster.decide_posting_action(obs)
@@ -351,7 +351,7 @@ class TestDecidePostingAction:
         obs = Observation(can_post=True, visible_posts=[])
         # reply_priority=0.0 => won't try replies
         # random < 0.5 for new post creation
-        with patch("src.agents.roles.poster.random") as mock_random:
+        with patch("swarm.agents.roles.poster.random") as mock_random:
             mock_random.random.return_value = 0.1  # < 0.5 => post
             mock_random.choice.side_effect = lambda x: x[0]
             result = poster.decide_posting_action(obs)
@@ -365,7 +365,7 @@ class TestDecidePostingAction:
         poster.set_strategy(ContentStrategy(reply_priority=0.0))
         obs = Observation(can_post=True, visible_posts=[])
         # random >= 0.5 => no new post
-        with patch("src.agents.roles.poster.random") as mock_random:
+        with patch("swarm.agents.roles.poster.random") as mock_random:
             mock_random.random.return_value = 0.9  # >= 0.5 => skip
             result = poster.decide_posting_action(obs)
         assert result is None

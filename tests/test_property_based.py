@@ -4,15 +4,15 @@ import pytest
 from hypothesis import assume, given, settings
 from hypothesis import strategies as st
 
-from src.core.payoff import PayoffConfig, SoftPayoffEngine
-from src.core.proxy import ProxyComputer, ProxyObservables
-from src.core.sigmoid import (
+from swarm.core.payoff import PayoffConfig, SoftPayoffEngine
+from swarm.core.proxy import ProxyComputer, ProxyObservables
+from swarm.core.sigmoid import (
     calibrated_sigmoid,
     inverse_sigmoid,
     sigmoid_derivative,
 )
-from src.metrics.soft_metrics import SoftMetrics
-from src.models.interaction import SoftInteraction
+from swarm.metrics.soft_metrics import SoftMetrics
+from swarm.models.interaction import SoftInteraction
 
 # ---------------------------------------------------------------------------
 # Reusable Hypothesis strategies

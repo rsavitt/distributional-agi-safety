@@ -4,12 +4,12 @@ from pathlib import Path
 
 import pytest
 
-from src.agents.base import ActionType
-from src.agents.honest import HonestAgent
-from src.agents.opportunistic import OpportunisticAgent
-from src.core.orchestrator import Orchestrator, OrchestratorConfig
-from src.core.payoff import PayoffConfig
-from src.env.marketplace import (
+from swarm.agents.base import ActionType
+from swarm.agents.honest import HonestAgent
+from swarm.agents.opportunistic import OpportunisticAgent
+from swarm.core.orchestrator import Orchestrator, OrchestratorConfig
+from swarm.core.payoff import PayoffConfig
+from swarm.env.marketplace import (
     Bid,
     BidStatus,
     Bounty,
@@ -21,8 +21,8 @@ from src.env.marketplace import (
     Marketplace,
     MarketplaceConfig,
 )
-from src.env.state import RateLimits, RateLimitState
-from src.governance.config import GovernanceConfig
+from swarm.env.state import RateLimits, RateLimitState
+from swarm.governance.config import GovernanceConfig
 
 # ===========================================================================
 # Model Tests
@@ -464,7 +464,7 @@ class TestOrchestratorIntegration:
 
     def test_post_bounty_action(self):
         orch = self._make_orchestrator()
-        from src.agents.base import Action
+        from swarm.agents.base import Action
 
         action = Action(
             action_type=ActionType.POST_BOUNTY,
@@ -487,7 +487,7 @@ class TestOrchestratorIntegration:
 
     def test_post_bounty_insufficient_resources(self):
         orch = self._make_orchestrator()
-        from src.agents.base import Action
+        from swarm.agents.base import Action
 
         action = Action(
             action_type=ActionType.POST_BOUNTY,
@@ -502,7 +502,7 @@ class TestOrchestratorIntegration:
 
     def test_place_bid_action(self):
         orch = self._make_orchestrator()
-        from src.agents.base import Action
+        from swarm.agents.base import Action
 
         # Post bounty first
         orch.state.get_agent("h1").resources = 100.0
@@ -532,7 +532,7 @@ class TestOrchestratorIntegration:
 
     def test_accept_bid_action(self):
         orch = self._make_orchestrator()
-        from src.agents.base import Action
+        from swarm.agents.base import Action
 
         # Setup: post bounty, place bid
         orch.state.get_agent("h1").resources = 100.0
@@ -569,7 +569,7 @@ class TestOrchestratorIntegration:
     def test_full_bounty_lifecycle(self):
         """Test complete flow: post -> bid -> accept -> settle."""
         orch = self._make_orchestrator()
-        from src.agents.base import Action
+        from swarm.agents.base import Action
 
         # Post bounty
         orch.state.get_agent("h1").resources = 100.0
@@ -613,7 +613,7 @@ class TestOrchestratorIntegration:
     def test_settle_with_governance_taxes(self):
         """Test that settlement creates taxable interaction."""
         orch = self._make_orchestrator(with_governance=True)
-        from src.agents.base import Action
+        from swarm.agents.base import Action
 
         orch.state.get_agent("h1").resources = 100.0
         orch.state.get_agent("h2").resources = 100.0
@@ -655,7 +655,7 @@ class TestOrchestratorIntegration:
 
     def test_observation_includes_marketplace(self):
         orch = self._make_orchestrator()
-        from src.agents.base import Action
+        from swarm.agents.base import Action
 
         # Post a bounty
         orch.state.get_agent("h1").resources = 100.0
@@ -693,7 +693,7 @@ class TestOrchestratorIntegration:
     def test_epoch_maintenance_refunds_resources(self):
         """Test that orchestrator refunds bounty funds on expiry."""
         orch = self._make_orchestrator()
-        from src.agents.base import Action
+        from swarm.agents.base import Action
 
         orch.state.get_agent("h1").resources = 100.0
         orch._execute_action(Action(
@@ -717,7 +717,7 @@ class TestOrchestratorIntegration:
 
     def test_file_dispute_action(self):
         orch = self._make_orchestrator()
-        from src.agents.base import Action
+        from swarm.agents.base import Action
 
         # Setup: bounty -> bid -> accept -> escrow
         orch.state.get_agent("h1").resources = 100.0
@@ -765,7 +765,7 @@ class TestScenarioLoader:
     """Test scenario loading with marketplace config."""
 
     def test_parse_marketplace_config(self):
-        from src.scenarios.loader import parse_marketplace_config
+        from swarm.scenarios.loader import parse_marketplace_config
 
         data = {
             "enabled": True,
@@ -780,19 +780,19 @@ class TestScenarioLoader:
         assert config.max_bids_per_bounty == 5
 
     def test_parse_marketplace_config_disabled(self):
-        from src.scenarios.loader import parse_marketplace_config
+        from swarm.scenarios.loader import parse_marketplace_config
 
         config = parse_marketplace_config({"enabled": False})
         assert config is None
 
     def test_parse_marketplace_config_empty(self):
-        from src.scenarios.loader import parse_marketplace_config
+        from swarm.scenarios.loader import parse_marketplace_config
 
         config = parse_marketplace_config({})
         assert config is None
 
     def test_load_marketplace_scenario(self):
-        from src.scenarios.loader import build_orchestrator, load_scenario
+        from swarm.scenarios.loader import build_orchestrator, load_scenario
 
         path = Path("scenarios/marketplace_economy.yaml")
         if not path.exists():

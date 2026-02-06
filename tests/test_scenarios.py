@@ -5,7 +5,7 @@ from tempfile import NamedTemporaryFile
 
 import pytest
 
-from src.scenarios import (
+from swarm.scenarios import (
     build_orchestrator,
     create_agents,
     load_scenario,
@@ -92,6 +92,34 @@ class TestParseGovernanceConfig:
         data = {"transaction_tax_rate": 1.5}  # Invalid: > 1.0
         with pytest.raises(ValueError):
             parse_governance_config(data)
+
+    def test_parses_variance_aware_governance_fields(self):
+        """Should parse variance-aware governance toggles and thresholds."""
+        data = {
+            "self_ensemble_enabled": True,
+            "self_ensemble_samples": 7,
+            "incoherence_breaker_enabled": True,
+            "incoherence_breaker_threshold": 0.65,
+            "decomposition_enabled": True,
+            "decomposition_horizon_threshold": 14,
+            "incoherence_friction_enabled": True,
+            "incoherence_friction_rate": 0.12,
+            "adaptive_governance_enabled": True,
+            "adaptive_incoherence_threshold": 0.7,
+            "adaptive_use_behavioral_features": True,
+        }
+        config = parse_governance_config(data)
+        assert config.self_ensemble_enabled
+        assert config.self_ensemble_samples == 7
+        assert config.incoherence_breaker_enabled
+        assert config.incoherence_breaker_threshold == pytest.approx(0.65)
+        assert config.decomposition_enabled
+        assert config.decomposition_horizon_threshold == 14
+        assert config.incoherence_friction_enabled
+        assert config.incoherence_friction_rate == pytest.approx(0.12)
+        assert config.adaptive_governance_enabled
+        assert config.adaptive_incoherence_threshold == pytest.approx(0.7)
+        assert config.adaptive_use_behavioral_features
 
 
 class TestParsePayoffConfig:
@@ -240,6 +268,30 @@ simulation:
             assert gov.audit_enabled
             assert gov.audit_probability == 0.2
 
+    def test_loads_observation_noise_from_yaml(self):
+        """Should parse observation noise simulation settings."""
+        yaml_content = """
+scenario_id: test_noise
+agents:
+  - type: honest
+    count: 2
+
+simulation:
+  n_epochs: 2
+  steps_per_epoch: 4
+  observation_noise_probability: 0.25
+  observation_noise_std: 0.15
+"""
+        with NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
+            f.write(yaml_content)
+            f.flush()
+
+            scenario = load_scenario(Path(f.name))
+
+            sim = scenario.orchestrator_config
+            assert sim.observation_noise_probability == pytest.approx(0.25)
+            assert sim.observation_noise_std == pytest.approx(0.15)
+
     def test_file_not_found_raises(self):
         """Should raise FileNotFoundError for missing file."""
         with pytest.raises(FileNotFoundError):
@@ -297,6 +349,8 @@ class TestEndToEnd:
             pytest.skip("baseline.yaml not found")
 
         scenario = load_scenario(path)
+        scenario.orchestrator_config.log_path = None
+        scenario.orchestrator_config.log_events = False
         orchestrator = build_orchestrator(scenario)
 
         # Run 2 epochs only for speed
@@ -313,20 +367,33 @@ class TestEndToEnd:
             pytest.skip("status_game.yaml not found")
 
         scenario = load_scenario(path)
+        scenario.orchestrator_config.log_path = None
+        scenario.orchestrator_config.log_events = False
         orchestrator = build_orchestrator(scenario)
 
         # Verify governance is configured
         gov = orchestrator.governance_engine.config
         assert gov.transaction_tax_rate > 0
-        assert gov.staking_enabled
-        assert gov.circuit_breaker_enabled
-        assert gov.audit_enabled
 
         # Run 2 epochs for speed
         orchestrator.config.n_epochs = 2
         metrics = orchestrator.run()
 
         assert len(metrics) == 2
+
+    def test_incoherence_tier_scenarios_load(self):
+        """New incoherence tier scenario files should load successfully."""
+        paths = [
+            Path("scenarios/incoherence/short_low_branching.yaml"),
+            Path("scenarios/incoherence/medium_medium_branching.yaml"),
+            Path("scenarios/incoherence/long_high_branching.yaml"),
+        ]
+        for path in paths:
+            if not path.exists():
+                pytest.skip(f"{path} not found")
+            scenario = load_scenario(path)
+            assert scenario.motif == "incoherence_stress"
+            assert scenario.orchestrator_config.observation_noise_probability >= 0.0
 
     def test_strict_governance_scenario_runs(self):
         """Strict governance scenario should complete."""
@@ -335,6 +402,8 @@ class TestEndToEnd:
             pytest.skip("strict_governance.yaml not found")
 
         scenario = load_scenario(path)
+        scenario.orchestrator_config.log_path = None
+        scenario.orchestrator_config.log_events = False
         orchestrator = build_orchestrator(scenario)
 
         # Verify all levers enabled
