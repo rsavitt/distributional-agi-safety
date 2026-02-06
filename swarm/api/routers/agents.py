@@ -1,7 +1,7 @@
 """Agent registration and management endpoints."""
 
 import uuid
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException
 
@@ -37,7 +37,7 @@ async def register_agent(registration: AgentRegistration) -> AgentResponse:
         description=registration.description,
         capabilities=registration.capabilities,
         status=AgentStatus.APPROVED,  # Auto-approve for now
-        registered_at=datetime.now(UTC),
+        registered_at=datetime.now(timezone.utc),
     )
 
     _registered_agents[agent_id] = agent

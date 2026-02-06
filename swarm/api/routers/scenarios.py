@@ -1,7 +1,7 @@
 """Scenario submission and management endpoints."""
 
 import uuid
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException
 
@@ -42,7 +42,7 @@ async def submit_scenario(submission: ScenarioSubmission) -> ScenarioResponse:
         description=submission.description,
         status=status,
         validation_errors=validation_errors,
-        submitted_at=datetime.now(UTC),
+        submitted_at=datetime.now(timezone.utc),
         tags=submission.tags,
     )
 
