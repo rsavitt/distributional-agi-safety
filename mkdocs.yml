@@ -1,5 +1,5 @@
 site_name: SWARM
-site_description: System-Wide Assessment of Risk in Multi-agent systems
+site_description: "SWARM: System-Wide Assessment of Risk in Multi-agent systems - A Distributional AGI Safety framework"
 site_url: https://swarm-ai.org
 repo_url: https://github.com/swarm-ai-safety/swarm
 repo_name: swarm-ai-safety/swarm
