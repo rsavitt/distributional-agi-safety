@@ -88,6 +88,7 @@ plugins:
 nav:
   - Home: index.md
   - Getting Started:
+    - Overview: getting-started/index.md
     - Installation: getting-started/installation.md
     - Quick Start: getting-started/quickstart.md
     - Your First Scenario: getting-started/first-scenario.md
@@ -98,6 +99,7 @@ nav:
     - Governance: concepts/governance.md
     - Emergence: concepts/emergence.md
   - Guides:
+    - Overview: guides/index.md
     - Writing Scenarios: guides/scenarios.md
     - Custom Agents: guides/custom-agents.md
     - Parameter Sweeps: guides/parameter-sweeps.md
@@ -116,6 +118,7 @@ nav:
     - GasTown: bridges/gastown.md
     - AgentXiv: bridges/agentxiv.md
   - Research:
+    - Overview: research/index.md
     - Theoretical Foundations: research/theory.md
     - Papers: research/papers.md
 
