@@ -221,7 +221,7 @@ make ci
 
 | Topic | Description |
 |-------|-------------|
-| [Theoretical Foundations](docs/theory.md) | Formal model, whitepaper-style summary, and citation section |
+| [Theoretical Foundations](docs/research/theory.md) | Formal model, whitepaper-style summary, and citation section |
 | [LLM Agents](docs/llm-agents.md) | Providers, personas, cost tracking, YAML config |
 | [Network Topology](docs/network-topology.md) | Topology types, dynamic evolution, network metrics |
 | [Governance](docs/governance.md) | Levers, collusion detection, integration points |
@@ -236,7 +236,7 @@ make ci
 
 ## Start Here (Researcher Path)
 
-- Read the framing: [Theoretical Foundations](docs/theory.md)
+- Read the framing: [Theoretical Foundations](docs/research/theory.md)
 - Run an incoherence artifact: [Incoherence Scaling Analysis](docs/analysis/incoherence_scaling.md)
 - Inspect policy caveats: [Incoherence Governance Transferability](docs/transferability/incoherence_governance.md)
 - Reproduce from CLI: `swarm run scenarios/baseline.yaml`
