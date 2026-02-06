@@ -3,6 +3,7 @@
 from pathlib import Path
 
 import pytest
+from pydantic import ValidationError
 
 from swarm.agents.base import ActionType
 from swarm.agents.honest import HonestAgent
@@ -80,13 +81,13 @@ class TestModels:
 
     def test_config_validation(self):
         config = MarketplaceConfig()
-        config.validate()  # Should not raise
+        assert config is not None  # Pydantic auto-validates on creation
 
-        with pytest.raises(ValueError):
-            MarketplaceConfig(escrow_fee_rate=-0.1).validate()
+        with pytest.raises(ValidationError, match="escrow_fee_rate"):
+            MarketplaceConfig(escrow_fee_rate=-0.1)
 
-        with pytest.raises(ValueError):
-            MarketplaceConfig(dispute_default_split=1.5).validate()
+        with pytest.raises(ValidationError, match="dispute_default_split"):
+            MarketplaceConfig(dispute_default_split=1.5)
 
 
 # ===========================================================================

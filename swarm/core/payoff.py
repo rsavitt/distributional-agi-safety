@@ -3,11 +3,12 @@
 from dataclasses import dataclass
 from typing import Optional
 
+from pydantic import BaseModel, model_validator
+
 from swarm.models.interaction import SoftInteraction
 
 
-@dataclass
-class PayoffConfig:
+class PayoffConfig(BaseModel):
     """
     Configuration for the soft payoff engine.
 
@@ -31,7 +32,12 @@ class PayoffConfig:
     w_rep: float = 1.0
     sigmoid_k: float = 2.0
 
-    def validate(self) -> None:
+    @model_validator(mode="after")
+    def _run_validation(self) -> "PayoffConfig":
+        self._check_values()
+        return self
+
+    def _check_values(self) -> None:
         """Validate configuration parameters."""
         if self.s_plus < 0:
             raise ValueError("s_plus must be non-negative")
@@ -97,8 +103,8 @@ class SoftPayoffEngine:
         Args:
             config: Payoff configuration (default: PayoffConfig())
         """
-        self.config = config or PayoffConfig()
-        self.config.validate()
+        self.config = PayoffConfig() if config is None else config
+        # Pydantic auto-validates
 
     def expected_surplus(self, p: float) -> float:
         """

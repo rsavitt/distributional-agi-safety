@@ -25,6 +25,7 @@ class AgentSnapshot:
 
     agent_id: str
     epoch: int
+    name: Optional[str] = None
     reputation: float = 0.0
     resources: float = 100.0
     interactions_initiated: int = 0
@@ -377,6 +378,7 @@ class MetricsAggregator:
             agent_snapshot = AgentSnapshot(
                 agent_id=agent_id,
                 epoch=epoch,
+                name=state.name,
                 reputation=state.reputation,
                 resources=state.resources,
                 interactions_initiated=agent_data.get("interactions_initiated", 0),
@@ -513,7 +515,7 @@ def build_scaling_curve_points(
     aggregated_rows: List[Dict[str, Any]],
     x_axis: str,
     fixed_tier: str,
-) -> Dict[str, List[float]]:
+) -> Dict[str, Any]:
     """
     Build curve-ready points from aggregated incoherence rows.
 
