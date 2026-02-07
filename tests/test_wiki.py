@@ -1,6 +1,12 @@
 """Tests for Moltipedia wiki environment."""
 
-from swarm.env.wiki import EditType, PageStatus, PolicyViolationType, WikiPage, WikiTaskPool
+from swarm.env.wiki import (
+    EditType,
+    PageStatus,
+    PolicyViolationType,
+    WikiPage,
+    WikiTaskPool,
+)
 
 
 def test_wiki_task_pool_seed_and_retrieve():
