@@ -113,7 +113,6 @@ class GovernanceConfig(BaseModel):
     moltipedia_daily_cap_enabled: bool = False
     moltipedia_daily_policy_fix_cap: float = 24.0
     moltipedia_no_self_fix: bool = False
-
     @model_validator(mode="after")
     def _run_validation(self) -> "GovernanceConfig":
         self._check_values()

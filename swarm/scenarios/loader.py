@@ -154,7 +154,6 @@ def parse_governance_config(data: Dict[str, Any]) -> GovernanceConfig:
         adaptive_governance_enabled=data.get("adaptive_governance_enabled", False),
         adaptive_incoherence_threshold=data.get("adaptive_incoherence_threshold", 0.5),
         adaptive_use_behavioral_features=data.get("adaptive_use_behavioral_features", False),
-
         # Moltipedia governance
         moltipedia_pair_cap_enabled=data.get("moltipedia_pair_cap_enabled", False),
         moltipedia_pair_cap_max=data.get("moltipedia_pair_cap_max", 2),
