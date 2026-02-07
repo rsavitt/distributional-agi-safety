@@ -16,6 +16,12 @@ from swarm.governance.identity_lever import SybilDetectionLever
 from swarm.governance.incoherence_breaker import IncoherenceCircuitBreakerLever
 from swarm.governance.levers import GovernanceLever, LeverEffect
 from swarm.governance.moderator_lever import ModeratorLever
+from swarm.governance.moltipedia import (
+    DailyPointCapLever,
+    NoSelfFixLever,
+    PageCooldownLever,
+    PairCapLever,
+)
 from swarm.governance.reputation import ReputationDecayLever, VoteNormalizationLever
 from swarm.governance.security import SecurityLever
 from swarm.governance.taxes import TransactionTaxLever
@@ -100,6 +106,10 @@ class GovernanceEngine:
             RandomAuditLever(self.config, seed=seed),
             CollusionPenaltyLever(self.config),
             SecurityLever(self.config, seed=seed),
+            PairCapLever(self.config),
+            PageCooldownLever(self.config),
+            DailyPointCapLever(self.config),
+            NoSelfFixLever(self.config),
         ]
         # Variance-aware levers (scaffold registration; behavior in #35)
         if self.config.self_ensemble_enabled:

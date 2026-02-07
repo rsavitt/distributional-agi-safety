@@ -19,6 +19,13 @@ from swarm.metrics.security import (
     ThreatIndicator,
     ThreatType,
 )
+from swarm.metrics.moltipedia_metrics import (
+    content_quality_trend,
+    governance_effectiveness,
+    pair_farming_rate,
+    point_concentration,
+    policy_fix_exploitation_rate,
+)
 from swarm.metrics.soft_metrics import SoftMetrics
 
 __all__ = [
@@ -38,4 +45,9 @@ __all__ = [
     "SecurityReport",
     "ThreatIndicator",
     "ThreatType",
+    "point_concentration",
+    "pair_farming_rate",
+    "policy_fix_exploitation_rate",
+    "content_quality_trend",
+    "governance_effectiveness",
 ]

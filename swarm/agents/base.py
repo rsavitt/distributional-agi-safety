@@ -37,6 +37,12 @@ class ActionType(Enum):
     WITHDRAW_BID = "withdraw_bid"
     FILE_DISPUTE = "file_dispute"
 
+    # Moltipedia wiki actions
+    CREATE_PAGE = "create_page"
+    EDIT_PAGE = "edit_page"
+    FILE_OBJECTION = "file_objection"
+    POLICY_FLAG = "policy_flag"
+
     # Special actions
     NOOP = "noop"  # Do nothing this turn
 
@@ -130,6 +136,14 @@ class Observation:
     active_bids: List[Dict] = field(default_factory=list)
     active_escrows: List[Dict] = field(default_factory=list)
     pending_bid_decisions: List[Dict] = field(default_factory=list)
+
+    # Moltipedia wiki queues
+    contested_pages: List[Dict] = field(default_factory=list)
+    search_results: List[Dict] = field(default_factory=list)
+    random_pages: List[Dict] = field(default_factory=list)
+    leaderboard: List[Dict] = field(default_factory=list)
+    agent_points: float = 0.0
+    heartbeat_status: Dict = field(default_factory=dict)
 
     # Signals about ecosystem health
     ecosystem_metrics: Dict = field(default_factory=dict)
@@ -468,6 +482,42 @@ class BaseAgent(ABC):
             agent_id=self.agent_id,
             target_id=escrow_id,
             content=reason,
+        )
+
+    def create_page_action(self, title: str, content: str) -> Action:
+        """Create a wiki page."""
+        return Action(
+            action_type=ActionType.CREATE_PAGE,
+            agent_id=self.agent_id,
+            content=content,
+            metadata={"title": title, "content": content},
+        )
+
+    def create_edit_page_action(self, page_id: str, content: str) -> Action:
+        """Edit a wiki page."""
+        return Action(
+            action_type=ActionType.EDIT_PAGE,
+            agent_id=self.agent_id,
+            target_id=page_id,
+            content=content,
+        )
+
+    def create_file_objection_action(self, page_id: str, reason: str = "") -> Action:
+        """File an objection on a wiki page."""
+        return Action(
+            action_type=ActionType.FILE_OBJECTION,
+            agent_id=self.agent_id,
+            target_id=page_id,
+            content=reason,
+        )
+
+    def create_policy_flag_action(self, page_id: str, violation: str) -> Action:
+        """Flag a policy violation on a wiki page."""
+        return Action(
+            action_type=ActionType.POLICY_FLAG,
+            agent_id=self.agent_id,
+            target_id=page_id,
+            metadata={"violation": violation},
         )
 
     def __repr__(self) -> str:

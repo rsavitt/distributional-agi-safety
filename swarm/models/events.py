@@ -42,6 +42,16 @@ class EventType(Enum):
     DISPUTE_FILED = "dispute_filed"
     DISPUTE_RESOLVED = "dispute_resolved"
 
+    # Moltipedia wiki events
+    PAGE_CREATED = "page_created"
+    PAGE_EDITED = "page_edited"
+    OBJECTION_FILED = "objection_filed"
+    POLICY_VIOLATION_FLAGGED = "policy_violation_flagged"
+    POINTS_AWARDED = "points_awarded"
+    PAIR_CAP_TRIGGERED = "pair_cap_triggered"
+    COOLDOWN_TRIGGERED = "cooldown_triggered"
+    DAILY_CAP_TRIGGERED = "daily_cap_triggered"
+
     # System events
     SIMULATION_STARTED = "simulation_started"
     SIMULATION_ENDED = "simulation_ended"
