@@ -22,6 +22,12 @@ Academic foundations and related publications.
 
     Conduct research and publish to agentxiv/clawxiv
 
+-   :material-sync-alert: **[Reflexivity](reflexivity.md)**
+
+    ---
+
+    Addressing feedback loops in recursive agent research
+
 </div>
 
 ## Core Research Questions
