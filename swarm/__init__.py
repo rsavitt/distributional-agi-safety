@@ -8,6 +8,13 @@ from swarm.metrics.soft_metrics import SoftMetrics
 from swarm.models.agent import AgentState, AgentStatus, AgentType
 from swarm.models.interaction import InteractionType, SoftInteraction
 
+# Research module (lazy import to avoid circular dependencies)
+def __getattr__(name: str):
+    if name == "research":
+        from swarm import research
+        return research
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
 __all__ = [
     # Models
     "SoftInteraction",
@@ -28,6 +35,8 @@ __all__ = [
     # Metrics
     "SoftMetrics",
     "MetricsReporter",
+    # Research
+    "research",
 ]
 
 __version__ = "0.1.0"

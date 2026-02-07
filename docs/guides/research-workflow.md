@@ -2,6 +2,44 @@
 
 A multi-agent workflow for conducting rigorous SWARM research, inspired by recursive exploration architectures like DeepResearch^Eco.
 
+## Implementation
+
+The workflow is implemented in `swarm.research`:
+
+```python
+from swarm.research import ResearchWorkflow, WorkflowConfig
+
+# Configure workflow
+config = WorkflowConfig(
+    depth=3,
+    breadth=3,
+    enable_reflexivity=True,
+    enable_pre_registration=True,
+    target_venue="clawxiv",
+)
+
+# Initialize with simulation function
+workflow = ResearchWorkflow(
+    config=config,
+    simulation_fn=my_simulation_function,
+)
+
+# Run complete workflow
+state = workflow.run(
+    question="How do governance mechanisms interact with population composition?",
+    parameter_space={
+        "honest_fraction": [0.2, 0.4, 0.6, 0.8, 1.0],
+        "transaction_tax": [0.0, 0.05, 0.10],
+    },
+)
+
+print(f"Status: {state.status}")
+if state.submission_result:
+    print(f"Published: {state.submission_result.paper_id}")
+```
+
+See [Reflexivity](../research/reflexivity.md) for the epistemological framework.
+
 ## Overview
 
 This workflow decomposes research into specialized sub-agents with controllable depth and breadth parameters, enabling systematic exploration while maintaining quality.
@@ -1026,8 +1064,125 @@ class IterativeWorkflow:
 └─────────────────────────────────────────────────────────────────────────┘
 ```
 
+## Reflexivity Handling
+
+Recursive agent research creates feedback loops: publishing findings changes the system being studied. The workflow addresses this through the `ReflexivityAnalyzer`.
+
+### The Reflexivity Problem
+
+From [Soros (1987)](../research/reflexivity.md):
+> Financial market participants act on models of the market, changing the market, invalidating the models.
+
+In agent research, this manifests as:
+- **Lucas Critique**: Agents adapt to published governance findings
+- **Goodhart's Law**: Published metrics become targets, gaming them
+- **Observer Effect**: Measurement disturbs the system
+
+### Shadow Simulations
+
+The workflow runs parallel simulations to measure reflexivity magnitude:
+
+```python
+from swarm.research import ShadowSimulation
+
+shadow = ShadowSimulation(
+    simulation_fn=my_simulation,
+    divergence_threshold=0.2,
+)
+
+result = shadow.run(
+    config=experiment_config,
+    findings=["Pair caps block collusion"],
+    epochs=10,
+)
+
+print(f"Divergence: {result.overall_divergence:.3f}")
+print(f"Finding robust: {result.finding_is_robust}")
+```
+
+**Interpretation**:
+- Low divergence (< 0.2): Finding is robust to self-knowledge
+- High divergence (> 0.5): Finding is fragile, may invert when known
+
+### Publish-Then-Attack Protocol
+
+Before publishing, red-team the finding:
+
+```python
+from swarm.research import PublishThenAttack
+
+attack = PublishThenAttack(simulation_fn=my_simulation)
+
+result = attack.run(
+    config=experiment_config,
+    finding="Reputation decay reduces toxicity",
+    baseline_metrics={"toxicity": 0.3, "welfare": 450},
+)
+
+print(f"Classification: {result.robustness_classification}")
+# DISCLOSURE_ROBUST, CONDITIONALLY_VALID, or FRAGILE
+```
+
+**Attack Strategies Tested**:
+- Direct evasion
+- Metric gaming
+- Collusive adaptation
+- Boundary exploitation
+
+### Robustness Classifications
+
+| Classification | Meaning | Action |
+|----------------|---------|--------|
+| `DISCLOSURE_ROBUST` | Finding holds even when agents know it | Safe to publish |
+| `CONDITIONALLY_VALID` | Finding holds only while unknown | Publish with caveat |
+| `FRAGILE` | Finding inverts when known | Treat as intelligence, not science |
+
+### Epistemic Disclosure
+
+Every published finding should include:
+
+```
+This finding [holds / degrades / inverts] under full-knowledge conditions.
+```
+
+The workflow automatically appends reflexivity analysis to papers:
+
+```latex
+% Reflexivity Analysis
+% Shadow Simulation Divergence: 0.15
+% Finding Robust to Self-Knowledge: Yes
+% Disclosure Robustness: DISCLOSURE_ROBUST
+```
+
+### Goodhart-Resistant Metrics
+
+The workflow uses strategies to resist metric gaming:
+
+1. **Composite metrics**: Require multiple metrics to pass simultaneously
+2. **Holdout metrics**: Compute some metrics internally but don't publish
+3. **Metric rotation**: Change primary metrics across publications
+4. **Ensemble checks**: Multiple proxies for same underlying property
+
+```python
+from swarm.research import GoodhartResistantMetrics
+
+metrics = GoodhartResistantMetrics()
+
+# Register holdout metric
+metrics.register_holdout_metric("secret_quality", compute_quality_fn)
+
+# Check for gaming
+gaming = metrics.detect_gaming(
+    data=results,
+    published_values={"toxicity": 0.2, "welfare": 500},
+)
+if gaming.get("secret_quality"):
+    print("Warning: Possible gaming detected")
+```
+
 ## Next Steps
 
 - [Agent Publishing Guide](../research/agent-publishing.md) - Platform APIs and submission
 - [Recursive Research](../concepts/recursive-research.md) - Epistemics of agents studying agents
+- [Reflexivity](../research/reflexivity.md) - Addressing feedback loops in recursive research
 - [Research Quality Standards](../research/agent-publishing.md#research-quality-standards) - Pre-publication checklist
