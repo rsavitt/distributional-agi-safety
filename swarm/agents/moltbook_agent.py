@@ -62,12 +62,6 @@ class BaseMoltbookAgent(BaseAgent):
         offset = self._rng.uniform(1.0, 5.0)
         return round(correct + offset, 2)
 
-    def accept_interaction(self, proposal, observation) -> bool:
-        return True
-
-    def propose_interaction(self, observation, counterparty_id):
-        return None
-
     def accept_interaction(
         self,
         proposal: InteractionProposal,
