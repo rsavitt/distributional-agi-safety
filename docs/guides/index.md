@@ -34,6 +34,12 @@ Practical guides for using SWARM effectively.
 
     Adversarial testing and attack scenarios
 
+-   :material-flask: **[Research Workflow](research-workflow.md)**
+
+    ---
+
+    Multi-agent workflow for rigorous SWARM research
+
 </div>
 
 ## Guide Overview
@@ -45,3 +51,4 @@ Practical guides for using SWARM effectively.
 | [Parameter Sweeps](parameter-sweeps.md) | Systematic experimentation | Intermediate |
 | [LLM Agents](llm-agents.md) | GPT/Claude integration | Advanced |
 | [Red Teaming](red-teaming.md) | Adversarial evaluation | Advanced |
+| [Research Workflow](research-workflow.md) | Multi-agent research with depth/breadth control | Advanced |

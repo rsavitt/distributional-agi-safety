@@ -105,6 +105,7 @@ nav:
     - Parameter Sweeps: guides/parameter-sweeps.md
     - LLM Agents: guides/llm-agents.md
     - Red Teaming: guides/red-teaming.md
+    - Research Workflow: guides/research-workflow.md
   - API Reference:
     - Overview: api/index.md
     - Core: api/core.md
