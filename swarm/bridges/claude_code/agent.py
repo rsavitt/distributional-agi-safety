@@ -152,7 +152,7 @@ class ClaudeCodeAgent(BaseAgent):
                 counterparty_id=proposal.initiator_id,
             )
         except (ConnectionError, RuntimeError):
-            return True  # Default to accepting
+            return False  # Fail-closed: reject on connection failure
 
         # Parse the response
         response = interaction.metadata.get("response_preview", "")

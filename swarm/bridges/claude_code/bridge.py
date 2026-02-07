@@ -57,6 +57,8 @@ class BridgeConfig:
     event_poll_interval: float = 1.0
     auto_respond_governance: bool = True
     tool_allowlist: Optional[Dict[str, List[str]]] = None
+    max_interactions: int = 50000
+    max_bridge_events: int = 50000
 
 
 class ClaudeCodeBridge:
@@ -242,7 +244,7 @@ class ClaudeCodeBridge:
             },
         )
 
-        self._interactions.append(interaction)
+        self._record_interaction(interaction)
 
         # Update agent state
         if agent_id in self._agent_states:
@@ -328,7 +330,7 @@ class ClaudeCodeBridge:
             },
         )
 
-        self._interactions.append(interaction)
+        self._record_interaction(interaction)
         self._log_interaction(interaction)
         return interaction
 
@@ -447,8 +449,16 @@ class ClaudeCodeBridge:
 
     def _record_bridge_event(self, event: BridgeEvent) -> None:
         """Record a bridge event to the internal log."""
+        if len(self._bridge_events) >= self._config.max_bridge_events:
+            self._bridge_events = self._bridge_events[-self._config.max_bridge_events // 2 :]
         self._bridge_events.append(event)
         self._client._dispatch_event(event)
+
+    def _record_interaction(self, interaction: SoftInteraction) -> None:
+        """Record an interaction, enforcing the configured cap."""
+        if len(self._interactions) >= self._config.max_interactions:
+            self._interactions = self._interactions[-self._config.max_interactions // 2 :]
+        self._interactions.append(interaction)
 
     def _log_interaction(self, interaction: SoftInteraction) -> None:
         """Log an interaction to SWARM's event log."""

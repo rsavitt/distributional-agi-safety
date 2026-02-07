@@ -7,6 +7,7 @@ calls for compatibility with SWARM's synchronous orchestrator loop.
 
 import json
 import logging
+import re
 import time
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Optional
@@ -22,6 +23,20 @@ from swarm.bridges.claude_code.events import (
 
 logger = logging.getLogger(__name__)
 
+# Agent IDs must be alphanumeric with hyphens/underscores, max 128 chars
+_AGENT_ID_RE = re.compile(r"^[a-zA-Z0-9_-]{1,128}$")
+
+# Maximum response body size to read (10 MB)
+_MAX_RESPONSE_SIZE = 10 * 1024 * 1024
+
+
+def _validate_agent_id(agent_id: str) -> None:
+    """Validate that an agent ID is safe for URL interpolation."""
+    if not _AGENT_ID_RE.match(agent_id):
+        raise ValueError(
+            f"Invalid agent_id '{agent_id}': must match [a-zA-Z0-9_-]{{1,128}}"
+        )
+
 
 @dataclass
 class ClientConfig:
@@ -32,6 +47,16 @@ class ClientConfig:
     max_retries: int = 3
     retry_backoff_base: float = 1.0
     api_key: Optional[str] = None
+
+    def __repr__(self) -> str:
+        """Redact api_key in repr to prevent accidental exposure."""
+        key_display = "***" if self.api_key else "None"
+        return (
+            f"ClientConfig(base_url={self.base_url!r}, "
+            f"timeout_seconds={self.timeout_seconds}, "
+            f"max_retries={self.max_retries}, "
+            f"api_key={key_display})"
+        )
 
 
 class ClaudeCodeClient:
@@ -86,7 +111,7 @@ class ClaudeCodeClient:
             try:
                 timeout = self.config.timeout_seconds
                 with urlopen(req, timeout=timeout) as resp:
-                    resp_body = resp.read().decode("utf-8")
+                    resp_body = resp.read(_MAX_RESPONSE_SIZE).decode("utf-8")
                     if resp_body:
                         result: Dict[str, Any] = json.loads(resp_body)
                         return result
@@ -145,6 +170,7 @@ class ClaudeCodeClient:
         Args:
             agent_id: ID of the agent to shut down
         """
+        _validate_agent_id(agent_id)
         return self._request("POST", f"/agents/{agent_id}/shutdown")
 
     # --- Interaction ---
@@ -165,6 +191,7 @@ class ClaudeCodeClient:
         Returns:
             MessageEvent with the agent's response
         """
+        _validate_agent_id(agent_id)
         body = {"prompt": prompt}
         if timeout_seconds is not None:
             body["timeout_seconds"] = timeout_seconds  # type: ignore[assignment]

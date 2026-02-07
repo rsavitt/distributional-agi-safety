@@ -21,7 +21,7 @@
  * a mock controller that simulates agent behavior.
  */
 
-import express, { Request, Response } from "express";
+import express, { Request, Response, NextFunction } from "express";
 import { v4 as uuidv4 } from "uuid";
 import type {
   SpawnRequest,
@@ -36,7 +36,44 @@ import type {
 } from "./types";
 
 const app = express();
-app.use(express.json());
+app.use(express.json({ limit: "100kb" }));
+
+// --- Security: Bearer token authentication ---
+
+const API_KEY = process.env.SWARM_BRIDGE_API_KEY || "";
+
+function authMiddleware(req: Request, res: Response, next: NextFunction): void {
+  // Health endpoint is unauthenticated for liveness probes
+  if (req.path === "/health") {
+    next();
+    return;
+  }
+  if (!API_KEY) {
+    // If no API key is configured, allow all requests (dev mode)
+    next();
+    return;
+  }
+  const authHeader = req.headers.authorization;
+  if (!authHeader || authHeader !== `Bearer ${API_KEY}`) {
+    res.status(401).json({ error: "Unauthorized: invalid or missing Bearer token" });
+    return;
+  }
+  next();
+}
+
+app.use(authMiddleware);
+
+// --- Security: Input validation helpers ---
+
+const AGENT_ID_RE = /^[a-zA-Z0-9_-]{1,128}$/;
+const MAX_AGENTS = 1000;
+const MAX_TASKS = 10000;
+const MAX_PROMPT_LENGTH = 100000;
+const MAX_EVENTS_LIMIT = 1000;
+
+function isValidAgentId(id: string): boolean {
+  return AGENT_ID_RE.test(id);
+}
 
 // --- In-memory state ---
 
@@ -102,6 +139,16 @@ app.post("/agents/spawn", (req: Request, res: Response) => {
   const body = req.body as SpawnRequest;
   const agentId = body.agent_id || uuidv4();
 
+  if (!isValidAgentId(agentId)) {
+    res.status(400).json({ error: "Invalid agent_id: must match [a-zA-Z0-9_-]{1,128}" });
+    return;
+  }
+
+  if (agents.size >= MAX_AGENTS) {
+    res.status(429).json({ error: `Agent limit reached (max ${MAX_AGENTS})` });
+    return;
+  }
+
   if (agents.has(agentId)) {
     res.status(409).json({ status: "error", message: "Agent already exists" });
     return;
@@ -130,6 +177,10 @@ app.post("/agents/spawn", (req: Request, res: Response) => {
 
 app.post("/agents/:id/shutdown", (req: Request, res: Response) => {
   const agentId = req.params.id;
+  if (!isValidAgentId(agentId)) {
+    res.status(400).json({ error: "Invalid agent_id format" });
+    return;
+  }
   if (!agents.has(agentId)) {
     res.status(404).json({ error: "Agent not found" });
     return;
@@ -149,25 +200,38 @@ app.post("/agents/:id/ask", (req: Request, res: Response) => {
   const agentId = req.params.id;
   const body = req.body as AskRequest;
 
+  if (!isValidAgentId(agentId)) {
+    res.status(400).json({ error: "Invalid agent_id format" });
+    return;
+  }
   if (!agents.has(agentId)) {
     res.status(404).json({ error: "Agent not found" });
     return;
   }
+  if (!body.prompt || typeof body.prompt !== "string") {
+    res.status(400).json({ error: "Missing or invalid 'prompt' field" });
+    return;
+  }
+  if (body.prompt.length > MAX_PROMPT_LENGTH) {
+    res.status(400).json({ error: `Prompt too long (max ${MAX_PROMPT_LENGTH} chars)` });
+    return;
+  }
 
-  emitEvent("message:sent", agentId, { prompt: body.prompt });
+  // Log event with truncated prompt to avoid storing sensitive data in full
+  emitEvent("message:sent", agentId, { prompt_length: body.prompt.length });
 
   // TODO: In production, forward to ClaudeCodeController.ask()
   // For now, return a mock response.
 
   const resp: AskResponse = {
-    content: `[Mock response from ${agentId}] Acknowledged: ${body.prompt.slice(0, 100)}`,
+    content: `[Mock response from agent] Acknowledged prompt (${body.prompt.length} chars)`,
     tool_calls: [],
     token_count: Math.floor(body.prompt.length * 1.5),
     cost_usd: 0.001,
   };
 
   emitEvent("message:received", agentId, {
-    content: resp.content,
+    content_length: resp.content.length,
     token_count: resp.token_count,
   });
 
@@ -178,6 +242,16 @@ app.post("/agents/:id/ask", (req: Request, res: Response) => {
 
 app.post("/tasks", (req: Request, res: Response) => {
   const body = req.body as CreateTaskRequest;
+
+  if (!body.subject || !body.owner) {
+    res.status(400).json({ error: "Missing required fields: 'subject' and 'owner'" });
+    return;
+  }
+  if (tasks.size >= MAX_TASKS) {
+    res.status(429).json({ error: `Task limit reached (max ${MAX_TASKS})` });
+    return;
+  }
+
   const taskId = uuidv4();
 
   const task: TaskState = {
@@ -263,7 +337,8 @@ app.get("/tasks/:id/wait", (req: Request, res: Response) => {
 
 app.get("/events", (req: Request, res: Response) => {
   const since = req.query.since as string | undefined;
-  const limit = parseInt((req.query.limit as string) || "100", 10);
+  const rawLimit = parseInt((req.query.limit as string) || "100", 10);
+  const limit = Math.min(Math.max(1, isNaN(rawLimit) ? 100 : rawLimit), MAX_EVENTS_LIMIT);
 
   let filtered = events;
   if (since) {
@@ -280,6 +355,16 @@ app.get("/events", (req: Request, res: Response) => {
 
 app.post("/governance/respond", (req: Request, res: Response) => {
   const body = req.body as GovernanceResponse;
+
+  if (!body.request_id || !body.decision) {
+    res.status(400).json({ error: "Missing required fields: 'request_id' and 'decision'" });
+    return;
+  }
+  const validDecisions = ["approve", "reject", "grant", "deny"];
+  if (!validDecisions.includes(body.decision)) {
+    res.status(400).json({ error: `Invalid decision: must be one of ${validDecisions.join(", ")}` });
+    return;
+  }
 
   // TODO: In production, forward to ClaudeCodeController's
   // plan/permission response handler.
@@ -299,9 +384,13 @@ app.post("/governance/respond", (req: Request, res: Response) => {
 // --- Start ---
 
 const PORT = parseInt(process.env.PORT || "3100", 10);
+const HOST = process.env.HOST || "127.0.0.1";
 
-app.listen(PORT, () => {
-  console.log(`SWARM Claude Code service listening on port ${PORT}`);
+app.listen(PORT, HOST, () => {
+  console.log(`SWARM Claude Code service listening on ${HOST}:${PORT}`);
+  if (!API_KEY) {
+    console.warn("WARNING: No SWARM_BRIDGE_API_KEY set - running without authentication");
+  }
 });
 
 export default app;

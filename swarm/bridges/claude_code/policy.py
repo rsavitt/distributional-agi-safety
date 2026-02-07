@@ -6,6 +6,7 @@ plan:approval_request and permission:request events.
 """
 
 import logging
+import threading
 from dataclasses import dataclass
 from enum import Enum
 from typing import Dict, List, Optional, Set
@@ -88,6 +89,7 @@ class GovernancePolicy:
         self.config = governance_config or GovernanceConfig()
         self.tool_allowlist = tool_allowlist or {}
         self._budgets: Dict[str, AgentBudget] = per_agent_budgets or {}
+        self._lock = threading.Lock()
 
     def _get_budget(self, agent_id: str) -> AgentBudget:
         """Get or create a budget tracker for an agent."""
@@ -115,6 +117,14 @@ class GovernancePolicy:
         Returns:
             PolicyResult with decision and metadata
         """
+        with self._lock:
+            return self._evaluate_plan_unlocked(request, agent_reputation)
+
+    def _evaluate_plan_unlocked(
+        self,
+        request: PlanApprovalRequest,
+        agent_reputation: float,
+    ) -> PolicyResult:
         budget = self._get_budget(request.agent_id)
 
         # Circuit breaker check
@@ -203,6 +213,14 @@ class GovernancePolicy:
         Returns:
             PolicyResult with decision and metadata
         """
+        with self._lock:
+            return self._evaluate_permission_unlocked(request, agent_reputation)
+
+    def _evaluate_permission_unlocked(
+        self,
+        request: PermissionRequest,
+        agent_reputation: float,
+    ) -> PolicyResult:
         budget = self._get_budget(request.agent_id)
 
         # Allowlist check
@@ -279,16 +297,18 @@ class GovernancePolicy:
             max_tool_calls: Maximum tool invocations allowed
             max_cost_usd: Maximum dollar cost allowed
         """
-        budget = self._get_budget(agent_id)
-        budget.max_tool_calls = max_tool_calls
-        budget.max_cost_usd = max_cost_usd
+        with self._lock:
+            budget = self._get_budget(agent_id)
+            budget.max_tool_calls = max_tool_calls
+            budget.max_cost_usd = max_cost_usd
 
     def reset_budgets(self) -> None:
         """Reset all agent budgets (e.g., at epoch boundary)."""
-        for budget in self._budgets.values():
-            budget.tool_calls_used = 0
-            budget.cost_used_usd = 0.0
-            budget.denied_permissions = 0
-            budget.approved_permissions = 0
-            budget.plans_approved = 0
-            budget.plans_denied = 0
+        with self._lock:
+            for budget in self._budgets.values():
+                budget.tool_calls_used = 0
+                budget.cost_used_usd = 0.0
+                budget.denied_permissions = 0
+                budget.approved_permissions = 0
+                budget.plans_approved = 0
+                budget.plans_denied = 0

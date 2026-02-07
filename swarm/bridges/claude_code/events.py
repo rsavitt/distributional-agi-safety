@@ -8,9 +8,25 @@ requests, task lifecycle).
 
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Dict, List, Optional
+
+
+def _utcnow() -> datetime:
+    """Return the current time as a timezone-aware UTC datetime."""
+    return datetime.now(timezone.utc)
+
+
+def _parse_timestamp(data: Dict[str, Any]) -> datetime:
+    """Safely parse a timestamp from a dict, defaulting to UTC now."""
+    raw = data.get("timestamp")
+    if raw is None:
+        return _utcnow()
+    try:
+        return datetime.fromisoformat(str(raw))
+    except (ValueError, TypeError):
+        return _utcnow()
 
 
 class BridgeEventType(Enum):
@@ -52,7 +68,7 @@ class BridgeEvent:
 
     event_id: str = field(default_factory=lambda: str(uuid.uuid4()))
     event_type: BridgeEventType = BridgeEventType.MESSAGE_RECEIVED
-    timestamp: datetime = field(default_factory=datetime.now)
+    timestamp: datetime = field(default_factory=_utcnow)
     agent_id: str = ""
     payload: Dict[str, Any] = field(default_factory=dict)
 
@@ -68,14 +84,16 @@ class BridgeEvent:
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "BridgeEvent":
-        """Deserialize from dict."""
+        """Deserialize from dict with safe type handling."""
+        try:
+            event_type = BridgeEventType(data["event_type"])
+        except (ValueError, KeyError):
+            event_type = BridgeEventType.ERROR
         return cls(
             event_id=data.get("event_id", str(uuid.uuid4())),
-            event_type=BridgeEventType(data["event_type"]),
-            timestamp=datetime.fromisoformat(data["timestamp"])
-            if "timestamp" in data
-            else datetime.now(),
-            agent_id=data.get("agent_id", ""),
+            event_type=event_type,
+            timestamp=_parse_timestamp(data),
+            agent_id=str(data.get("agent_id", "")),
             payload=data.get("payload", {}),
         )
 
@@ -88,7 +106,7 @@ class MessageEvent:
     role: str = "user"  # "user" | "assistant" | "system"
     content: str = ""
     tool_calls: List[Dict[str, Any]] = field(default_factory=list)
-    timestamp: datetime = field(default_factory=datetime.now)
+    timestamp: datetime = field(default_factory=_utcnow)
     token_count: int = 0
     cost_usd: float = 0.0
 
@@ -118,7 +136,7 @@ class PlanApprovalRequest:
     steps: List[str] = field(default_factory=list)
     estimated_tool_calls: int = 0
     risk_flags: List[str] = field(default_factory=list)
-    timestamp: datetime = field(default_factory=datetime.now)
+    timestamp: datetime = field(default_factory=_utcnow)
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -134,15 +152,13 @@ class PlanApprovalRequest:
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "PlanApprovalRequest":
         return cls(
-            request_id=data.get("request_id", str(uuid.uuid4())),
-            agent_id=data.get("agent_id", ""),
-            plan_description=data.get("plan_description", ""),
+            request_id=str(data.get("request_id", str(uuid.uuid4()))),
+            agent_id=str(data.get("agent_id", "")),
+            plan_description=str(data.get("plan_description", "")),
             steps=data.get("steps", []),
-            estimated_tool_calls=data.get("estimated_tool_calls", 0),
+            estimated_tool_calls=int(data.get("estimated_tool_calls", 0)),
             risk_flags=data.get("risk_flags", []),
-            timestamp=datetime.fromisoformat(data["timestamp"])
-            if "timestamp" in data
-            else datetime.now(),
+            timestamp=_parse_timestamp(data),
         )
 
 
@@ -160,7 +176,7 @@ class PermissionRequest:
     tool_name: str = ""
     tool_args: Dict[str, Any] = field(default_factory=dict)
     risk_level: str = "low"  # "low" | "medium" | "high"
-    timestamp: datetime = field(default_factory=datetime.now)
+    timestamp: datetime = field(default_factory=_utcnow)
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -175,14 +191,12 @@ class PermissionRequest:
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "PermissionRequest":
         return cls(
-            request_id=data.get("request_id", str(uuid.uuid4())),
-            agent_id=data.get("agent_id", ""),
-            tool_name=data.get("tool_name", ""),
+            request_id=str(data.get("request_id", str(uuid.uuid4()))),
+            agent_id=str(data.get("agent_id", "")),
+            tool_name=str(data.get("tool_name", "")),
             tool_args=data.get("tool_args", {}),
-            risk_level=data.get("risk_level", "low"),
-            timestamp=datetime.fromisoformat(data["timestamp"])
-            if "timestamp" in data
-            else datetime.now(),
+            risk_level=str(data.get("risk_level", "low")),
+            timestamp=_parse_timestamp(data),
         )
 
 
@@ -202,7 +216,7 @@ class TaskEvent:
     result: Optional[str] = None
     duration_ms: int = 0
     tools_used: List[str] = field(default_factory=list)
-    timestamp: datetime = field(default_factory=datetime.now)
+    timestamp: datetime = field(default_factory=_utcnow)
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -221,16 +235,14 @@ class TaskEvent:
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "TaskEvent":
         return cls(
-            task_id=data.get("task_id", str(uuid.uuid4())),
-            agent_id=data.get("agent_id", ""),
-            subject=data.get("subject", ""),
-            description=data.get("description", ""),
-            owner=data.get("owner", ""),
-            status=data.get("status", "pending"),
+            task_id=str(data.get("task_id", str(uuid.uuid4()))),
+            agent_id=str(data.get("agent_id", "")),
+            subject=str(data.get("subject", "")),
+            description=str(data.get("description", "")),
+            owner=str(data.get("owner", "")),
+            status=str(data.get("status", "pending")),
             result=data.get("result"),
-            duration_ms=data.get("duration_ms", 0),
+            duration_ms=int(data.get("duration_ms", 0)),
             tools_used=data.get("tools_used", []),
-            timestamp=datetime.fromisoformat(data["timestamp"])
-            if "timestamp" in data
-            else datetime.now(),
+            timestamp=_parse_timestamp(data),
         )
