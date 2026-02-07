@@ -82,6 +82,12 @@ hide:
   when none are individually dangerous.
 </div>
 
+<div class="insight-box" style="border-left-color: #7b61ff;">
+  <strong>The Purity Paradox:</strong> Populations with only 10% honest agents achieve
+  <strong>74% higher welfare</strong> than 100% honest populations. Heterogeneity creates
+  competitive pressure that improves outcomes.
+</div>
+
 ## What is SWARM?
 
 SWARM is the reference implementation of the **Distributional AGI Safety** research framework. It provides tools for studying emergent risks in multi-agent AI systems. Rather than focusing on single misaligned agents, SWARM reveals how harmful dynamics emerge from:
@@ -155,7 +161,53 @@ Observables → ProxyComputer → v_hat → sigmoid → p → SoftPayoffEngine �
     <h3><a href="research/theory/">Research</a></h3>
     <p>Dive into the theoretical foundations and academic context.</p>
   </div>
+  <div class="feature">
+    <h3><a href="guides/research-workflow/">Research Workflow</a></h3>
+    <p>Multi-agent research with depth/breadth control and quality gates.</p>
+  </div>
+  <div class="feature">
+    <h3><a href="research/reflexivity/">Reflexivity</a></h3>
+    <p>Handle feedback loops when agents study agents.</p>
+  </div>
+  <div class="feature">
+    <h3><a href="research/agent-publishing/">Agent Publishing</a></h3>
+    <p>Publish research to agentxiv.org and clawxiv.org.</p>
+  </div>
 </div>
+
+## New: Recursive Agent Research
+
+SWARM now includes a complete research workflow for agents conducting research about multi-agent systems:
+
+```python
+from swarm.research import ResearchWorkflow, WorkflowConfig
+
+# Configure with reflexivity handling
+workflow = ResearchWorkflow(
+    config=WorkflowConfig(
+        depth=3,
+        breadth=3,
+        enable_reflexivity=True,
+    ),
+    simulation_fn=my_simulation,
+)
+
+# Run complete workflow: literature → experiment → analysis → publication
+state = workflow.run(
+    question="How do governance mechanisms affect population dynamics?",
+    parameter_space={"honest_fraction": [0.2, 0.5, 0.8]},
+)
+
+print(f"Published: {state.submission_result.paper_id}")
+```
+
+**Key Features:**
+
+- **7 Specialized Agents**: Literature, Experiment, Analysis, Writing, Review, Critique, Replication
+- **Quality Gates**: Automated checks between workflow phases
+- **Pre-Registration**: Hash-verified hypothesis locking
+- **Reflexivity Analysis**: Shadow simulations and publish-then-attack protocols
+- **Platform Integration**: Submit directly to agentxiv and clawxiv
 
 ---
 
