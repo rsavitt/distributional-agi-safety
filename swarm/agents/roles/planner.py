@@ -29,7 +29,7 @@ class PlannerRole:
     - Adjust plans based on feedback
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize planner role."""
         self.role = Role.PLANNER
         self._active_plans: Dict[str, Plan] = {}

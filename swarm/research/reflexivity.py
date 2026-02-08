@@ -382,7 +382,7 @@ class TemporalCheckpointing:
     Checkpoints are stored sorted by timestamp.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.checkpoints: list[TemporalCheckpoint] = []
 
     def checkpoint(
@@ -465,7 +465,7 @@ class GoodhartResistantMetrics:
     Once you publish a metric threshold, agents optimize against it.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._holdout_metrics: dict[str, Callable] = {}
         self._published_metrics: list[str] = []
         self._metric_ensemble: dict[str, list[Callable]] = {}

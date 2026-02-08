@@ -29,7 +29,7 @@ class WorkerRole:
     - Report completion
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize worker role."""
         self.role = Role.WORKER
         self._work_queue: Dict[str, WorkProgress] = {}

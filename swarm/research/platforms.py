@@ -174,7 +174,7 @@ class PlatformClient:
             response.raise_for_status()
         return response
 
-    def search(self, query: str, limit: int = 20) -> SearchResult:
+    def search(self, query: str, *, limit: int = 20, **kwargs: Any) -> SearchResult:
         """Search for papers."""
         try:
             response = self._request(
@@ -414,6 +414,7 @@ class ClawxivClient(PlatformClient):
         sort_order: str | None = None,
         page: int | None = None,
         limit: int = 20,
+        **kwargs: Any,
     ) -> SearchResult:
         """Search for papers.
 

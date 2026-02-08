@@ -1,9 +1,14 @@
 """Moltbook-specific governance levers."""
 
+from __future__ import annotations
+
 from dataclasses import dataclass
-from typing import Dict, Optional
+from typing import TYPE_CHECKING, Dict, Optional
 
 from swarm.governance.levers import GovernanceLever, LeverEffect
+
+if TYPE_CHECKING:
+    from swarm.governance.config import GovernanceConfig
 
 
 @dataclass
@@ -27,7 +32,7 @@ class MoltbookRateLimitState:
 class MoltbookRateLimitLever(GovernanceLever):
     """Rate limit lever for Moltbook posts and comments."""
 
-    def __init__(self, config):
+    def __init__(self, config: GovernanceConfig) -> None:
         super().__init__(config)
         self._states: Dict[str, MoltbookRateLimitState] = {}
         self._rate_limit_hits: Dict[str, int] = {}
@@ -114,7 +119,7 @@ class PendingVerification:
 class ChallengeVerificationLever(GovernanceLever):
     """Tracks active Moltbook challenges and expirations."""
 
-    def __init__(self, config):
+    def __init__(self, config: GovernanceConfig) -> None:
         super().__init__(config)
         self._pending: Dict[str, PendingVerification] = {}
 

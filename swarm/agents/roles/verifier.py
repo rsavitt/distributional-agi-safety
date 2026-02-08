@@ -30,7 +30,7 @@ class VerifierRole:
     - Approve or reject submissions
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize verifier role."""
         self.role = Role.VERIFIER
         self._verification_history: List[VerificationResult] = []
