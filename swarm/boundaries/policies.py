@@ -432,7 +432,7 @@ class CompositePolicy(BoundaryPolicy):
 class PolicyEngine:
     """Central engine for managing and enforcing boundary policies."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize the policy engine."""
         self.policies: List[BoundaryPolicy] = []
         self.evaluation_history: List[Dict[str, Any]] = []

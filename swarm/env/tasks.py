@@ -246,7 +246,7 @@ class TaskPool:
     Manages task lifecycle and assignment.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize task pool."""
         self._tasks: Dict[str, Task] = {}
         self._tasks_by_agent: Dict[str, List[str]] = {}  # agent_id -> [task_id]

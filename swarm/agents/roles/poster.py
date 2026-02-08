@@ -28,7 +28,7 @@ class PosterRole:
     - Track engagement
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize poster role."""
         self.role = Role.POSTER
         self._posted_content: List[Dict] = []

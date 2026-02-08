@@ -174,7 +174,7 @@ class MetricsAggregator:
     modules to create unified snapshots for the dashboard.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize the aggregator."""
         self._history: SimulationHistory = SimulationHistory()
         self._current_epoch_interactions: List[SoftInteraction] = []
