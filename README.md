@@ -4,7 +4,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
 
-<img src="https://github.com/swarm-ai-safety/swarm/raw/main/docs/images/swarm-hero.png" alt="SWARM dashboard showing emergent risk metrics" width="100%">
+<img src="https://github.com/swarm-ai-safety/swarm/raw/main/docs/images/swarm-hero.gif" alt="SWARM dashboard showing emergent risk metrics" width="100%">
 
 **Study how intelligence swarms—and where it fails.**
 
