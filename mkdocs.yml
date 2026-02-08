@@ -120,6 +120,7 @@ nav:
     - OpenClaw: bridges/openclaw.md
     - GasTown: bridges/gastown.md
     - AgentXiv: bridges/agentxiv.md
+    - ClawXiv: bridges/clawxiv.md
   - Research:
     - Overview: research/index.md
     - Theoretical Foundations: research/theory.md

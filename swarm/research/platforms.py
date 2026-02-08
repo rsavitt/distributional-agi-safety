@@ -18,6 +18,20 @@ from tenacity import (
 logger = logging.getLogger(__name__)
 
 
+def _parse_datetime(value: str | datetime | None) -> datetime:
+    """Parse ISO timestamps, handling Zulu suffixes gracefully."""
+    if isinstance(value, datetime):
+        return value
+    if not value:
+        return datetime.now(timezone.utc)
+    if isinstance(value, str) and value.endswith("Z"):
+        value = value[:-1] + "+00:00"
+    try:
+        return datetime.fromisoformat(value)  # type: ignore[arg-type]
+    except ValueError:
+        return datetime.now(timezone.utc)
+
+
 @dataclass
 class Paper:
     """A research paper."""
@@ -27,6 +41,8 @@ class Paper:
     abstract: str = ""
     categories: list[str] = field(default_factory=list)
     source: str = ""  # LaTeX source
+    bib: str = ""  # BibTeX bibliography
+    images: dict[str, str] = field(default_factory=dict)  # base64-encoded images
     authors: list[str] = field(default_factory=list)
     version: int = 1
     created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
@@ -42,6 +58,8 @@ class Paper:
             "abstract": self.abstract,
             "categories": self.categories,
             "source": self.source,
+            "bib": self.bib,
+            "images": self.images,
             "authors": self.authors,
             "version": self.version,
             "created_at": self.created_at.isoformat(),
@@ -53,20 +71,31 @@ class Paper:
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "Paper":
         """Deserialize from dictionary."""
+        files = data.get("files", {}) if isinstance(data.get("files"), dict) else {}
+        source = data.get("source") or files.get("source", "")
+        bib = data.get("bib") or files.get("bib", "")
+        images_raw = data.get("images") or files.get("images", {})
+        images = images_raw if isinstance(images_raw, dict) else {}
+        authors_raw = data.get("authors", [])
+        if isinstance(authors_raw, list) and authors_raw:
+            if isinstance(authors_raw[0], dict):
+                authors = [a.get("name", "") for a in authors_raw if a.get("name")]
+            else:
+                authors = [str(a) for a in authors_raw]
+        else:
+            authors = []
         return cls(
             paper_id=data.get("paper_id", data.get("id", "")),
             title=data.get("title", ""),
             abstract=data.get("abstract", ""),
             categories=data.get("categories", []),
-            source=data.get("source", ""),
-            authors=data.get("authors", []),
+            source=source,
+            bib=bib,
+            images=images,
+            authors=authors,
             version=data.get("version", 1),
-            created_at=datetime.fromisoformat(data["created_at"])
-            if "created_at" in data
-            else datetime.now(timezone.utc),
-            updated_at=datetime.fromisoformat(data["updated_at"])
-            if "updated_at" in data
-            else datetime.now(timezone.utc),
+            created_at=_parse_datetime(data.get("created_at")),
+            updated_at=_parse_datetime(data.get("updated_at")),
             changelog=data.get("changelog", ""),
             upvotes=data.get("upvotes", 0),
         )
@@ -299,6 +328,155 @@ class ClawxivClient(PlatformClient):
     base_url = "https://www.clawxiv.org/api/v1"
     env_var_name = "CLAWXIV_API_KEY"
     auth_header = "X-API-Key"
+
+    def register(self, name: str, description: str) -> dict[str, str]:
+        """Register a new bot account."""
+        response = self._request(
+            "POST",
+            f"{self.base_url}/register",
+            json={"name": name, "description": description},
+        )
+        response.raise_for_status()
+        result: dict[str, str] = response.json()  # type: ignore[assignment]
+        return result
+
+    def submit(self, paper: Paper) -> SubmissionResult:
+        """Submit a new paper (LaTeX)."""
+        try:
+            files: dict[str, Any] = {"source": paper.source}
+            if paper.bib:
+                files["bib"] = paper.bib
+            if paper.images:
+                files["images"] = paper.images
+            response = self._request(
+                "POST",
+                f"{self.base_url}/papers",
+                json={
+                    "title": paper.title,
+                    "abstract": paper.abstract,
+                    "categories": paper.categories,
+                    "files": files,
+                },
+            )
+            response.raise_for_status()
+            data = response.json()
+            return SubmissionResult(
+                success=True,
+                paper_id=data.get("paper_id", data.get("id", "")),
+                message="Paper submitted successfully",
+                version=1,
+            )
+        except requests.RequestException as e:
+            logger.warning("Submit failed on %s: %s", self.base_url, e)
+            return SubmissionResult(success=False, message=str(e))
+
+    def update(self, paper_id: str, paper: Paper) -> SubmissionResult:
+        """Update an existing paper (single-author)."""
+        try:
+            files: dict[str, Any] = {"source": paper.source}
+            if paper.bib:
+                files["bib"] = paper.bib
+            if paper.images:
+                files["images"] = paper.images
+            response = self._request(
+                "PUT",
+                f"{self.base_url}/papers/{paper_id}",
+                json={
+                    "title": paper.title,
+                    "abstract": paper.abstract,
+                    "categories": paper.categories,
+                    "files": files,
+                },
+            )
+            response.raise_for_status()
+            data = response.json()
+            return SubmissionResult(
+                success=True,
+                paper_id=paper_id,
+                message="Paper updated successfully",
+                version=data.get("version", paper.version + 1),
+            )
+        except requests.RequestException as e:
+            logger.warning("Update %s failed on %s: %s", paper_id, self.base_url, e)
+            return SubmissionResult(success=False, message=str(e))
+
+    def search(
+        self,
+        query: str,
+        *,
+        title: str | None = None,
+        author: str | None = None,
+        abstract: str | None = None,
+        category: str | None = None,
+        date_from: str | None = None,
+        date_to: str | None = None,
+        sort_by: str | None = None,
+        sort_order: str | None = None,
+        page: int | None = None,
+        limit: int = 20,
+    ) -> SearchResult:
+        """Search for papers.
+
+        ClawXiv search uses GET with query parameters.
+        """
+        try:
+            params: dict[str, Any] = {"query": query, "limit": limit}
+            if title:
+                params["title"] = title
+            if author:
+                params["author"] = author
+            if abstract:
+                params["abstract"] = abstract
+            if category:
+                params["category"] = category
+            if date_from:
+                params["date_from"] = date_from
+            if date_to:
+                params["date_to"] = date_to
+            if sort_by:
+                params["sort_by"] = sort_by
+            if sort_order:
+                params["sort_order"] = sort_order
+            if page is not None:
+                params["page"] = page
+
+            response = self._request(
+                "GET",
+                f"{self.base_url}/search",
+                params=params,
+            )
+            response.raise_for_status()
+            data = response.json()
+        except requests.HTTPError as e:
+            if e.response is None or e.response.status_code != 405:
+                logger.warning("Search failed for %s on %s: %s", query, self.base_url, e)
+                return SearchResult(papers=[], total_count=0, query=query)
+            # Fallback for older deployments that still use POST
+            try:
+                response = self._request(
+                    "POST",
+                    f"{self.base_url}/search",
+                    json={"query": query, "limit": limit},
+                )
+                response.raise_for_status()
+                data = response.json()
+            except requests.RequestException as e2:
+                logger.warning(
+                    "Search failed for %s on %s: %s", query, self.base_url, e2
+                )
+                return SearchResult(papers=[], total_count=0, query=query)
+        except requests.RequestException as e:
+            logger.warning("Search failed for %s on %s: %s", query, self.base_url, e)
+            return SearchResult(papers=[], total_count=0, query=query)
+
+        papers = [
+            Paper.from_dict(p) for p in data.get("papers", data.get("results", []))
+        ]
+        return SearchResult(
+            papers=papers,
+            total_count=data.get("total", len(papers)),
+            query=query,
+        )
 
 
 def get_client(platform: str, api_key: str | None = None) -> PlatformClient:
