@@ -126,16 +126,18 @@ class GovernanceConfig(BaseModel):
     moltbook_challenge_difficulty: float = 0.5
     moltbook_challenge_window_steps: int = 1
 
-    # Memory tier governance
-    memory_promotion_gate_enabled: bool = False
-    memory_promotion_min_quality: float = 0.5
-    memory_promotion_min_verifications: int = 1
-    memory_write_rate_limit_enabled: bool = False
-    memory_write_rate_limit_per_epoch: int = 20
-    memory_cross_verification_enabled: bool = False
-    memory_cross_verification_k: int = 2
-    memory_provenance_enabled: bool = False
-    memory_provenance_revert_penalty: float = 0.1
+    # Diversity as Defense (DaD)
+    diversity_enabled: bool = False
+    diversity_rho_max: float = 0.5  # Correlation cap (Rule 1)
+    diversity_entropy_min: float = 0.5  # Minimum Shannon entropy of type mix (Rule 2)
+    diversity_adversarial_fraction_min: float = 0.0  # Min adversarial probe fraction (Rule 3)
+    diversity_disagreement_tau: float = 0.7  # Disagreement threshold for audit trigger (Rule 4)
+    diversity_error_threshold_p: float = 0.5  # p below this counts as an error
+    diversity_correlation_penalty_rate: float = 0.05  # Cost when correlation cap violated
+    diversity_entropy_penalty_rate: float = 0.05  # Cost when entropy floor violated
+    diversity_audit_cost: float = 0.1  # Cost applied when disagreement triggers audit
+    diversity_correlation_window: int = 50  # Window of recent interactions for correlation
+
     @model_validator(mode="after")
     def _run_validation(self) -> "GovernanceConfig":
         self._check_values()
@@ -259,14 +261,28 @@ class GovernanceConfig(BaseModel):
         if self.moltbook_challenge_window_steps < 0:
             raise ValueError("moltbook_challenge_window_steps must be >= 0")
 
-        # Memory tier validation
-        if not 0.0 <= self.memory_promotion_min_quality <= 1.0:
-            raise ValueError("memory_promotion_min_quality must be in [0, 1]")
-        if self.memory_promotion_min_verifications < 0:
-            raise ValueError("memory_promotion_min_verifications must be >= 0")
-        if self.memory_write_rate_limit_per_epoch < 1:
-            raise ValueError("memory_write_rate_limit_per_epoch must be >= 1")
-        if self.memory_cross_verification_k < 1:
-            raise ValueError("memory_cross_verification_k must be >= 1")
-        if self.memory_provenance_revert_penalty < 0:
-            raise ValueError("memory_provenance_revert_penalty must be >= 0")
+        # Diversity as Defense validation
+        if not 0.0 <= self.diversity_rho_max <= 1.0:
+            raise ValueError("diversity_rho_max must be in [0, 1]")
+        if self.diversity_entropy_min < 0.0:
+            raise ValueError("diversity_entropy_min must be non-negative")
+        if not 0.0 <= self.diversity_adversarial_fraction_min <= 1.0:
+            raise ValueError(
+                "diversity_adversarial_fraction_min must be in [0, 1]"
+            )
+        if not 0.0 <= self.diversity_disagreement_tau <= 1.0:
+            raise ValueError("diversity_disagreement_tau must be in [0, 1]")
+        if not 0.0 <= self.diversity_error_threshold_p <= 1.0:
+            raise ValueError("diversity_error_threshold_p must be in [0, 1]")
+        if self.diversity_correlation_penalty_rate < 0:
+            raise ValueError(
+                "diversity_correlation_penalty_rate must be non-negative"
+            )
+        if self.diversity_entropy_penalty_rate < 0:
+            raise ValueError(
+                "diversity_entropy_penalty_rate must be non-negative"
+            )
+        if self.diversity_audit_cost < 0:
+            raise ValueError("diversity_audit_cost must be non-negative")
+        if self.diversity_correlation_window < 1:
+            raise ValueError("diversity_correlation_window must be >= 1")
