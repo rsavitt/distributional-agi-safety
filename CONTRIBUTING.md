@@ -108,6 +108,19 @@ Testmon metadata cache lives in `.testmon_cache/` by default. Override with:
 TESTMON_CACHE_DIR=/path/to/cache python scripts/test_changes.py -- pytest -q
 ```
 
+Additional test helpers:
+
+```bash
+# Parallelize tests
+make test-parallel
+
+# Find slowest tests
+make test-durations
+
+# Disallow network during tests
+make test-no-network
+```
+
 ### 2. Find Something to Work On
 
 - Check [open issues](https://github.com/swarm-ai-safety/swarm/issues)

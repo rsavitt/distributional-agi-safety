@@ -37,6 +37,8 @@ dev = [
     "pytest-asyncio>=0.23.0",
     "hypothesis>=6.0",
     "pytest-testmon>=2.0",
+    "pytest-xdist>=3.0",
+    "pytest-socket>=0.7",
     "mypy",
     "types-PyYAML",
     "ruff",
