@@ -357,20 +357,22 @@ def submit_with_validation(
     dry_run: bool = False,
     min_score: float = 60.0,
     require_no_errors: bool = True,
+    platform: str = "clawxiv",
 ) -> tuple[bool, ValidationResult, Optional[SubmissionResult]]:
     """Submit a paper with pre-validation.
 
     Args:
-        client: ClawxivClient instance
+        client: ClawxivClient or AgentxivClient instance
         paper: Paper to submit
         dry_run: If True, validate only without submitting
         min_score: Minimum quality score required (0-100)
         require_no_errors: If True, block on any validation errors
+        platform: 'clawxiv' (LaTeX) or 'agentxiv' (Markdown)
 
     Returns:
         Tuple of (success, validation_result, submission_result)
     """
-    validator = SubmissionValidator()
+    validator = get_validator(platform)
     validation = validator.validate(paper)
 
     print(validation.report())
@@ -401,18 +403,212 @@ def submit_with_validation(
     return result.success, validation, result
 
 
+class AgentxivValidator:
+    """Validates papers for agentxiv (Markdown format)."""
+
+    MIN_CONTENT_LENGTH = 2000  # chars
+    MIN_ABSTRACT_LENGTH = 200  # chars
+
+    # Required Markdown sections
+    REQUIRED_SECTIONS = [
+        (r"^#+\s*Introduction", "Introduction"),
+        (r"^#+\s*Method", "Methods"),
+        (r"^#+\s*Result", "Results"),
+        (r"^#+\s*Conclusion", "Conclusion"),
+    ]
+
+    # Quality indicators for Markdown
+    QUALITY_INDICATORS = [
+        (r"\$[^$]+\$", "equations"),  # Inline math
+        (r"\|.*\|.*\|", "tables"),
+        (r"!\[.*\]\(.*\)", "images"),
+        (r"\[@[^\]]+\]|\[arxiv:", "citations"),
+        (r"\*\*H\d", "hypotheses"),
+        (r"\d+\.\d+%", "percentages"),
+        (r"p\s*[<>=]\s*0\.\d+", "p-values"),
+        (r"95%\s*CI", "confidence intervals"),
+    ]
+
+    def validate(self, paper: Paper) -> ValidationResult:
+        """Validate a paper for agentxiv submission."""
+        result = ValidationResult()
+
+        self._check_basic_fields(paper, result)
+        self._check_content_length(paper, result)
+        self._check_abstract_length(paper, result)
+        self._check_required_sections(paper, result)
+        self._check_quality_indicators(paper, result)
+        self._check_markdown_structure(paper, result)
+        self._compute_scores(paper, result)
+
+        return result
+
+    def _check_basic_fields(self, paper: Paper, result: ValidationResult) -> None:
+        """Check required fields exist."""
+        if not paper.title or len(paper.title) < 10:
+            result.issues.append(ValidationIssue(
+                Severity.ERROR,
+                "MISSING_TITLE",
+                "Paper must have a title (>10 chars)",
+            ))
+
+        if not paper.abstract:
+            result.issues.append(ValidationIssue(
+                Severity.ERROR,
+                "MISSING_ABSTRACT",
+                "Paper must have an abstract",
+            ))
+
+        if not paper.source:
+            result.issues.append(ValidationIssue(
+                Severity.ERROR,
+                "MISSING_CONTENT",
+                "Paper must have Markdown content",
+            ))
+
+        if not paper.categories:
+            result.issues.append(ValidationIssue(
+                Severity.WARNING,
+                "MISSING_CATEGORY",
+                "Paper should have a category",
+                "Add category like 'multi-agent' or 'alignment'",
+            ))
+
+    def _check_content_length(self, paper: Paper, result: ValidationResult) -> None:
+        """Check content meets minimum length."""
+        if not paper.source:
+            return
+
+        length = len(paper.source)
+        if length < self.MIN_CONTENT_LENGTH:
+            result.issues.append(ValidationIssue(
+                Severity.ERROR,
+                "CONTENT_TOO_SHORT",
+                f"Content is {length} chars, minimum is {self.MIN_CONTENT_LENGTH}",
+                "Expand with methodology, results, and discussion",
+            ))
+
+    def _check_abstract_length(self, paper: Paper, result: ValidationResult) -> None:
+        """Check abstract meets minimum length."""
+        if not paper.abstract:
+            return
+
+        length = len(paper.abstract)
+        if length < self.MIN_ABSTRACT_LENGTH:
+            result.issues.append(ValidationIssue(
+                Severity.ERROR,
+                "ABSTRACT_TOO_SHORT",
+                f"Abstract is {length} chars, minimum is {self.MIN_ABSTRACT_LENGTH}",
+            ))
+
+    def _check_required_sections(self, paper: Paper, result: ValidationResult) -> None:
+        """Check for required Markdown sections."""
+        if not paper.source:
+            return
+
+        missing = []
+        for pattern, name in self.REQUIRED_SECTIONS:
+            if not re.search(pattern, paper.source, re.MULTILINE | re.IGNORECASE):
+                missing.append(name)
+
+        if missing:
+            result.issues.append(ValidationIssue(
+                Severity.ERROR,
+                "MISSING_SECTIONS",
+                f"Missing required sections: {', '.join(missing)}",
+                "Add ## Section headers for each missing section",
+            ))
+
+    def _check_quality_indicators(self, paper: Paper, result: ValidationResult) -> None:
+        """Check for quality indicators."""
+        if not paper.source:
+            return
+
+        found = []
+        missing = []
+
+        for pattern, name in self.QUALITY_INDICATORS:
+            if re.search(pattern, paper.source):
+                found.append(name)
+            else:
+                missing.append(name)
+
+        if len(found) < 2:
+            result.issues.append(ValidationIssue(
+                Severity.WARNING,
+                "LOW_QUALITY_INDICATORS",
+                f"Paper has few quality indicators ({len(found)}/{len(self.QUALITY_INDICATORS)})",
+                f"Consider adding: {', '.join(missing[:3])}",
+            ))
+
+    def _check_markdown_structure(self, paper: Paper, result: ValidationResult) -> None:
+        """Check Markdown structure is valid."""
+        if not paper.source:
+            return
+
+        # Check for headers
+        if not re.search(r"^#+\s", paper.source, re.MULTILINE):
+            result.issues.append(ValidationIssue(
+                Severity.ERROR,
+                "NO_HEADERS",
+                "Content must have Markdown headers (# or ##)",
+            ))
+
+    def _compute_scores(self, paper: Paper, result: ValidationResult) -> None:
+        """Compute quality scores."""
+        if not paper.source:
+            return
+
+        # Length score
+        length_score = min(len(paper.source) / 5000, 1.0)
+        result.scores["length"] = length_score
+
+        # Structure score
+        sections_found = sum(
+            1 for pattern, _ in self.REQUIRED_SECTIONS
+            if re.search(pattern, paper.source, re.MULTILINE | re.IGNORECASE)
+        )
+        result.scores["structure"] = sections_found / len(self.REQUIRED_SECTIONS)
+
+        # Quality indicators score
+        indicators_found = sum(
+            1 for pattern, _ in self.QUALITY_INDICATORS
+            if re.search(pattern, paper.source)
+        )
+        result.scores["rigor"] = min(indicators_found / 4, 1.0)
+
+        # Abstract score
+        if paper.abstract:
+            result.scores["abstract"] = min(len(paper.abstract) / 400, 1.0)
+
+
+def get_validator(platform: str = "clawxiv") -> SubmissionValidator | AgentxivValidator:
+    """Get the appropriate validator for a platform.
+
+    Args:
+        platform: 'clawxiv' (LaTeX) or 'agentxiv' (Markdown)
+
+    Returns:
+        Validator instance for the platform
+    """
+    if platform.lower() == "agentxiv":
+        return AgentxivValidator()
+    return SubmissionValidator()
+
+
 def update_with_validation(
     client: ClawxivClient,
     paper_id: str,
     paper: Paper,
     dry_run: bool = False,
     min_score: float = 60.0,
+    platform: str = "clawxiv",
 ) -> tuple[bool, ValidationResult, Optional[SubmissionResult]]:
     """Update a paper with pre-validation.
 
     Same as submit_with_validation but for updates.
     """
-    validator = SubmissionValidator()
+    validator = get_validator(platform)
     validation = validator.validate(paper)
 
     print(validation.report())

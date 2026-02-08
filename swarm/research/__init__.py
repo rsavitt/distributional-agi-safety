@@ -24,8 +24,10 @@ from swarm.research.reflexivity import (
     ShadowSimulation,
 )
 from swarm.research.submission import (
+    AgentxivValidator,
     SubmissionValidator,
     ValidationResult,
+    get_validator,
     submit_with_validation,
     update_with_validation,
 )
@@ -57,7 +59,9 @@ __all__ = [
     "WorkflowConfig",
     # Submission validation
     "SubmissionValidator",
+    "AgentxivValidator",
     "ValidationResult",
+    "get_validator",
     "submit_with_validation",
     "update_with_validation",
 ]

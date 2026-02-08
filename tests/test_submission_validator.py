@@ -4,10 +4,12 @@ import pytest
 
 from swarm.research.platforms import Paper
 from swarm.research.submission import (
+    AgentxivValidator,
     Severity,
     SubmissionValidator,
     ValidationIssue,
     ValidationResult,
+    get_validator,
 )
 
 
@@ -316,3 +318,126 @@ class TestValidationIntegration:
 
         assert result.passed
         assert "PASSED" in report
+
+
+class TestAgentxivValidator:
+    """Tests for AgentxivValidator (Markdown format)."""
+
+    @pytest.fixture
+    def validator(self):
+        return AgentxivValidator()
+
+    @pytest.fixture
+    def valid_markdown_paper(self):
+        """A valid Markdown paper for agentxiv."""
+        content = """
+# Research on Multi-Agent Safety
+
+## Introduction
+
+This paper investigates governance mechanisms in multi-agent systems.
+We build on prior work in distributed systems and safety research.
+
+## Methods
+
+We use SWARM simulations with 20 agents across 50 epochs.
+Statistical analysis includes 95% CI and effect sizes.
+
+| Config | Toxicity | Welfare |
+|--------|----------|---------|
+| Baseline | 0.31 | 347 |
+| Governed | 0.24 | 413 |
+
+## Results
+
+Our experiments show a 15.2% improvement (p < 0.001).
+The effect size is Cohen's d = 0.82.
+
+$p = \\sigma(k \\cdot \\hat{v})$
+
+## Discussion
+
+These findings support our hypothesis about governance.
+
+## Conclusion
+
+Governance mechanisms improve multi-agent safety.
+Future work will explore adaptive governance policies.
+The implications for deployed systems are significant.
+
+## References
+
+- SWARM: System-Wide Assessment of Risk in Multi-Agent Systems
+- Prior work on distributed governance mechanisms
+""" + "\n\nAdditional content for length requirements. " * 50  # Padding for length
+        return Paper(
+            title="Governance Mechanisms for Multi-Agent Safety",
+            abstract="We study governance mechanisms in multi-agent systems. " * 5,
+            source=content,
+            categories=["multi-agent"],
+        )
+
+    @pytest.fixture
+    def low_quality_markdown(self):
+        """A low-quality Markdown paper."""
+        return Paper(
+            title="Test",
+            abstract="Short",
+            source="# Hello\n\nThis is short.",
+            categories=[],
+        )
+
+    def test_validates_markdown_paper(self, validator, valid_markdown_paper):
+        result = validator.validate(valid_markdown_paper)
+        assert result.passed is True
+        assert result.quality_score > 50
+
+    def test_rejects_low_quality_markdown(self, validator, low_quality_markdown):
+        result = validator.validate(low_quality_markdown)
+        assert result.passed is False
+        assert len(result.errors()) > 0
+
+    def test_detects_missing_sections_markdown(self, validator):
+        paper = Paper(
+            title="Test Paper",
+            abstract="Test abstract " * 20,
+            source="# Just a Title\n\nNo real sections here." + "x" * 2000,
+            categories=["multi-agent"],
+        )
+        result = validator.validate(paper)
+        assert any(i.code == "MISSING_SECTIONS" for i in result.errors())
+
+    def test_detects_quality_indicators(self, validator, valid_markdown_paper):
+        result = validator.validate(valid_markdown_paper)
+        # Should detect tables, equations, p-values, CIs
+        assert result.scores.get("rigor", 0) > 0.5
+
+    def test_no_headers_error(self, validator):
+        paper = Paper(
+            title="Test",
+            abstract="Test abstract " * 20,
+            source="No markdown headers here at all." + "x" * 2000,
+            categories=["multi-agent"],
+        )
+        result = validator.validate(paper)
+        assert any(i.code == "NO_HEADERS" for i in result.errors())
+
+
+class TestGetValidator:
+    """Tests for get_validator function."""
+
+    def test_returns_clawxiv_validator_by_default(self):
+        validator = get_validator()
+        assert isinstance(validator, SubmissionValidator)
+
+    def test_returns_clawxiv_validator(self):
+        validator = get_validator("clawxiv")
+        assert isinstance(validator, SubmissionValidator)
+
+    def test_returns_agentxiv_validator(self):
+        validator = get_validator("agentxiv")
+        assert isinstance(validator, AgentxivValidator)
+
+    def test_case_insensitive(self):
+        validator = get_validator("AGENTXIV")
+        assert isinstance(validator, AgentxivValidator)
