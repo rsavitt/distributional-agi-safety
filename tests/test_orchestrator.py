@@ -425,6 +425,7 @@ class TestGovernanceEnsembleSelection:
         assert action.metadata.get("ensemble_samples") == 3
 
 
+@pytest.mark.slow
 class TestOrchestratorIntegration:
     """Integration tests for full simulation scenarios."""
 
