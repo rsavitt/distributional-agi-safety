@@ -2,18 +2,17 @@
   "mcpServers": {
     "github": {
       "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-github"],
+      "args": ["-y", "@modelcontextprotocol/server-github@2025.4.8"],
       "env": {
         "GITHUB_TOKEN": "${GITHUB_TOKEN}"
       }
     },
     "sqlite_runs": {
-      "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-sqlite"],
+      "command": "uvx",
+      "args": ["mcp-server-sqlite==2025.4.24"],
       "env": {
         "SQLITE_PATH": "${SWARM_RUNS_DB_PATH}"
       }
     }
   }
 }
-
