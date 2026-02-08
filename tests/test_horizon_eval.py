@@ -439,3 +439,19 @@ class TestEdgeCases:
         assert cfg.coherence_lag_max == 10
         assert cfg.drift_window == 5
         assert cfg.variance_dominance_threshold == 1.0
+
+    def test_rejects_oversized_epoch_count(self):
+        """Evaluator should reject input exceeding max_epochs."""
+        evaluator = _default_evaluator(max_epochs=5)
+        epochs = generate_stable_epochs(n_epochs=10, seed=42)
+        with pytest.raises(ValueError, match="exceeding max_epochs"):
+            evaluator.evaluate(epochs)
+
+    def test_rejects_oversized_epoch_interactions(self):
+        """Evaluator should reject an epoch exceeding max_interactions_per_epoch."""
+        evaluator = _default_evaluator(max_interactions_per_epoch=10)
+        epochs = generate_stable_epochs(
+            n_epochs=2, interactions_per_epoch=20, seed=42,
+        )
+        with pytest.raises(ValueError, match="exceeding max_interactions_per_epoch"):
+            evaluator.evaluate(epochs)

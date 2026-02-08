@@ -64,6 +64,8 @@ class HorizonEvalConfig:
     coherence_lag_max: int = 10
     drift_window: int = 5
     variance_dominance_threshold: float = 1.0
+    max_epochs: int = 10_000
+    max_interactions_per_epoch: int = 100_000
 
 
 # ---------------------------------------------------------------------------
@@ -171,6 +173,20 @@ class SystemHorizonEvaluator:
             return HorizonEvalResult()
 
         n_epochs = len(interactions_by_epoch)
+
+        # Guard against oversized input
+        if n_epochs > self.config.max_epochs:
+            raise ValueError(
+                f"Input has {n_epochs} epochs, exceeding "
+                f"max_epochs={self.config.max_epochs}"
+            )
+        for idx, epoch in enumerate(interactions_by_epoch):
+            if len(epoch) > self.config.max_interactions_per_epoch:
+                raise ValueError(
+                    f"Epoch {idx} has {len(epoch)} interactions, exceeding "
+                    f"max_interactions_per_epoch="
+                    f"{self.config.max_interactions_per_epoch}"
+                )
 
         # ---- Per-epoch summary series ----
         quality_series = self._quality_series(interactions_by_epoch)
