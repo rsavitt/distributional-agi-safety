@@ -1,5 +1,11 @@
 # SWARM: System-Wide Assessment of Risk in Multi-agent systems
 
+**Making emergent interaction risks in AI agent swarms observable, measurable, and mitigable.**
+
+Study how sub-AGI agents can cause systemic failures through information asymmetry, adverse selection, and variance amplification — even when individually aligned.
+
+![Dashboard preview](link-to-screenshot-or-gif)
+
 [![CI](https://github.com/swarm-ai-safety/swarm/actions/workflows/ci.yml/badge.svg)](https://github.com/swarm-ai-safety/swarm/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
