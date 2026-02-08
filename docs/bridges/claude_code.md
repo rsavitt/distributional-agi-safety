@@ -52,6 +52,11 @@ npm install
 npm start
 ```
 
+### Security defaults
+
+- Always set `SWARM_BRIDGE_API_KEY` before starting the service.
+- Keep `HOST` on loopback (e.g. `127.0.0.1`) unless you have a secured reverse proxy in front.
+
 ### 2. Use the bridge from Python
 
 ```python

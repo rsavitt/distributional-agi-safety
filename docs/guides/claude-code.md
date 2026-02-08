@@ -16,6 +16,21 @@ This repository ships a shared Claude Code setup so contributors (human or agent
 - Optional git hooks (research hygiene): `.claude/hooks/`
 - MCP config stub: `.mcp.json`
 
+## Permissions profiles
+
+The default `.claude/settings.json` is a **safe baseline** (read-only tooling: `git status`, `git diff`, `ruff`, `mypy`).
+
+If you want the full power-user profile (tests, installs, scenario runs, git push), replace it with:
+
+- `.claude/settings.power.json`
+
+(You can copy it over `.claude/settings.json` locally. Do not commit local overrides unless you intend them to be the new default.)
+
+## Security notes
+
+- Treat prompt audit logs as secrets if you enable them. Store them under `runs/` when possible and keep permissions tight.
+- When using the Claude Code bridge service, always set `SWARM_BRIDGE_API_KEY` and keep `HOST` on loopback.
+
 ## Run folder convention
 
 Write experiment artifacts to:
@@ -46,4 +61,5 @@ Emergency bypass:
 `.mcp.json` contains safe-by-default placeholders for common MCP servers (e.g. GitHub, SQLite).
 
 - Use environment variables (e.g. `GITHUB_TOKEN`, `SWARM_RUNS_DB_PATH`) rather than committing secrets.
+- Versions are pinned in the template for supply-chain safety (GitHub via `npx`, SQLite via `uvx`).
 - If you don’t use MCP, you can ignore this file.

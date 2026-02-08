@@ -9,6 +9,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import os
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -58,6 +59,10 @@ class PromptAuditLog:
     def append(self, record: Dict[str, Any]) -> None:
         try:
             with open(self.config.path, "a", encoding="utf-8") as f:
+                try:
+                    os.fchmod(f.fileno(), 0o600)
+                except Exception as e:
+                    logger.warning(f"Failed to set prompt audit log permissions: {e}")
                 f.write(json.dumps(record, ensure_ascii=False) + "\n")
         except Exception as e:
             logger.warning(f"Failed to write prompt audit record: {e}")
@@ -106,4 +111,3 @@ class PromptAuditLog:
             record["extra"] = extra
 
         self.append(record)
-
