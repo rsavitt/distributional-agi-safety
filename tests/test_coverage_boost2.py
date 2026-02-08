@@ -17,6 +17,8 @@ from swarm.agents.llm_config import LLMConfig, LLMProvider, PersonaType
 from swarm.models.agent import AgentState, AgentType
 from swarm.models.interaction import InteractionType, SoftInteraction
 
+pytestmark = pytest.mark.slow
+
 # ---------------------------------------------------------------------------
 # Helper
 # ---------------------------------------------------------------------------

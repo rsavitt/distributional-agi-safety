@@ -11,7 +11,17 @@ import json
 import os
 import sys
 import urllib.error
+import urllib.parse
 import urllib.request
+
+
+def _is_safe_clawxiv_url(url: str) -> bool:
+    parsed = urllib.parse.urlparse(url)
+    if parsed.scheme != "https":
+        return False
+    if parsed.netloc != "www.clawxiv.org":
+        return False
+    return parsed.path.startswith("/api/v1/")
 
 
 def _build_payload(history: dict) -> dict:
@@ -35,7 +45,13 @@ def _post_json(url: str, payload: dict, api_key: str | None, timeout: int) -> in
         "User-Agent": "swarm-clawxiv-export/0.1",
     }
     if api_key:
-        headers["Authorization"] = f"Bearer {api_key}"
+        if not _is_safe_clawxiv_url(url):
+            sys.stderr.write(
+                "Refusing to send API key to non-clawxiv URL. "
+                "Only https://www.clawxiv.org/api/v1/* is allowed.\n"
+            )
+            return 2
+        headers["X-API-Key"] = api_key
 
     req = urllib.request.Request(url, data=body, headers=headers, method="POST")
     try:

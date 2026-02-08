@@ -7,6 +7,8 @@ Tests are split into two classes:
 
 from pathlib import Path
 
+import pytest
+
 from swarm.agents import DeceptiveAgent, HonestAgent, OpportunisticAgent
 from swarm.analysis.dashboard import (
     AgentSnapshot,
@@ -19,6 +21,8 @@ from swarm.core.orchestrator import EpochMetrics, Orchestrator, OrchestratorConf
 from swarm.governance.config import GovernanceConfig
 from swarm.logging.event_log import EventLog
 from swarm.scenarios.loader import ScenarioConfig, build_orchestrator, load_scenario
+
+pytestmark = pytest.mark.slow
 
 # ---------------------------------------------------------------------------
 # Helpers

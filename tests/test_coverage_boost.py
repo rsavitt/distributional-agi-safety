@@ -2,6 +2,8 @@
 
 import random
 
+import pytest
+
 from swarm.agents.base import (
     Action,
     ActionType,
@@ -13,6 +15,8 @@ from swarm.agents.honest import HonestAgent
 from swarm.agents.opportunistic import OpportunisticAgent
 from swarm.models.agent import AgentState
 from swarm.models.interaction import InteractionType, SoftInteraction
+
+pytestmark = pytest.mark.slow
 
 
 def obs(**kwargs) -> Observation:
