@@ -8,13 +8,9 @@ Verifies that SystemHorizonEvaluator correctly detects:
     - Temporal risk accumulation (harm acceleration)
 """
 
-import math
-from typing import List
-
 import numpy as np
 import pytest
 
-from swarm.core.payoff import PayoffConfig, SoftPayoffEngine
 from swarm.metrics.horizon_eval import (
     HorizonEvalConfig,
     HorizonEvalResult,
@@ -22,8 +18,6 @@ from swarm.metrics.horizon_eval import (
     group_by_epoch,
 )
 from swarm.models.interaction import SoftInteraction
-
-# Import test fixtures
 from tests.fixtures.horizon_fixtures import (
     generate_accelerating_harm_epochs,
     generate_chained_handoff_epochs,
@@ -32,20 +26,19 @@ from tests.fixtures.horizon_fixtures import (
     generate_variance_dominated_epochs,
 )
 
-
 # =====================================================================
 # Helpers
 # =====================================================================
 
 def _default_evaluator(**overrides) -> SystemHorizonEvaluator:
     """Create evaluator with sensible test defaults."""
-    defaults = dict(
-        agent_horizon_steps=1,
-        discount_factor=0.95,
-        coherence_lag_max=10,
-        drift_window=5,
-        variance_dominance_threshold=1.0,
-    )
+    defaults = {
+        "agent_horizon_steps": 1,
+        "discount_factor": 0.95,
+        "coherence_lag_max": 10,
+        "drift_window": 5,
+        "variance_dominance_threshold": 1.0,
+    }
     defaults.update(overrides)
     cfg = HorizonEvalConfig(**defaults)
     return SystemHorizonEvaluator(config=cfg)
@@ -345,8 +338,6 @@ class TestGroupByEpoch:
 
     def test_even_distribution_fallback(self):
         """Without epoch metadata, interactions are distributed evenly."""
-        from swarm.models.interaction import SoftInteraction
-
         interactions = [SoftInteraction(p=0.5) for _ in range(30)]
         grouped = group_by_epoch(interactions, n_epochs=3, steps_per_epoch=10)
         assert len(grouped) == 3

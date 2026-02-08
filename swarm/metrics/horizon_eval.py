@@ -26,7 +26,6 @@ Key metrics:
 
 from __future__ import annotations
 
-import math
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
@@ -34,7 +33,6 @@ import numpy as np
 
 from swarm.core.payoff import SoftPayoffEngine
 from swarm.models.interaction import SoftInteraction
-
 
 # ---------------------------------------------------------------------------
 # Configuration

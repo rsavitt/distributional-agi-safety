@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import random as _random_mod
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import List, Optional
 
 from swarm.models.interaction import InteractionType, SoftInteraction
