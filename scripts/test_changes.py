@@ -158,6 +158,21 @@ def main() -> int:
         flag in pytest_args for flag in ("--testmon", "--testmon-noselect")
     )
     disable_testmon = "-p" in pytest_args and "no:testmon" in pytest_args
+    has_cov = any(
+        arg == "--cov"
+        or arg.startswith("--cov=")
+        or arg.startswith("--cov-report")
+        or arg.startswith("--cov-fail-under")
+        for arg in pytest_args
+    )
+    if has_cov and not disable_testmon:
+        print(
+            "[test_changes] warning: pytest-cov detected; disabling testmon to avoid conflicts.",
+            file=sys.stderr,
+        )
+        pytest_args.extend(["-p", "no:testmon"])
+        disable_testmon = True
+
     if not has_testmon_flag and not disable_testmon:
         if args.full or not has_cache:
             pytest_args.append("--testmon-noselect")
