@@ -49,6 +49,7 @@ analysis = [
 ]
 runtime = [
     "pyyaml>=6.0",
+    "requests>=2.31",
 ]
 llm = [
     "anthropic>=0.40.0",
