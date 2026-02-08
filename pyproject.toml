@@ -102,6 +102,9 @@ python_files = ["test_*.py"]
 python_functions = ["test_*"]
 addopts = "-v --tb=short"
 norecursedirs = [
+    ".hypothesis",
+    ".pytest_cache",
+    "__pycache__",
     ".git",
     ".testmon_cache",
     ".venv",
