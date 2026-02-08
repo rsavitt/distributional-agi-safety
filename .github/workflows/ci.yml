@@ -38,6 +38,7 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
       - run: python -m pip install -e ".[dev,runtime]"
+      - run: echo "Running pytest with xdist parallelization (-n auto)."
       - name: Download testmon data (best effort)
         if: github.event_name == 'pull_request'
         uses: dawidd6/action-download-artifact@v6
@@ -47,7 +48,7 @@ jobs:
           name: testmondata-latest
           path: .testmon_cache
           if_no_artifact_found: ignore
-      - run: python scripts/test_changes.py --full -- pytest tests/ -v --cov=swarm --cov-report=term-missing --cov-fail-under=70
+      - run: python scripts/test_changes.py --full -- pytest tests/ -v -n auto --cov=swarm --cov-report=term-missing --cov-fail-under=70
       - name: Upload testmon data
         if: success()
         uses: actions/upload-artifact@v4

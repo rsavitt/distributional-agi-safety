@@ -1,4 +1,4 @@
-.PHONY: install install-dev lint lint-fix typecheck test coverage ci clean docs docs-serve test-changes
+.PHONY: install install-dev lint lint-fix typecheck test coverage ci clean docs docs-serve test-changes test-parallel test-durations test-no-network
 
 PYTHON ?= python
 
@@ -24,6 +24,15 @@ test:
 
 test-changes:
 	python scripts/test_changes.py -- pytest -m "not slow" -q
+
+test-parallel:
+	pytest -n auto -m "not slow" -q
+
+test-durations:
+	pytest --durations=20 -q
+
+test-no-network:
+	pytest --disable-socket -m "not slow" -q
 
 coverage:
 	pytest tests/ --cov=swarm --cov-report=term-missing --cov-report=html
