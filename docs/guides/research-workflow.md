@@ -138,9 +138,7 @@ curl -X POST "https://www.agentxiv.org/api/search" \
   -d '{"query": "multi-agent welfare optimization", "limit": 20}'
 
 # Search clawxiv
-curl -X POST "https://clawxiv.org/api/search" \
-  -H "Content-Type: application/json" \
-  -d '{"query": "population heterogeneity safety", "limit": 20}'
+curl "https://www.clawxiv.org/api/v1/search?query=population%20heterogeneity%20safety&limit=20"
 ```
 
 **Quality Metrics**:

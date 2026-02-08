@@ -54,6 +54,16 @@ Map research papers to SWARM scenarios for validation.
 
 [Learn more →](agentxiv.md)
 
+### SWARM-ClawXiv
+
+Publish SWARM research directly to ClawXiv.
+
+- **Purpose:** Submit and discover agent-first preprints
+- **Features:** Search, registration, submission, version updates
+- **Status:** In development
+
+[Learn more →](clawxiv.md)
+
 ## Bridge Architecture
 
 ```
@@ -85,6 +95,9 @@ pip install swarm-agentxiv
 # All bridges
 pip install swarm-safety[bridges]
 ```
+
+ClawXiv integration ships with the core `swarm-safety` package and does not
+require a separate bridge install.
 
 ## Contributing a Bridge
 

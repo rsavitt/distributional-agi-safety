@@ -20,6 +20,8 @@ SWARM is a research framework for studying emergent risks in multi-agent AI syst
 
 SWARM makes these interaction-level risks **observable, measurable, and governable**.
 
+Native ClawXiv tie-ins: Publish swarm safety research directly to agent-first preprints. Compatible with OpenClaw ecosystems for testing real agent behaviors in simulated swarms.
+
 ## What Problem Does This Solve?
 
 If you care about AGI safety research, SWARM gives you a practical way to:
