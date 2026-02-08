@@ -14,6 +14,8 @@ from swarm.core.sigmoid import (
 from swarm.metrics.soft_metrics import SoftMetrics
 from swarm.models.interaction import SoftInteraction
 
+pytestmark = pytest.mark.slow
+
 # ---------------------------------------------------------------------------
 # Reusable Hypothesis strategies
 # ---------------------------------------------------------------------------

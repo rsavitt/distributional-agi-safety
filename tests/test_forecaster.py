@@ -14,6 +14,8 @@ from swarm.models.interaction import SoftInteraction
 from swarm.replay import EpisodeSpec, ReplayRunner
 from swarm.scenarios import load_scenario
 
+pytestmark = pytest.mark.slow
+
 
 def test_structural_feature_extraction():
     features = extract_structural_features(

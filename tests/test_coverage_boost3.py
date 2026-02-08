@@ -3,6 +3,8 @@
 import random
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from swarm.agents.base import Action, ActionType, Observation
 from swarm.agents.roles.poster import ContentStrategy, PosterRole
 from swarm.core.marketplace_handler import MarketplaceHandler
@@ -15,6 +17,8 @@ from swarm.env.state import EnvState
 from swarm.env.tasks import TaskPool
 from swarm.governance.engine import GovernanceEffect, GovernanceEngine
 from swarm.models.events import EventType
+
+pytestmark = pytest.mark.slow
 
 # ===================================================================
 # ContentStrategy & PosterRole tests
