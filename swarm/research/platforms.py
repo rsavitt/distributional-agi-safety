@@ -287,11 +287,70 @@ class AgentxivClient(PlatformClient):
     """Client for agentxiv.org API.
 
     Note: Uses Markdown content format, not LaTeX.
-    Submit endpoint is /tools/submit, not /papers.
+    All tool endpoints use POST to /api/v1/tools/*.
+    Requires human verification before submission access.
     """
 
     base_url = "https://agentxiv.org/api/v1"
     env_var_name = "AGENTXIV_API_KEY"
+
+    def register(self, name: str, affiliation: str) -> dict[str, str]:
+        """Register an agent account.
+
+        Returns claim_url for human verification.
+        """
+        response = self._request(
+            "POST",
+            f"{self.base_url}/agents/register",
+            json={"name": name, "affiliation": affiliation},
+        )
+        response.raise_for_status()
+        result: dict[str, str] = response.json()
+        return result
+
+    def get_status(self) -> dict[str, Any]:
+        """Check agent verification status."""
+        response = self._request("GET", f"{self.base_url}/agents/status")
+        response.raise_for_status()
+        return response.json()
+
+    def search(self, query: str, *, limit: int = 20, **kwargs: Any) -> SearchResult:
+        """Search for papers."""
+        try:
+            response = self._request(
+                "POST",
+                f"{self.base_url}/tools/search",
+                json={"query": query, "limit": limit},
+            )
+            response.raise_for_status()
+            data = response.json()
+
+            papers = [
+                Paper.from_dict(p)
+                for p in data.get("papers", data.get("results", []))
+            ]
+            return SearchResult(
+                papers=papers,
+                total_count=data.get("total", len(papers)),
+                query=query,
+            )
+        except requests.RequestException as e:
+            logger.warning("Search failed for %s on %s: %s", query, self.base_url, e)
+            return SearchResult(papers=[], total_count=0, query=query)
+
+    def get_paper(self, paper_id: str) -> Paper | None:
+        """Retrieve a specific paper."""
+        try:
+            response = self._request(
+                "POST",
+                f"{self.base_url}/tools/read",
+                json={"paper_id": paper_id},
+            )
+            response.raise_for_status()
+            return Paper.from_dict(response.json())
+        except requests.RequestException as e:
+            logger.warning("Get paper %s failed on %s: %s", paper_id, self.base_url, e)
+            return None
 
     def submit(self, paper: Paper) -> SubmissionResult:
         """Submit a new paper (Markdown format)."""
@@ -303,7 +362,7 @@ class AgentxivClient(PlatformClient):
                     "title": paper.title,
                     "abstract": paper.abstract,
                     "content": paper.source,  # agentxiv uses Markdown content
-                    "category": paper.categories[0] if paper.categories else "general",
+                    "category": paper.categories[0] if paper.categories else "multi-agent",
                 },
             )
             response.raise_for_status()
@@ -317,6 +376,89 @@ class AgentxivClient(PlatformClient):
         except requests.RequestException as e:
             logger.warning("Submit failed on %s: %s", self.base_url, e)
             return SubmissionResult(success=False, message=str(e))
+
+    def update(self, paper_id: str, paper: Paper) -> SubmissionResult:
+        """Revise an existing paper."""
+        try:
+            response = self._request(
+                "POST",
+                f"{self.base_url}/tools/revise",
+                json={
+                    "paper_id": paper_id,
+                    "title": paper.title,
+                    "abstract": paper.abstract,
+                    "content": paper.source,
+                    "changelog": paper.changelog or "Updated",
+                },
+            )
+            response.raise_for_status()
+            data = response.json()
+            return SubmissionResult(
+                success=True,
+                paper_id=paper_id,
+                message="Paper revised successfully",
+                version=data.get("version", paper.version + 1),
+            )
+        except requests.RequestException as e:
+            logger.warning("Revise %s failed on %s: %s", paper_id, self.base_url, e)
+            return SubmissionResult(success=False, message=str(e))
+
+    def get_categories(self) -> list[str]:
+        """Get available paper categories."""
+        try:
+            response = self._request(
+                "POST",
+                f"{self.base_url}/tools/categories",
+                json={},
+            )
+            response.raise_for_status()
+            data = response.json()
+            return data.get("categories", [])
+        except requests.RequestException as e:
+            logger.warning("Get categories failed on %s: %s", self.base_url, e)
+            return []
+
+    def submit_review(
+        self,
+        paper_id: str,
+        rating: int,
+        comment: str,
+        reply_to: str | None = None,
+    ) -> bool:
+        """Submit a review for a paper."""
+        try:
+            payload: dict[str, Any] = {
+                "paper_id": paper_id,
+                "rating": rating,
+                "comment": comment,
+            }
+            if reply_to:
+                payload["reply_to"] = reply_to
+
+            response = self._request(
+                "POST",
+                f"{self.base_url}/tools/review",
+                json=payload,
+            )
+            response.raise_for_status()
+            return True
+        except requests.RequestException as e:
+            logger.warning("Review %s failed on %s: %s", paper_id, self.base_url, e)
+            return False
+
+    def get_reviews(self, paper_id: str) -> list[dict[str, Any]]:
+        """Get reviews for a paper."""
+        try:
+            response = self._request(
+                "POST",
+                f"{self.base_url}/tools/reviews",
+                json={"paper_id": paper_id},
+            )
+            response.raise_for_status()
+            return response.json().get("reviews", [])
+        except requests.RequestException as e:
+            logger.warning("Get reviews for %s failed: %s", paper_id, e)
+            return []
 
 
 class ClawxivClient(PlatformClient):
