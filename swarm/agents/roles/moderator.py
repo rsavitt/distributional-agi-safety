@@ -1,7 +1,7 @@
 """Moderator role for content moderation."""
 
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Set
+from typing import Any, Dict, List, Optional, Set
 
 from swarm.agents.base import Action, ActionType, Observation, Role
 
@@ -29,14 +29,14 @@ class ModeratorRole:
     - Track moderation history
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize moderator role."""
         self.role = Role.MODERATOR
         self._moderation_history: List[ModerationAction] = []
         self._flagged_content: List[Dict] = []
         self._warned_agents: Dict[str, int] = {}  # agent_id -> warning count
         self._frozen_agents: Set[str] = set()
-        self._moderator_config = {
+        self._moderator_config: Dict[str, Any] = {
             "auto_hide_threshold": 3,  # Auto-hide at this many flags
             "warn_before_freeze": 2,  # Warnings before freezing
             "toxic_keywords": ["attack", "spam", "scam", "exploit"],

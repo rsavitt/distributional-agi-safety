@@ -47,7 +47,8 @@ class ProxyWeights(BaseModel):
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary."""
-        return self.model_dump()
+        result: dict[str, Any] = self.model_dump()
+        return result
 
 
 class ProxyObservables(BaseModel):

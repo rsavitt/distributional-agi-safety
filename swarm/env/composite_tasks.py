@@ -427,7 +427,7 @@ class CompositeTask:
 class CompositeTaskPool:
     """Pool of composite tasks."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize pool."""
         self._tasks: Dict[str, CompositeTask] = {}
         self._open_tasks: Set[str] = set()

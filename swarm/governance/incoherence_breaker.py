@@ -1,11 +1,16 @@
 """Incoherence-triggered circuit breaker lever."""
 
+from __future__ import annotations
+
 from dataclasses import dataclass, field
-from typing import Dict, List
+from typing import TYPE_CHECKING, Dict, List
 
 from swarm.env.state import EnvState
 from swarm.governance.levers import GovernanceLever, LeverEffect
 from swarm.models.interaction import SoftInteraction
+
+if TYPE_CHECKING:
+    from swarm.governance.config import GovernanceConfig
 
 
 @dataclass
@@ -33,7 +38,7 @@ class IncoherenceCircuitBreakerLever(GovernanceLever):
     Uses uncertainty proxy `1 - abs(2p - 1)`, which peaks near p=0.5.
     """
 
-    def __init__(self, config):
+    def __init__(self, config: GovernanceConfig) -> None:
         super().__init__(config)
         self._trackers: Dict[str, _IncoherenceTracker] = {}
 
