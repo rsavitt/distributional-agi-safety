@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SWARM Agent Dashboard</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="layout">
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <h1 class="logo">SWARM Dashboard</h1>
+        <p class="logo-sub">Agent Interaction Visualizer</p>
+      </div>
+      <div class="sessions-section">
+        <h3 class="section-title">Sessions</h3>
+        <div id="sessions-list" class="sessions-list">
+          <div class="loading">Scanning for sessions...</div>
+        </div>
+      </div>
+      <div class="sidebar-footer">
+        <a href="https://github.com/swarm-ai-safety/swarm" target="_blank">GitHub</a>
+      </div>
+    </aside>
+
+    <!-- Main content -->
+    <main class="main">
+      <div class="topbar">
+        <div class="topbar-title" id="topbar-title">Select a session</div>
+        <div class="topbar-meta" id="topbar-meta"></div>
+      </div>
+      <div class="content-area">
+        <!-- Flow visualization -->
+        <div class="flow-container" id="flow-container">
+          <div class="empty-state" id="empty-state">
+            Select a simulation session from the sidebar to visualize agent interactions.
+          </div>
+          <svg id="flow-svg" class="flow-svg"></svg>
+        </div>
+        <!-- Timeline chart below flow -->
+        <div class="timeline-container" id="timeline-container">
+          <svg id="timeline-svg" class="timeline-svg"></svg>
+        </div>
+      </div>
+    </main>
+
+    <!-- Detail panel -->
+    <div class="detail-panel" id="detail-panel">
+      <div class="panel-header">
+        <h3 id="panel-title">Agent Details</h3>
+        <button class="panel-close" id="panel-close">&times;</button>
+      </div>
+      <div class="panel-body" id="panel-body"></div>
+    </div>
+  </div>
+  <script src="app.js"></script>
+</body>
+</html>

@@ -213,6 +213,18 @@ def cmd_list(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_dashboard(args: argparse.Namespace) -> int:
+    """Launch the agent interaction dashboard."""
+    from swarm.dashboard.server import run_dashboard
+
+    run_dashboard(
+        base_dir=args.dir,
+        port=args.port,
+        no_open=args.no_open,
+    )
+    return 0
+
+
 def cmd_agentrxiv(args: argparse.Namespace) -> int:
     """Handle AgentRxiv subcommands."""
     subcmd = args.agentrxiv_cmd
@@ -418,12 +430,35 @@ def main() -> int:
     arxiv_status = arxiv_subparsers.add_parser("status", help="Check AgentRxiv server status")
     arxiv_status.add_argument("--url", help="AgentRxiv server URL (default: http://127.0.0.1:5000)")
 
+    # dashboard
+    dash_parser = subparsers.add_parser(
+        "dashboard", help="Launch agent interaction dashboard"
+    )
+    dash_parser.add_argument(
+        "--dir",
+        default=".",
+        help="Root directory to scan for sessions (default: current directory)",
+    )
+    dash_parser.add_argument(
+        "--port",
+        type=int,
+        default=3339,
+        help="Port to serve dashboard on (default: 3339)",
+    )
+    dash_parser.add_argument(
+        "--no-open",
+        action="store_true",
+        help="Don't auto-open browser",
+    )
+
     args = parser.parse_args()
 
     if args.command == "run":
         return cmd_run(args)
     elif args.command == "list":
         return cmd_list(args)
+    elif args.command == "dashboard":
+        return cmd_dashboard(args)
     elif args.command == "agentrxiv":
         if args.agentrxiv_cmd:
             return cmd_agentrxiv(args)
