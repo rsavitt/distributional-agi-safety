@@ -1,4 +1,4 @@
-# SWARM: System-Wide Assessment of Risk in Multi-agent Systems
+# SWARM: System-Wide Assessment of Risk in Multi-agent systems
 
 [![CI](https://github.com/swarm-ai-safety/swarm/actions/workflows/ci.yml/badge.svg)](https://github.com/swarm-ai-safety/swarm/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
