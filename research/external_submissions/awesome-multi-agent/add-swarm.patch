@@ -1,0 +1,27 @@
+diff --git a/README.md b/README.md
+index 1234567..abcdefg 100644
+--- a/README.md
++++ b/README.md
+@@ -4,6 +4,7 @@ Multi-Agent Learning is a very exciting research area, which has strong connectio
+ This repo contains a set of research papers as well as related information. The papers are sorted by time. Any suggestions and pull requests are welcome.
+
+ ## Overview
++ - [Frameworks & Tools](#frameworks--tools)
+  - [Tutorials](#tutorials)
+  - [Research Papers](#papers)
+     - RL in multi-agent
+@@ -14,6 +15,14 @@ This repo contains a set of research papers as well as related information. The p
+     - Others
+  - [Environment](#environment)
+
++## Frameworks & Tools
++- **SWARM: System-Wide Assessment of Risk in Multi-agent systems** [[code]](https://github.com/swarm-ai-safety/swarm) [[install]](https://pypi.org/project/swarm-safety/)
++  - A distributional safety simulation framework for studying emergent risks in multi-agent AI systems.
++  - Uses soft (probabilistic) labels instead of binary classifications to measure toxicity, adverse selection, and governance effectiveness.
++  - Built-in agent archetypes (honest, opportunistic, deceptive, adversarial, LLM-backed) and governance levers (taxes, reputation, circuit breakers, audits).
++  - YAML-driven scenarios, parameter sweeps, and full replay support for reproducible multi-agent experiments.
++  - R. Savitt, 2026. MIT License.
++
+ ## Tutorials
+ - **SJTU Multi-Agent Reinforcement Learning Tutorial** [[website]](http://wnzhang.net/tutorials/marl2018/index.html)
+   - J. Wang, W. Zhang at SJTU 2018
