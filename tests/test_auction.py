@@ -2,7 +2,7 @@
 
 import pytest
 
-from src.env.auction import (
+from swarm.env.auction import (
     AuctionBid,
     AuctionConfig,
     DworkinAuction,
@@ -153,10 +153,12 @@ class TestDworkinAuction:
 
     def test_envy_free_check(self):
         """Symmetric agents should result in envy-free allocation."""
-        auction = DworkinAuction(AuctionConfig(
-            max_rounds=100,
-            envy_tolerance=5.0,
-        ))
+        auction = DworkinAuction(
+            AuctionConfig(
+                max_rounds=100,
+                envy_tolerance=5.0,
+            )
+        )
         bids = {
             "agent_1": AuctionBid(
                 agent_id="agent_1",

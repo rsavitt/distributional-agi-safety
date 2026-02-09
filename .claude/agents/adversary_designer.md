@@ -1,3 +1,7 @@
+---
+name: Adversary Designer
+---
+
 # Adversary Designer
 
 You design adaptive/evasive strategies that probe governance gaps.

@@ -231,6 +231,7 @@ class BaseAgent(ABC):
         # Memory configuration (import here to avoid circular imports)
         if memory_config is None:
             from swarm.agents.memory_config import MemoryConfig
+
             self.memory_config = MemoryConfig()
         else:
             self.memory_config = memory_config
@@ -279,6 +280,19 @@ class BaseAgent(ABC):
         """
         pass
 
+    async def accept_interaction_async(
+        self,
+        proposal: InteractionProposal,
+        observation: Observation,
+    ) -> bool:
+        """
+        Async wrapper for accept_interaction().
+
+        Sync agents can rely on this default implementation; async agents
+        should override with true async behavior.
+        """
+        return self.accept_interaction(proposal, observation)
+
     @abstractmethod
     def propose_interaction(
         self,
@@ -318,19 +332,34 @@ class BaseAgent(ABC):
             else interaction.initiator
         )
 
-        # Update counterparty trust memory if interaction was accepted
+        # Update counterparty trust memory.
+        # Accepted interactions provide full signal (alpha=0.3).
+        # Rejected interactions still carry information about the
+        # counterparty's proposal quality, so we update with a smaller
+        # learning rate to prevent trust from freezing permanently
+        # after an initial bad impression.
         if interaction.accepted:
             self.update_counterparty_trust(counterparty, interaction.p)
+        else:
+            # Decay toward neutral on rejection — prevents trust death spirals
+            # where low trust → rejection → no updates → permanent low trust
+            current = self._counterparty_memory.get(counterparty, 0.5)
+            alpha = 0.1  # Smaller learning rate for rejected interactions
+            self._counterparty_memory[counterparty] = (
+                current * (1 - alpha) + 0.5 * alpha
+            )
 
-        self._memory.append({
-            "type": "interaction_outcome",
-            "interaction_id": interaction.interaction_id,
-            "counterparty": counterparty,
-            "p": interaction.p,
-            "payoff": payoff,
-            "accepted": interaction.accepted,
-            "timestamp": datetime.now().isoformat(),
-        })
+        self._memory.append(
+            {
+                "type": "interaction_outcome",
+                "interaction_id": interaction.interaction_id,
+                "counterparty": counterparty,
+                "p": interaction.p,
+                "payoff": payoff,
+                "accepted": interaction.accepted,
+                "timestamp": datetime.now().isoformat(),
+            }
+        )
 
     def remember(self, memory_item: Dict) -> None:
         """Add an item to memory."""
@@ -349,8 +378,9 @@ class BaseAgent(ABC):
         """
         Compute trust score for a counterparty based on history.
 
-        Uses cached trust memory if available, otherwise computes from
-        interaction history.
+        Returns the live trust value maintained by update_counterparty_trust()
+        (called after each accepted interaction). Falls back to history-based
+        bootstrap only when no trust entry exists yet.
 
         Args:
             counterparty_id: ID of the counterparty
@@ -358,13 +388,15 @@ class BaseAgent(ABC):
         Returns:
             Trust score in [0, 1]
         """
-        # Check cached memory first
+        # Return the live EMA trust value if available
         if counterparty_id in self._counterparty_memory:
             return self._counterparty_memory[counterparty_id]
 
-        # Compute from interaction history
+        # Bootstrap from interaction history for agents we've interacted with
+        # but whose trust hasn't been initialized yet (e.g. after a memory clear)
         relevant = [
-            i for i in self._interaction_history
+            i
+            for i in self._interaction_history
             if (i.initiator == counterparty_id or i.counterparty == counterparty_id)
             and i.accepted
         ]
@@ -372,12 +404,16 @@ class BaseAgent(ABC):
         if not relevant:
             return 0.5  # Neutral for unknown agents
 
-        # Average p from past interactions
-        avg_p = sum(i.p for i in relevant) / len(relevant)
+        # Bootstrap trust via EMA over historical interactions (same as
+        # update_counterparty_trust) so the result is consistent with the
+        # incremental updates that will follow.
+        alpha = 0.3
+        trust = 0.5  # Start from neutral
+        for interaction in relevant:
+            trust = trust * (1 - alpha) + interaction.p * alpha
 
-        # Cache the computed trust
-        self._counterparty_memory[counterparty_id] = avg_p
-        return avg_p
+        self._counterparty_memory[counterparty_id] = trust
+        return trust
 
     def apply_memory_decay(self, epoch: int) -> None:
         """
@@ -423,7 +459,9 @@ class BaseAgent(ABC):
         """
         alpha = 0.3  # Learning rate
         current = self._counterparty_memory.get(counterparty_id, 0.5)
-        self._counterparty_memory[counterparty_id] = current * (1 - alpha) + new_p * alpha
+        self._counterparty_memory[counterparty_id] = (
+            current * (1 - alpha) + new_p * alpha
+        )
 
     def should_post(self, observation: Observation) -> bool:
         """Determine if agent should create a post."""

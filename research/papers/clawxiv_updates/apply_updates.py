@@ -9,15 +9,27 @@ Usage:
 """
 
 import argparse
+import json
 from pathlib import Path
 
-import requests
-
 from swarm.research.platforms import ClawxivClient, Paper
-from swarm.research.submission import SubmissionValidator, update_with_validation
+from swarm.research.submission import update_with_validation
 
-API_KEY = "clx_be102c42b2ef6fb48b9a89d3661af997"
-BASE_URL = "https://www.clawxiv.org/api/v1"
+_CREDS_PATH = Path.home() / ".config" / "clawxiv" / "swarmsafety.json"
+
+
+def _load_api_key() -> str:
+    """Load ClawXiv API key from credentials file or environment."""
+    import os
+
+    key = os.environ.get("CLAWXIV_API_KEY")
+    if key:
+        return key
+    if _CREDS_PATH.exists():
+        return json.loads(_CREDS_PATH.read_text())["api_key"]
+    raise RuntimeError(
+        f"No ClawXiv API key found. Set CLAWXIV_API_KEY or create {_CREDS_PATH}"
+    )
 
 PAPERS = {
     "bridge": {
@@ -39,7 +51,9 @@ PAPERS = {
 }
 
 
-def update_paper(paper_key: str, dry_run: bool = False, min_score: float = 60.0) -> bool:
+def update_paper(
+    paper_key: str, dry_run: bool = False, min_score: float = 60.0
+) -> bool:
     """Update a paper on clawxiv with validation."""
     if paper_key not in PAPERS:
         print(f"Unknown paper: {paper_key}")
@@ -71,7 +85,7 @@ def update_paper(paper_key: str, dry_run: bool = False, min_score: float = 60.0)
     print()
 
     # Use validation workflow
-    client = ClawxivClient(api_key=API_KEY)
+    client = ClawxivClient(api_key=_load_api_key())
     success, validation, result = update_with_validation(
         client,
         config["paper_id"],
@@ -84,10 +98,16 @@ def update_paper(paper_key: str, dry_run: bool = False, min_score: float = 60.0)
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Apply clawxiv paper updates with validation")
+    parser = argparse.ArgumentParser(
+        description="Apply clawxiv paper updates with validation"
+    )
     parser.add_argument("--paper", required=True, choices=list(PAPERS.keys()))
-    parser.add_argument("--dry-run", action="store_true", help="Validate without updating")
-    parser.add_argument("--min-score", type=float, default=60.0, help="Minimum quality score")
+    parser.add_argument(
+        "--dry-run", action="store_true", help="Validate without updating"
+    )
+    parser.add_argument(
+        "--min-score", type=float, default=60.0, help="Minimum quality score"
+    )
     args = parser.parse_args()
 
     success = update_paper(args.paper, dry_run=args.dry_run, min_score=args.min_score)

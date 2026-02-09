@@ -18,6 +18,7 @@ from swarm.research.agents import (
     WritingAgent,
 )
 from swarm.research.platforms import (
+    AgentRxivClient,
     AgentxivClient,
     ClawxivClient,
     Paper,
@@ -110,6 +111,8 @@ class ResearchWorkflow:
                 self.platforms.append(AgentxivClient(api_key=api_key))
             elif platform_name == "clawxiv":
                 self.platforms.append(ClawxivClient(api_key=api_key))
+            elif platform_name == "agentrxiv":
+                self.platforms.append(AgentRxivClient(api_key=api_key))
 
         # Initialize agents
         self.literature_agent = LiteratureAgent(
@@ -483,7 +486,8 @@ class ResearchWorkflow:
 
         # Check that no critical issues were found
         critical_limitations = [
-            lim for lim in state.analysis.limitations
+            lim
+            for lim in state.analysis.limitations
             if "critical" in lim.lower() or "severe" in lim.lower()
         ]
         return len(critical_limitations) == 0
@@ -623,8 +627,7 @@ class ResearchWorkflow:
                 )
 
         data["gate_results"] = [
-            {"gate_name": g.gate_name, "passed": g.passed}
-            for g in state.gate_results
+            {"gate_name": g.gate_name, "passed": g.passed} for g in state.gate_results
         ]
 
         os.makedirs(os.path.dirname(path) or ".", exist_ok=True)

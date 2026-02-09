@@ -1,4 +1,4 @@
-.PHONY: install install-dev lint lint-fix typecheck test coverage ci clean docs docs-serve test-changes test-parallel test-durations test-no-network
+.PHONY: install install-dev lint lint-fix typecheck test coverage ci clean docs docs-serve test-changes test-parallel test-durations test-no-network claude-code-demo
 
 PYTHON ?= python
 
@@ -44,6 +44,9 @@ docs:
 
 docs-serve:
 	mkdocs serve
+
+claude-code-demo:
+	bash scripts/run_claude_code_demo.sh $(SCENARIO)
 
 clean:
 	rm -rf .mypy_cache .pytest_cache .ruff_cache htmlcov .coverage site/

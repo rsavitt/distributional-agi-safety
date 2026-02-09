@@ -11,6 +11,11 @@ The Claude Code bridge connects SWARM to [claude-code-controller](https://github
 - **Interaction scoring** through SWARM's ProxyComputer pipeline
 - **Circuit breakers** that freeze misbehaving agents
 
+This bridge is designed for:
+- Governance experiments on tool-using agents.
+- Long-horizon inbox tasks (task creation + wait).
+- Safety telemetry from tool usage and plan approval events.
+
 ## Architecture
 
 ```
@@ -52,10 +57,31 @@ npm install
 npm start
 ```
 
+### Requirements
+- Node 18+ for the controller service.
+- Python 3.10+ for SWARM.
+- Claude Code installed and configured for the controller.
+- `SWARM_BRIDGE_API_KEY` set for the controller (recommended).
+
 ### Security defaults
 
 - Always set `SWARM_BRIDGE_API_KEY` before starting the service.
 - Keep `HOST` on loopback (e.g. `127.0.0.1`) unless you have a secured reverse proxy in front.
+- Auto-approval is off by default and only allowed for loopback controller URLs.
+
+### Controller setup script (repeatable)
+```bash
+#!/usr/bin/env bash
+set -euo pipefail
+
+export HOST=127.0.0.1
+export PORT=3100
+export SWARM_BRIDGE_API_KEY="replace_me"
+
+cd bridges/claude-code-service
+npm install
+npm start
+```
 
 ### 2. Use the bridge from Python
 
@@ -109,6 +135,37 @@ print(f"Tool calls used: {budget.tool_calls_used}/{budget.max_tool_calls}")
 bridge.shutdown()
 ```
 
+### 3. Run the minimal demo (end-to-end)
+```bash
+python scripts/run_claude_code_scenario.py \
+  --scenario scenarios/claude_code_demo.yaml \
+  --base-url http://localhost:3100 \
+  --api-prefix /api \
+  --auto-approve
+```
+
+Shortcut wrapper:
+```bash
+bash scripts/run_claude_code_demo.sh
+```
+
+## Configuration
+
+### ClientConfig
+Key fields:
+- `base_url`: controller URL (default `http://localhost:3100`).
+- `api_prefix`: prefix for endpoints (default `/api`).
+- `timeout_seconds`, `max_retries`, `retry_backoff_base`.
+- `api_key`: bearer token, if configured in the service.
+
+### BridgeConfig
+Key fields:
+- `governance_config`: SWARM governance controls.
+- `auto_respond_governance`: auto-approve/deny plan and permission requests.
+- `tool_allowlist`: per-agent tool permissions.
+- `proxy_sigmoid_k`: calibration for ProxyComputer.
+- `event_poll_interval`: event polling rate.
+
 ## Conceptual Mapping
 
 | SWARM Concept | Claude Code Equivalent |
@@ -132,6 +189,14 @@ Controller events map to SWARM observables:
 | Plan rejection count | `verifier_rejections` |
 | Rework requests | `rework_count` |
 
+## Event Flow
+1. `spawn_agent()` requests a controller agent.
+2. Controller emits `agent:spawned`.
+3. `dispatch_task()` sends a message or creates an inbox task.
+4. Controller emits message/task events.
+5. Bridge converts events to `SoftInteraction` and logs metrics.
+6. If plan/permission requests appear, the governance policy responds.
+
 ## Governance Integration
 
 SWARM governance maps to Claude Code controls:
@@ -147,7 +212,10 @@ SWARM governance maps to Claude Code controls:
 
 ## Scenario Format
 
-See `scenarios/claude_code_mvp.yaml` for a complete example:
+Minimal demo: `scenarios/claude_code_demo.yaml`  
+Full example: `scenarios/claude_code_mvp.yaml`
+
+Note: These scenarios assume a Claude Code controller is running and a bridge-aware runner is used to spawn Claude Code agents from the agent config block. Use `scripts/run_claude_code_scenario.py` for the demo.
 
 ```yaml
 scenario_id: claude_code_mvp
@@ -176,16 +244,26 @@ The bridge produces standard SWARM metrics plus Claude Code-specific overlays:
 
 ### Endpoints
 
+All endpoints are prefixed with `/api` by default (configurable via `ClientConfig.api_prefix`).
+
 | Method | Path | Body | Response |
 |--------|------|------|----------|
-| GET | `/health` | — | `{status, agents_active, uptime_seconds}` |
-| POST | `/agents/spawn` | `{agent_id, system_prompt, allowed_tools, model}` | `{agent_id, status}` |
-| POST | `/agents/:id/ask` | `{prompt, timeout_seconds?}` | `{content, tool_calls, token_count, cost_usd}` |
+| GET | `/session/status` | — | `{initialized, agents_active, uptime_seconds}` |
+| POST | `/session/init` | `{teamName, cwd?}` | `{initialized, ...}` |
+| POST | `/agents/spawn` | `{name, model, type}` | `{agent_id, status}` |
+| POST | `/agents/:id/send` | `{message, summary?}` | `{status}` |
 | POST | `/agents/:id/shutdown` | — | `{status}` |
+| POST | `/agents/:id/kill` | — | `{status}` |
+| POST | `/agents/:id/approve-plan` | `{requestId, approve, feedback?}` | `{status}` |
+| POST | `/agents/:id/approve-permission` | `{requestId, approve}` | `{status}` |
 | POST | `/tasks` | `{subject, description, owner}` | `TaskEvent` |
 | GET | `/tasks/:id/wait` | — | `TaskEvent` |
 | GET | `/events?since=&limit=` | — | `{events: BridgeEvent[]}` |
-| POST | `/governance/respond` | `{request_id, decision, reason?}` | `{status}` |
+| POST | `/governance/respond` | `{requestId, decision, reason?}` | `{status}` |
+
+Notes:
+- The Python bridge uses `/agents/:id/send` and treats `ask()` as fire-and-forget.
+- Plan/permission approvals should be sent to the per-agent endpoints; `/governance/respond` is a fallback.
 
 ### Event Types
 
@@ -249,6 +327,31 @@ Access at http://localhost:3100 for real-time agent monitoring.
 #### Known Limitations
 
 - **Permission approval UI**: The web UI's approval buttons may show "requestId is required" due to a format mismatch between Claude Code and the controller. Use the Python bridge for programmatic approval or auto-approve workflows.
+
+## Troubleshooting
+- **401 Unauthorized**: Ensure `SWARM_BRIDGE_API_KEY` matches the bearer token used by the Python bridge `ClientConfig.api_key`.
+- **404 on /events or /agents/**: Verify `ClientConfig.api_prefix` (default `/api`) matches the controller.
+- **No responses after `ask()`**: The bridge uses `/send` as fire-and-forget; poll `/events` for responses.
+- **Approval buttons fail in UI**: Use the Python bridge `respond_to_plan()` or enable `auto_respond_governance`.
+- **Agent spawn succeeds but no output**: Confirm the controller session is initialized (`/session/status`) and agents are active.
+- **Auto-approval disabled unexpectedly**: Auto-approval only works for loopback controller URLs; use `http://localhost:3100` or `http://127.0.0.1:3100`.
+
+## Validation Against Python Bridge (2026-02-09)
+Validated the API contract against `swarm/bridges/claude_code/client.py` and `swarm/bridges/claude_code/bridge.py`.
+
+Verified:
+- API prefix defaults to `/api` (`ClientConfig.api_prefix`).
+- Session lifecycle endpoints: `/session/init`, `/session/status`.
+- Agent lifecycle endpoints: `/agents/spawn`, `/agents/:id/shutdown`, `/agents/:id/kill`.
+- Messaging endpoint: `/agents/:id/send` (not `/ask`).
+- Inbox endpoints: `/tasks`, `/tasks/:id/wait`.
+- Events polling: `/events`.
+- Governance responses: per-agent `/agents/:id/approve-plan` and `/agents/:id/approve-permission`.
+
+Notes on compatibility:
+- `ask()` in Python is a wrapper over `/send` and returns a placeholder event. Actual responses arrive via `/events`.
+- `system_prompt` and `allowed_tools` are accepted by the Python bridge but marked as unused by the web controller.
+- `/governance/respond` is kept as a fallback but may not exist in all controller deployments.
 
 ### Research Integration
 
