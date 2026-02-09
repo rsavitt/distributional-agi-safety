@@ -11,7 +11,8 @@ from urllib.parse import urlparse
 from pathlib import Path
 from typing import Dict, List
 
-from swarm.bridges.claude_code import BridgeConfig, ClaudeCodeBridge, ClientConfig
+from swarm.bridges.claude_code import ClaudeCodeBridge, ClientConfig
+from swarm.bridges.claude_code.bridge import BridgeConfig
 from swarm.bridges.claude_code.agent import ClaudeCodeAgent
 from swarm.core.orchestrator import Orchestrator
 from swarm.scenarios.loader import load_scenario
