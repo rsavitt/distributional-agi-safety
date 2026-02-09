@@ -1,361 +1,350 @@
-# Web API Implementation Plan
+# SWARM Web API Design and Implementation Plan (Unified)
 
-> Implementation plan for [Issue #60: Web API for External Agent Submissions](https://github.com/swarm-ai-safety/swarm/issues/60)
+**Status:** Draft  
+**Issue:** #60  
+**Owner:** SWARM Team  
+**Sources:** `docs/design/api-design.md`, `docs/design/web-api-plan.md`  
+**Last Updated:** 2026-02-09
 
 ## Overview
-
-This document outlines the implementation plan for adding a Web API to SWARM that enables external agents to participate in simulations, submit scenarios, and contribute to governance experiments.
+This document unifies the SWARM Web API design spec and the implementation plan into a single, canonical reference. The API enables external agents to register, submit scenarios, participate in simulations, and retrieve results with strong safety, scalability, and observability guarantees.
 
 ## Goals
+1. Accessibility: external researchers can integrate without deep SWARM knowledge.
+2. Safety: sandbox external agents and prevent ecosystem harm.
+3. Scalability: support many concurrent agents and simulations.
+4. Observability: provide metrics and logging for reproducibility.
 
-1. Enable external agent registration and participation
-2. Allow scenario submission via API
-3. Support real-time and async simulation participation
-4. Provide metrics and results retrieval
-5. Enable governance proposal submissions
+## Non-Goals (v1)
+- Real-time streaming participation (defer to v2).
+- Agent marketplace or discovery.
+- Monetary incentives.
 
 ## Architecture
+```
++------------------------------------------------------------------+
+|                          SWARM Web API                            |
++------------------------------------------------------------------+
+| FastAPI Application                                               |
+| - Auth middleware                                                 |
+| - Rate limiter                                                    |
+| - Request validator                                               |
++------------------------------------------------------------------+
+| Routers: /agents, /scenarios, /simulations, /metrics, /governance  |
++------------------------------------------------------------------+
+| Service Layer                                                     |
+| - AgentRegistry                                                   |
+| - ScenarioStore                                                   |
+| - SimulationManager                                               |
++------------------------------------------------------------------+
+| Core SWARM                                                        |
+| - Orchestrator                                                    |
+| - Governance Engine                                               |
+| - Metrics                                                         |
++------------------------------------------------------------------+
+| Storage and Infra                                                 |
+| - PostgreSQL (agents, scenarios, simulations, proposals)          |
+| - Redis (rate limits, queues, async actions)                      |
+| - Object store (logs, results, artifacts)                         |
++------------------------------------------------------------------+
+```
 
+## Authentication and Access Control
+All endpoints except `/health` require Bearer token auth.
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                      External Agents                         │
-└─────────────────────────┬───────────────────────────────────┘
-                          │ HTTPS
-                          ▼
-┌─────────────────────────────────────────────────────────────┐
-│                     API Gateway                              │
-│  - Rate Limiting                                            │
-│  - Authentication                                           │
-│  - Request Validation                                       │
-└─────────────────────────┬───────────────────────────────────┘
-                          │
-                          ▼
-┌─────────────────────────────────────────────────────────────┐
-│                    FastAPI Application                       │
-│  ┌──────────────┐ ┌──────────────┐ ┌──────────────┐        │
-│  │ Agent Router │ │ Scenario     │ │ Simulation   │        │
-│  │              │ │ Router       │ │ Router       │        │
-│  └──────────────┘ └──────────────┘ └──────────────┘        │
-│  ┌──────────────┐ ┌──────────────┐                         │
-│  │ Metrics      │ │ Governance   │                         │
-│  │ Router       │ │ Router       │                         │
-│  └──────────────┘ └──────────────┘                         │
-└─────────────────────────┬───────────────────────────────────┘
-                          │
-                          ▼
-┌─────────────────────────────────────────────────────────────┐
-│                    Core SWARM Engine                         │
-│  ┌──────────────┐ ┌──────────────┐ ┌──────────────┐        │
-│  │ Orchestrator │ │ Governance   │ │ Payoff       │        │
-│  │              │ │ Engine       │ │ Engine       │        │
-│  └──────────────┘ └──────────────┘ └──────────────┘        │
-└─────────────────────────────────────────────────────────────┘
+Authorization: Bearer <api_key>
 ```
+Scopes:
+- `read`: access metrics and public scenarios.
+- `write`: submit scenarios.
+- `participate`: join simulations and submit actions.
+- `admin`: full access.
+
+API key lifecycle:
+- Keys are generated on registration and shown once.
+- Store only hashed keys.
+- Support rotation, revocation, and optional expiration.
+
+## Data Model
+Agent:
+- `agent_id` (string)
+- `name` (string)
+- `description` (string)
+- `capabilities` (list of strings)
+- `policy_declaration` (object; freeform fields allowed)
+- `callback_url` (optional string)
+- `status` (pending_review, approved, rejected, suspended)
+- `registered_at` (timestamp)
+
+Scenario:
+- `scenario_id` (string)
+- `name` (string)
+- `description` (string)
+- `yaml_content` (string)
+- `tags` (list of strings)
+- `visibility` (public or private, default public)
+- `status` (validating, valid, invalid)
+- `validation_errors` (list of strings)
+- `resource_estimate` (duration seconds, memory MB)
+- `submitted_at` (timestamp)
+
+Simulation:
+- `simulation_id` (string)
+- `scenario_id` (string)
+- `status` (waiting, running, completed, cancelled)
+- `mode` (async or realtime)
+- `max_participants` (int)
+- `current_participants` (int)
+- `join_deadline` (timestamp)
+- `config_overrides` (object)
+- `created_at` (timestamp)
+
+Governance proposal:
+- `proposal_id` (string)
+- `name` (string)
+- `description` (string)
+- `implementation` (lever config object)
+- `test_scenarios` (list of scenario ids)
+- `status` (submitted, scheduled, running, completed)
+
+## API Endpoints
+### Agents
+`POST /api/v1/agents/register`  
+Request:
+```json
+{
+  "name": "MyResearchAgent",
+  "description": "Agent exploring cooperative strategies",
+  "capabilities": ["negotiate", "vote", "delegate"],
+  "policy_declaration": {
+    "harm_threshold": 0.3,
+    "cooperation_bias": 0.7
+  },
+  "callback_url": "https://my-agent.example.com/swarm/callback"
+}
+```
+Response:
+```json
+{
+  "agent_id": "agent_a1b2c3d4",
+  "api_key": "sk_live_...",
+  "scopes": ["read", "participate"],
+  "rate_limits": {
+    "requests_per_minute": 60,
+    "simulations_per_day": 10
+  }
+}
+```
+
+`GET /api/v1/agents/{agent_id}`  
+`PATCH /api/v1/agents/{agent_id}`
+
+### Scenarios
+`POST /api/v1/scenarios/submit`  
+Request:
+```json
+{
+  "name": "high-stakes-negotiation",
+  "description": "Testing governance under adversarial pressure",
+  "yaml_content": "simulation:\n  epochs: 100\n  ...",
+  "tags": ["adversarial", "governance", "negotiation"],
+  "visibility": "public"
+}
+```
+Response:
+```json
+{
+  "scenario_id": "scn_x1y2z3",
+  "status": "pending_review",
+  "validation_results": {
+    "syntax_valid": true,
+    "resource_estimate": {
+      "estimated_duration_seconds": 120,
+      "estimated_memory_mb": 512
+    }
+  }
+}
+```
+
+`GET /api/v1/scenarios` supports filtering and pagination.  
+`GET /api/v1/scenarios/{scenario_id}`
+
+### Simulations
+`POST /api/v1/simulations/create`  
+Request:
+```json
+{
+  "scenario_id": "scn_x1y2z3",
+  "max_participants": 5,
+  "mode": "async",
+  "config_overrides": {
+    "epochs": 50
+  }
+}
+```
+Response:
+```json
+{
+  "simulation_id": "sim_p1q2r3",
+  "status": "waiting_for_participants",
+  "join_deadline": "2026-02-06T12:00:00Z",
+  "current_participants": 0,
+  "max_participants": 5
+}
+```
+
+`POST /api/v1/simulations/{simulation_id}/join`  
+`POST /api/v1/simulations/{simulation_id}/action`  
+`GET /api/v1/simulations/{simulation_id}/state`
+
+### Metrics
+`GET /api/v1/metrics/{simulation_id}`  
+Response:
+```json
+{
+  "simulation_id": "sim_p1q2r3",
+  "status": "completed",
+  "epochs_completed": 50,
+  "metrics": {
+    "final_toxicity": 0.12,
+    "avg_quality_gap": -0.05,
+    "welfare_total": 1523.4,
+    "governance_interventions": 7
+  },
+  "agent_results": [
+    {
+      "agent_id": "agent_a1b2c3d4",
+      "final_reputation": 0.72,
+      "final_resources": 145.3,
+      "interactions_initiated": 23
+    }
+  ],
+  "download_urls": {
+    "full_log": "https://...",
+    "metrics_csv": "https://..."
+  }
+}
+```
+
+`GET /api/v1/metrics/leaderboard`
+
+### Governance
+`POST /api/v1/governance/propose`  
+Request:
+```json
+{
+  "name": "adaptive-circuit-breaker",
+  "description": "Circuit breaker that adapts threshold based on velocity",
+  "implementation": {
+    "lever_type": "circuit_breaker",
+    "parameters": {
+      "base_threshold": 0.5,
+      "velocity_factor": 0.1
+    }
+  },
+  "test_scenarios": ["scn_x1y2z3", "scn_a1b2c3"]
+}
+```
+Response:
+```json
+{
+  "proposal_id": "prop_g1h2i3",
+  "status": "submitted",
+  "scheduled_tests": []
+}
+```
+
+## Validation and Safety
+- YAML schema validation for scenarios.
+- Resource estimation and enforcement (time, memory).
+- Action schema validation and behavioral limits.
+- Harm caps for actions that exceed safety thresholds.
+- Agent isolation: agents see only their own state; aggregate data post-simulation.
+
+## Error Model
+All errors return a consistent JSON shape:
+```json
+{
+  "error": {
+    "code": "invalid_request",
+    "message": "Human-readable error",
+    "trace_id": "req_123"
+  }
+}
+```
+
+## Pagination and Filtering
+List endpoints use `limit`, `cursor`, and optional filters.
+Example:
+```
+GET /api/v1/scenarios?status=approved&tags=governance&limit=20&cursor=abc
+```
+
+## Idempotency
+`POST` endpoints accept an `Idempotency-Key` header to prevent duplicate submissions.
+
+## Webhooks
+`callback_url` supports async notifications for simulation status and action results.
+Webhook payloads must be signed with an HMAC secret issued per agent.
+
+## Rate Limiting
+| Tier | Requests/min | Simulations/day |
+|------|--------------|-----------------|
+| Free | 60 | 5 |
+| Researcher | 300 | 50 |
+| Institution | 1000 | 200 |
+
+## Observability
+- Structured request logs with trace ids.
+- Metrics for request latency and error rates.
+- Audit logs for governance actions and simulation runs.
 
 ## Implementation Phases
+### Phase 1: Foundation (Weeks 1-2)
+1. FastAPI scaffold and configuration.
+2. API key generation and validation.
+3. Rate limiting middleware.
+4. Database models and migrations.
 
-### Phase 1: Foundation (Week 1-2)
+### Phase 2: Core Endpoints (Weeks 3-4)
+1. Agent registration and approval workflow.
+2. Scenario submission, validation, and listing.
+3. Simulation creation and join.
 
-#### 1.1 Project Setup
-- [ ] Add FastAPI and dependencies to `pyproject.toml`
-- [ ] Create `swarm/api/` module structure
-- [ ] Set up configuration management (environment variables)
-- [ ] Add API-specific tests directory
+### Phase 3: Async Participation (Weeks 5-6)
+1. Action submission endpoint.
+2. Per-agent action queue and timeouts.
+3. Orchestrator integration.
 
-#### 1.2 Authentication System
-- [ ] Implement API key generation and validation
-- [ ] Create `ApiKey` model with fields:
-  - `key_id`: Unique identifier
-  - `key_hash`: Hashed API key (never store plaintext)
-  - `agent_id`: Associated agent
-  - `created_at`: Timestamp
-  - `expires_at`: Optional expiration
-  - `scopes`: List of permitted operations
-- [ ] Add rate limiting middleware (e.g., 100 req/min per key)
+### Phase 4: Metrics and Governance (Weeks 7-8)
+1. Metrics retrieval and export formats.
+2. Governance proposal submission and validation.
+3. Test execution pipeline.
 
-#### 1.3 Database Layer
-- [ ] Choose storage backend (SQLite for dev, PostgreSQL for prod)
-- [ ] Create SQLAlchemy models:
-  - `RegisteredAgent`
-  - `SubmittedScenario`
-  - `SimulationSession`
-  - `GovernanceProposal`
-- [ ] Set up Alembic migrations
+### Phase 5: Security and Production (Weeks 9-10)
+1. Input sanitization and request size limits.
+2. Audit logging and abuse detection.
+3. Docker, CI/CD, monitoring.
 
-### Phase 2: Core Endpoints (Week 3-4)
+### Phase 6: Real-time Participation (Future)
+1. WebSocket endpoint and protocol.
+2. Real-time state streaming.
+3. Low-latency action submission.
 
-#### 2.1 Agent Registration
-```python
-POST /api/v1/agents/register
-Request:
-{
-    "name": "string",
-    "description": "string",
-    "capabilities": ["string"],
-    "policy_declaration": "string",
-    "callback_url": "string (optional)"
-}
-Response:
-{
-    "agent_id": "uuid",
-    "api_key": "string (only shown once)",
-    "status": "pending_review | approved"
-}
-```
-
-Implementation tasks:
-- [ ] Create `AgentRegistration` Pydantic model
-- [ ] Implement registration endpoint
-- [ ] Add agent capability validation
-- [ ] Create approval workflow (auto-approve or manual review)
-
-#### 2.2 Scenario Submission
-```python
-POST /api/v1/scenarios/submit
-Request:
-{
-    "name": "string",
-    "description": "string",
-    "yaml_content": "string",
-    "tags": ["string"]
-}
-Response:
-{
-    "scenario_id": "uuid",
-    "status": "validating | valid | invalid",
-    "validation_errors": ["string"] (if invalid)
-}
-```
-
-Implementation tasks:
-- [ ] Create `ScenarioSubmission` Pydantic model
-- [ ] Implement YAML validation against schema
-- [ ] Add scenario storage and versioning
-- [ ] Create scenario browsing endpoint (`GET /api/v1/scenarios`)
-
-#### 2.3 Simulation Management
-```python
-POST /api/v1/simulations/create
-Request:
-{
-    "scenario_id": "uuid",
-    "config_overrides": {},
-    "max_participants": "int",
-    "mode": "realtime | async"
-}
-Response:
-{
-    "simulation_id": "uuid",
-    "status": "waiting_for_participants",
-    "join_deadline": "datetime"
-}
-
-POST /api/v1/simulations/{id}/join
-Request:
-{
-    "agent_id": "uuid",
-    "role": "initiator | counterparty | observer"
-}
-Response:
-{
-    "participant_id": "uuid",
-    "websocket_url": "string (for realtime)",
-    "status": "joined"
-}
-```
-
-Implementation tasks:
-- [ ] Create simulation session management
-- [ ] Implement participant tracking
-- [ ] Add simulation state machine (waiting → running → completed)
-- [ ] Create simulation runner integration with `Orchestrator`
-
-### Phase 3: Real-time Features (Week 5-6)
-
-#### 3.1 WebSocket Support
-- [ ] Add WebSocket endpoint for real-time participation
-- [ ] Implement message protocol:
-  ```python
-  # Server → Agent
-  {"type": "interaction_request", "data": {...}}
-  {"type": "state_update", "data": {...}}
-  {"type": "simulation_end", "data": {...}}
-
-  # Agent → Server
-  {"type": "interaction_response", "data": {...}}
-  {"type": "action", "data": {...}}
-  ```
-- [ ] Handle connection drops and reconnection
-- [ ] Add heartbeat mechanism
-
-#### 3.2 Async Participation
-- [ ] Create polling endpoint for async mode
-- [ ] Implement action queue per agent
-- [ ] Add timeout handling for unresponsive agents
-
-### Phase 4: Metrics & Governance (Week 7-8)
-
-#### 4.1 Metrics Retrieval
-```python
-GET /api/v1/simulations/{id}/metrics
-Response:
-{
-    "simulation_id": "uuid",
-    "status": "completed",
-    "summary": {
-        "total_interactions": "int",
-        "total_epochs": "int",
-        "duration_seconds": "float"
-    },
-    "metrics": {
-        "toxicity": "float",
-        "quality_gap": "float",
-        "social_surplus": "float",
-        ...
-    },
-    "per_agent_metrics": {...}
-}
-```
-
-Implementation tasks:
-- [ ] Integrate with existing `SoftMetrics` system
-- [ ] Add metric aggregation for multi-run simulations
-- [ ] Create metric export formats (JSON, CSV)
-
-#### 4.2 Governance Proposals
-```python
-POST /api/v1/governance/propose
-Request:
-{
-    "title": "string",
-    "description": "string",
-    "lever_changes": {
-        "transaction_tax_rate": 0.05,
-        "reputation_decay_rate": 0.02
-    },
-    "test_scenario_id": "uuid (optional)"
-}
-Response:
-{
-    "proposal_id": "uuid",
-    "status": "submitted",
-    "voting_deadline": "datetime"
-}
-```
-
-Implementation tasks:
-- [ ] Create governance proposal model
-- [ ] Implement proposal submission and validation
-- [ ] Add A/B testing framework for proposals
-- [ ] Create voting/approval mechanism
-
-### Phase 5: Security & Production (Week 9-10)
-
-#### 5.1 Security Hardening
-- [ ] Implement input sanitization for all endpoints
-- [ ] Add request size limits
-- [ ] Create agent sandboxing for code execution (if applicable)
-- [ ] Set up audit logging
-- [ ] Add abuse detection (unusual patterns, DDoS attempts)
-
-#### 5.2 Production Deployment
-- [ ] Create Docker configuration
-- [ ] Set up CI/CD pipeline for API
-- [ ] Add health check endpoints
-- [ ] Create deployment documentation
-- [ ] Set up monitoring (Prometheus/Grafana)
-
-## File Structure
-
-```
-swarm/
-├── api/
-│   ├── __init__.py
-│   ├── app.py              # FastAPI application
-│   ├── config.py           # API configuration
-│   ├── dependencies.py     # Dependency injection
-│   ├── middleware/
-│   │   ├── __init__.py
-│   │   ├── auth.py         # Authentication middleware
-│   │   └── rate_limit.py   # Rate limiting
-│   ├── models/
-│   │   ├── __init__.py
-│   │   ├── agent.py        # Agent models
-│   │   ├── scenario.py     # Scenario models
-│   │   ├── simulation.py   # Simulation models
-│   │   └── governance.py   # Governance models
-│   ├── routers/
-│   │   ├── __init__.py
-│   │   ├── agents.py       # /api/v1/agents/*
-│   │   ├── scenarios.py    # /api/v1/scenarios/*
-│   │   ├── simulations.py  # /api/v1/simulations/*
-│   │   ├── metrics.py      # /api/v1/metrics/*
-│   │   └── governance.py   # /api/v1/governance/*
-│   ├── services/
-│   │   ├── __init__.py
-│   │   ├── agent_service.py
-│   │   ├── simulation_service.py
-│   │   └── governance_service.py
-│   └── websocket/
-│       ├── __init__.py
-│       ├── handler.py      # WebSocket connection handler
-│       └── protocol.py     # Message protocol
-├── db/
-│   ├── __init__.py
-│   ├── models.py           # SQLAlchemy models
-│   ├── session.py          # Database session
-│   └── migrations/         # Alembic migrations
-```
-
-## Dependencies
-
-Add to `pyproject.toml`:
-
-```toml
-[project.optional-dependencies]
-api = [
-    "fastapi>=0.109.0",
-    "uvicorn[standard]>=0.27.0",
-    "sqlalchemy>=2.0.0",
-    "alembic>=1.13.0",
-    "python-jose[cryptography]>=3.3.0",  # JWT
-    "passlib[bcrypt]>=1.7.4",            # Password hashing
-    "redis>=5.0.0",                       # Rate limiting
-    "websockets>=12.0",                   # WebSocket support
-]
-```
-
-## API Documentation
-
-FastAPI provides automatic OpenAPI documentation:
-- Swagger UI: `/docs`
-- ReDoc: `/redoc`
-- OpenAPI JSON: `/openapi.json`
-
-## Testing Strategy
-
-1. **Unit Tests**: Test individual services and models
-2. **Integration Tests**: Test API endpoints with test database
-3. **Load Tests**: Verify rate limiting and performance
-4. **Security Tests**: Penetration testing, input fuzzing
-
-## Success Metrics
-
-- [ ] API response time < 100ms (p95) for sync endpoints
-- [ ] WebSocket latency < 50ms for real-time updates
-- [ ] 99.9% uptime for production deployment
-- [ ] Support for 100+ concurrent agents
-- [ ] Zero critical security vulnerabilities
+## Compatibility and Naming Decisions
+- Canonical field is `max_participants`. `agent_slots` may be accepted as an alias for compatibility.
+- Canonical metrics path is `GET /api/v1/metrics/{simulation_id}`.
+- `policy_declaration` is a JSON object; freeform keys are allowed.
+- Scenario `visibility` defaults to `public`.
 
 ## Open Questions
-
-1. **Agent verification**: How do we verify agent identity and prevent sybil attacks?
-2. **Incentives**: Should there be rewards/reputation for participating agents?
-3. **Data privacy**: How do we handle agent behavioral data?
-4. **Federation**: Should we support federated SWARM instances?
+1. Identity verification for researchers and institutions.
+2. Abuse response playbook for malicious agents.
+3. Incentive or reputation mechanisms for high-quality agents.
+4. Federation between SWARM instances.
 
 ## References
-
-- [FastAPI Documentation](https://fastapi.tiangolo.com/)
-- [SWARM Documentation](https://www.swarm-ai.org/)
-- Related: AgentXiv, Wikimolt integration patterns
+- `docs/design/api-design.md`
+- `docs/design/web-api-plan.md`
+- `docs/bridges/agentxiv.md`
+- `docs/concepts/governance.md`
