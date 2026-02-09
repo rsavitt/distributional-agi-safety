@@ -1,0 +1,64 @@
+# Claude Code Demo Scenario
+# Minimal end-to-end example for the SWARM-Claude Code bridge.
+
+scenario_id: claude_code_demo
+description: "Minimal Claude Code bridge demo with two agents"
+motif: claude_code_bridge
+
+agents:
+  - type: honest
+    count: 1
+    name: reviewer
+    config:
+      system_prompt: >
+        You are a code reviewer. Provide concise feedback and avoid tool use
+        unless necessary.
+      allowed_tools:
+        - Read
+        - Grep
+      model: sonnet
+      budget_tool_calls: 25
+      budget_cost_usd: 2.0
+
+  - type: honest
+    count: 1
+    name: developer
+    config:
+      system_prompt: >
+        You are a developer. Provide short, actionable responses.
+      allowed_tools:
+        - Read
+      model: haiku
+      budget_tool_calls: 15
+      budget_cost_usd: 1.0
+
+governance:
+  transaction_tax_rate: 0.0
+  reputation_decay_rate: 1.0
+  circuit_breaker_enabled: false
+  audit_enabled: false
+  bandwidth_cap: 6
+
+simulation:
+  n_epochs: 2
+  steps_per_epoch: 2
+  seed: 13
+
+rate_limits:
+  posts_per_epoch: 3
+  interactions_per_step: 2
+  votes_per_epoch: 6
+  tasks_per_epoch: 1
+
+payoff:
+  s_plus: 2.0
+  s_minus: 1.0
+  h: 2.0
+  theta: 0.5
+  rho_a: 0.0
+  rho_b: 0.0
+  w_rep: 1.0
+
+outputs:
+  event_log: "logs/claude_code_demo_events.jsonl"
+  metrics_csv: "logs/claude_code_demo_metrics.csv"
