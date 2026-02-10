@@ -439,6 +439,8 @@ class TrackATaskGenerator:
             c = a * x + b
             prompt = f"Solve for x: {a}x + {b} = {c}."
             expr = f"({c} - {b}) / {a}"
+            lhs = f"{a}*x + {b}"
+            rhs = f"{c}"
         else:
             a = self._rng.randint(2, max_val)
             x = self._rng.randint(2, max_val)
@@ -446,13 +448,15 @@ class TrackATaskGenerator:
             c = a * (x + b)
             prompt = f"Solve for x: {a}(x + {b}) = {c}."
             expr = f"({c} / {a}) - {b}"
+            lhs = f"{a}*(x + {b})"
+            rhs = f"{c}"
 
         answer = _safe_eval(expr)
         return ReasoningTask(
             task_id=f"alg_{idx}",
             prompt=prompt,
             answer=_format_number(answer),
-            metadata={"expression": expr, "family": "algebra"},
+            metadata={"expression": expr, "family": "algebra", "lhs": lhs, "rhs": rhs},
         )
 
     def _symbolic_task(self, idx: int, difficulty: float) -> ReasoningTask:
@@ -1174,6 +1178,17 @@ class SimpleCritic:
         if family == "word" and any(val < 0 for val in numeric_answers):
             return "negative answer in word problem"
 
+        if family == "algebra" and expected is not None:
+            if any(abs(val - expected) > 1e-3 for val in numeric_answers):
+                return "algebra back-solve mismatch"
+            lhs_expr = task.metadata.get("lhs", "")
+            rhs_expr = task.metadata.get("rhs", "")
+            if lhs_expr and rhs_expr:
+                lhs_val = _safe_eval(lhs_expr.replace("x", str(expected)))
+                rhs_val = _safe_eval(rhs_expr)
+                if abs(lhs_val - rhs_val) > 1e-3:
+                    return "algebra substitution mismatch"
+
         spread = max(numeric_answers) - min(numeric_answers)
         top_conf = sorted((sol.confidence for sol in solutions), reverse=True)
         if len(set(answers)) > 1 and top_conf[0] >= 0.7 and top_conf[1] >= 0.6:
@@ -1664,6 +1679,8 @@ class TrackARunner:
             "reputation_drift": summary.reputation_drift,
         }
         self.summary_path.write_text(json.dumps(payload, indent=2))
+        if summary.reputation_drift:
+            self._write_reputation_csv(summary.reputation_drift)
 
     def _write_paper(self, summary: RunSummary) -> None:
         builder = PaperBuilder()
@@ -1837,6 +1854,41 @@ class TrackARunner:
             )
             images[fig4_path.name] = _encode_image(fig4_path)
 
+            # Token efficiency heatmap
+            fig4b, ax4b = plt.subplots(figsize=(7, 3.8))
+            matrix_eff = []
+            for cond in conditions:
+                row = []
+                for family in families:
+                    family_data = summary.family_metrics.get(cond, {}).get(family, {})
+                    if isinstance(family_data, dict):
+                        row.append(family_data.get("token_eff", 0.0))
+                    else:
+                        row.append(0.0)
+                matrix_eff.append(row)
+            im2 = ax4b.imshow(matrix_eff, vmin=0.0, cmap="Purples")
+            ax4b.set_xticks(range(len(families)))
+            ax4b.set_xticklabels([_family_label(f) for f in families], rotation=30, ha="right")
+            ax4b.set_yticks(range(len(conditions)))
+            ax4b.set_yticklabels(conditions)
+            ax4b.set_title("Token Efficiency by Task Family and Condition")
+            for i in range(len(conditions)):
+                for j in range(len(families)):
+                    ax4b.text(j, i, f"{matrix_eff[i][j]:.1f}", ha="center", va="center", fontsize=7)
+            fig4b.colorbar(im2, ax=ax4b, fraction=0.046, pad=0.04, label="Correct / 1k tokens")
+            fig4b.tight_layout()
+            fig4b_path = self.output_dir / "figure_family_token_eff.png"
+            fig4b.savefig(fig4b_path, dpi=150)
+            plt.close(fig4b)
+
+            figures.append(
+                PaperFigure(
+                    filename=fig4b_path.name,
+                    caption="Per-family token efficiency (correct per 1k tokens).",
+                )
+            )
+            images[fig4b_path.name] = _encode_image(fig4b_path)
+
         if summary.reputation_drift:
             fig5, ax5 = plt.subplots(figsize=(7, 3.6))
             series = _build_reputation_series(summary.reputation_drift)
@@ -1864,6 +1916,38 @@ class TrackARunner:
             images[fig5_path.name] = _encode_image(fig5_path)
 
         return figures, images
+
+    def _write_reputation_csv(self, drift: list[dict[str, object]]) -> None:
+        path = self.output_dir / "reputation_drift.csv"
+        if not drift:
+            return
+        solver_keys: set[str] = set()
+        role_keys: set[str] = set()
+        for snap in drift:
+            solvers = snap.get("solvers", {})
+            roles = snap.get("roles", {})
+            if isinstance(solvers, dict):
+                solver_keys.update(solvers.keys())
+            if isinstance(roles, dict):
+                role_keys.update(roles.keys())
+        solver_cols = sorted(solver_keys)
+        role_cols = sorted(role_keys)
+        headers = ["episode", "condition"]
+        headers += [f"solver_{k}" for k in solver_cols]
+        headers += [f"role_{k}" for k in role_cols]
+        lines = [",".join(headers)]
+        for snap in drift:
+            row = [str(snap.get("episode", "")), str(snap.get("condition", ""))]
+            solvers = snap.get("solvers", {})
+            roles = snap.get("roles", {})
+            for key in solver_cols:
+                value = solvers.get(key, "")
+                row.append(f"{float(value):.4f}" if value != "" else "")
+            for key in role_cols:
+                value = roles.get(key, "")
+                row.append(f"{float(value):.4f}" if value != "" else "")
+            lines.append(",".join(row))
+        path.write_text("\n".join(lines))
 
     def _compute_family_metrics(self, logs: list[EpisodeLog]) -> dict[str, dict[str, float]]:
         """Compute per-family metrics including accuracy and token efficiency."""
