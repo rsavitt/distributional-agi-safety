@@ -62,6 +62,15 @@ Examples:
 - When you want to commit specific files only — use `git add <files>` manually
 - When you haven't looked at what changed — run `/status` first
 
+## Session worktrees
+
+When running inside a session worktree (branch `session/pane-*`), `/sweep_and_ship` commits and pushes to the **session branch**, not directly to `main`. This is the expected workflow:
+
+1. `/sweep_and_ship` — commits to your session branch and pushes it to origin
+2. `/merge_session` — rebases your session branch onto main and fast-forward pushes to main
+
+This keeps each session's work isolated until you're ready to merge.
+
 ## Constraints
 
 - Never use `git add -A` or `git add .` — always list files explicitly

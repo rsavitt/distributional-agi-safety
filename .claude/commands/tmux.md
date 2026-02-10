@@ -49,9 +49,23 @@ tmux Hotkeys (prefix = Ctrl-b)
 
   Launch scripts
   ─────────────────────────────────
-  ./scripts/claude-tmux.sh        2 Claude panes (default)
-  ./scripts/claude-tmux.sh 3      3 Claude panes
-  ./scripts/claude-tmux.sh kill   Kill the session
+  ./scripts/claude-tmux.sh          2 panes (default)
+  ./scripts/claude-tmux.sh 3        3 panes
+  ./scripts/claude-tmux.sh kill     Kill tmux session (worktrees kept)
+  ./scripts/claude-tmux.sh cleanup  Remove all session worktrees + branches
+
+  Session worktrees
+  ─────────────────────────────────
+  Each pane runs in its own git worktree:
+    .worktrees/session-<N>  →  branch session/pane-<N>
+
+  This eliminates staging-area races and push conflicts
+  between concurrent sessions.
+
+  Workflow:
+    /sweep_and_ship      Commit to session branch
+    /merge_session       Rebase + push session branch to main
+    /merge_all_sessions  Batch merge all session branches
 ```
 
 Also run `tmux ls 2>/dev/null || echo "No active tmux sessions"` to show current sessions.
