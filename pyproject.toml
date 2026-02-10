@@ -149,6 +149,11 @@ ignore = [
 [tool.coverage.run]
 source = ["swarm"]
 branch = true
+omit = [
+    "swarm/analysis/streamlit_app.py",
+    "swarm/bridges/worktree/__main__.py",
+    "swarm/api/flask_app.py",
+]
 
 [tool.coverage.report]
 fail_under = 70
@@ -156,4 +161,5 @@ exclude_lines = [
     "pragma: no cover",
     "def __repr__",
     "raise NotImplementedError",
+    "if __name__ == .__main__.",
 ]

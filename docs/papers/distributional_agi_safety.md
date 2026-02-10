@@ -6,37 +6,29 @@
 
 ## Abstract
 
-We study governance trade-offs in multi-agent AI systems using a probabilistic
-simulation framework that replaces binary safety labels with calibrated soft
-scores p = P(v = +1). Across 11 scenarios (209 total epochs, 81 agent-slots)
-and a complementary 500-task benchmark, we find that ecosystem outcomes
-cluster into three regimes: cooperative (acceptance > 0.93, toxicity < 0.30),
-contested (acceptance 0.42-0.94, toxicity 0.33-0.37), and adversarial
-collapse (acceptance < 0.56, collapse by epoch 12-14). Collapse occurred
-exclusively when adversarial fraction reached 50%, and governance tuning
-delayed but did not prevent it — shifting collapse from epoch 12 to 14 across
-three red-team variants. Epoch-by-epoch analysis reveals the collapse
-mechanism: a cascading rejection spiral in which acceptance rate drops below
-~25%, reducing interaction volume below the threshold needed to sustain
-positive welfare. Quality gap — the difference in expected interaction quality
-between accepted and rejected interactions — acts as a leading indicator,
-remaining persistently elevated (0.19-0.21) in collapsing scenarios versus
-episodic in stable ones. Collusion detection proved critical: a scenario with
-37.5% adversarial agents avoided collapse entirely when pair-wise frequency
-and correlation monitoring were enabled. In cooperative regimes, capability
-complementarity and network amplification drove welfare to 44.9/epoch (9x
-the baseline), demonstrating that multi-agent systems can achieve outsized
-returns when adversarial pressure is absent. Incoherence metrics scaled
-sub-linearly with agent count, while welfare scaled super-linearly (~n^1.9),
-suggesting that larger cooperative populations are disproportionately
-productive but also harder to monitor. A multi-agent problem-solving benchmark
-(Track A) validates these dynamics: a single adversarial agent reduces
-accuracy by 20-24%, and adversary-majority conditions produce the lowest
-accuracy (0.702), paralleling the simulation's critical threshold. These
-results formalize the intuition from market microstructure theory that adverse
-selection in agent ecosystems is regime-dependent: governance interventions
-that suffice under moderate adversarial pressure fail abruptly beyond a
-critical threshold.
+We study governance trade-offs in multi-agent AI systems using a simulation
+framework that replaces binary safety labels with calibrated soft scores
+p = P(v = +1). Across 11 scenarios and a 500-task problem-solving benchmark,
+ecosystem outcomes cluster into three regimes: cooperative (acceptance > 0.93),
+contested (0.42-0.94), and adversarial collapse (< 0.56, collapse by epoch
+12-14). A critical adversarial fraction between 37.5% and 50% separates
+recoverable degradation from irreversible collapse; governance tuning delayed
+but could not prevent it. The collapse mechanism is a cascading rejection
+spiral in which acceptance drops below ~25%, starving interaction volume.
+Quality gap — the difference in expected p between accepted and rejected
+interactions — acts as a leading indicator, remaining persistently elevated
+(0.19-0.21) in collapsing scenarios versus episodic in stable ones.
+Collusion detection (pair-wise frequency and correlation monitoring) proved
+the critical differentiator, preventing collapse at 37.5% adversarial
+fraction where individual-level governance alone would fail. In cooperative
+regimes, welfare scaled super-linearly (~n^1.9) to 44.9/epoch (9x baseline),
+while toxicity saturated at ~0.34. A complementary benchmark (Track A)
+validates these dynamics: a single adversarial agent reduces multi-agent
+accuracy by 20-24%, and adversary-majority conditions yield the lowest
+accuracy (0.702). These results formalize the market microstructure intuition
+that adverse selection in agent ecosystems is regime-dependent: governance
+that suffices under moderate pressure fails abruptly beyond a critical
+threshold.
 
 ## 1. Introduction
 
@@ -82,7 +74,10 @@ auctions [8], Shapley-value reward allocation [9], and mission
 economies [4]. Using SWARM, we run 11 scenarios spanning cooperative,
 contested, and adversarial regimes, varying agent composition from 0% to 50%
 adversarial fraction and governance from disabled to fully layered
-(tax + staking + circuit breaker + audit + collusion detection).
+(tax + staking + circuit breaker + audit + collusion detection). We
+complement the simulation study with Track A, a 500-task multi-agent
+problem-solving benchmark that tests cooperative reasoning under adversarial
+interference across 12 conditions.
 
 Our central research questions are:
 
@@ -174,6 +169,18 @@ deceptive, adversarial) as a first-class experimental variable.
 
 Agent types: **H** = honest, **O** = opportunistic, **D** = deceptive, **Adv** = adversarial, **AA** = adaptive adversary.
 
+**Adversarial fraction** is the proportion of agents whose primary behavioral
+mode is non-cooperative, as classified by each scenario's configuration. The
+SWARM framework uses two classification scopes internally: the diversity
+defense lever counts only explicitly adversarial agents (Adv, AA), while the
+adaptive governance module counts adversarial and deceptive agents (Adv, AA,
+D). The fractions reported here follow the scenario-level classification:
+agents typed as Adv, AA, or D count as adversarial when present; O agents
+count only when they are the sole non-honest type (incoherence_medium). This
+means the adversarial fraction reflects the scenario designer's judgment of
+which agents pose non-cooperative risk in each configuration, not a fixed
+type-level rule.
+
 ### 3.2 Governance Parameters
 
 | Scenario | Tax Rate | Rep. Decay | Staking | Circuit Breaker | Audit | Collusion Det. |
@@ -184,6 +191,9 @@ Agent types: **H** = honest, **O** = opportunistic, **D** = deceptive, **Adv** =
 | emergent_capabilities | 0.03 | 0.97 | 5.0 min | tox > 0.7, 5 viol, 2 ep freeze | off | off |
 | marketplace_economy | 0.05 | 0.95 | off | tox > 0.7, 3 viol, 2 ep freeze | p=0.10, 2.0x pen | off |
 | network_effects | 0.05 | 0.95 | off | tox > 0.7, 3 ep freeze | p=0.10 | off |
+| incoherence_short | 0.00 | 1.00 | off | off | off | off |
+| incoherence_medium | 0.00 | 1.00 | off | off | off | off |
+| incoherence_long | 0.00 | 1.00 | off | off | off | off |
 
 Redteam variant differences:
 - **v1**: Original governance parameters
@@ -299,16 +309,23 @@ adversarial collapse.
 
 ### 4.3 Key Observations
 
-**Adversarial red-team progression (v1 -> v2 -> v3):**
-- Acceptance rate declined monotonically: 0.556 -> 0.481 -> 0.455
-- Collapse epoch shifted later: 12 -> 13 -> 14
-- Welfare/epoch degraded: 3.8 -> 3.8 -> 3.5
-- Governance parameter tuning delayed but did not prevent collapse at 50% adversarial fraction
+Three patterns emerge from the summary data that are not obvious from the
+tables alone.
 
-**Collusion detection scenario:**
-- Highest toxicity (0.370) among non-collapsing scenarios
-- Maintained positive welfare (6.3/epoch) despite 37.5% adversarial fraction
-- Collusion detection prevented collapse that occurred in redteam scenarios with higher adversarial fraction
+First, governance tuning across the red-team variants (v1→v2→v3) traded peak
+welfare for survival time: acceptance declined monotonically (0.556→0.455)
+while collapse shifted later (epoch 12→14), indicating that less aggressive
+governance smoothed the degradation trajectory but could not alter its
+endpoint.
+
+Second, collusion detection at 37.5% adversarial fraction achieved higher
+welfare (6.3/epoch) than the baseline (5.0/epoch) despite the highest
+toxicity of any surviving scenario (0.370). This counterintuitive result
+reflects throughput: the collusion scenario processed more interactions
+because structural monitoring contained coordinated exploitation without
+over-filtering individual transactions.
+
+Third, the incoherence series reveals opposing scaling dynamics:
 
 **Incoherence scaling** (related to variance-dominated failure modes [12]):
 
@@ -442,7 +459,19 @@ To validate the adversarial dynamics observed in the simulation scenarios, we
 ran a complementary benchmark (Track A) testing multi-agent problem-solving
 under adversarial interference. Track A evaluates 500 mathematical reasoning
 tasks across 12 conditions, progressively adding architectural layers and
-adversarial agents.
+adversarial agents. The non-adversarial conditions build incrementally:
+**single** uses one solver agent; **diverge** adds a second solver and selects
+the highest-confidence answer; **sda** (solve-diverge-aggregate) extends
+diverge with a reconciliation step when solvers disagree; **critic** adds a
+verification layer that challenges the proposed answer; and **memory** adds a
+retrieval-augmented memory system for pattern reuse across tasks. The
+adversarial conditions introduce agents with fixed strategies: **adv_noise**
+(random perturbation), **adv_confident** (high-confidence wrong answers),
+**adv_strategic** (targeted interference on hard problems),
+**adv_sycophant** (agreement-seeking to shift consensus), **adv_coordinated**
+(two adversaries sharing strategy), **adv_majority** (three adversaries
+outnumbering two solvers), and **adv_memory** (strategic adversary with
+memory access).
 
 | Condition | Accuracy | Adv. Success | Adv. Block | Note |
 |-----------|----------|-------------|-----------|------|
@@ -481,44 +510,42 @@ Full Track A results and figures are available in `runs/swarm_collate/`.
 
 ### 5.1 Regime Transitions and the Adversarial Threshold
 
-The sharpest finding is the existence of a critical adversarial fraction
-between 37.5% and 50%. Below this threshold, ecosystems remained functional
-across all governance configurations tested — the collusion detection scenario
-sustained positive welfare (6.3/epoch) despite 37.5% adversarial agents.
-Above it, all three red-team variants collapsed regardless of parameter
-tuning. This is consistent with the Glosten-Milgrom adverse selection model:
-when the fraction of informed (adversarial) agents exceeds the point at which
-the acceptance mechanism can no longer distinguish signal from noise, the
-ecosystem equivalent of a bid-ask spread widens until cooperation becomes
-unprofitable for honest agents. The monotonic decline in acceptance rate across
-red-team variants (0.556 to 0.455) traces exactly this widening.
+The critical adversarial fraction between 37.5% and 50% maps directly onto
+the Glosten-Milgrom adverse selection model [6]: when the fraction of
+informed (adversarial) agents exceeds the point at which the acceptance
+mechanism can distinguish signal from noise, the ecosystem equivalent of a
+bid-ask spread widens until cooperation becomes unprofitable for honest
+agents. The monotonic decline in acceptance rate across red-team variants
+(0.556→0.455) traces exactly this widening — each governance relaxation
+narrowed the spread slightly but could not close it.
 
-Governance tuning across v1-v3 shifted collapse later by two epochs (12 to 14)
-but could not prevent it. This suggests that parameter optimization within a
-fixed governance architecture has diminishing returns against high adversarial
-pressure. The implication for deployed multi-agent systems is that monitoring
-adversarial fraction is at least as important as tuning governance parameters —
-structural composition matters more than lever calibration once a critical
-threshold is crossed.
+The deeper implication is that parameter optimization within a fixed
+governance architecture has diminishing returns against high adversarial
+pressure. The v1→v3 progression purchased two additional epochs (collapse at
+12 vs. 14) at the cost of lower peak welfare (24.5 vs. 8.7 at epoch 5),
+revealing a Pareto frontier between survival time and throughput that
+collapses entirely above the critical fraction. For deployed systems, this
+means monitoring adversarial composition is at least as important as tuning
+governance parameters.
 
 ### 5.2 Collusion Detection as a Phase-Transition Buffer
 
-The collusion detection scenario is the most governance-intensive non-collapsing
-run. At 37.5% adversarial fraction, it sat just below the collapse threshold
-and exhibited the highest toxicity (0.370) of any surviving scenario. Yet it
-maintained positive welfare because pair-wise frequency monitoring (z-score >
-2.0) and correlation thresholds (> 0.7) disrupted coordinated exploitation
-before it could cascade.
+Collusion detection operates on interaction structure rather than individual
+agents, making it a qualitatively different governance lever from taxes or
+circuit breakers. This distinction explains why the collusion scenario
+survived at 37.5% adversarial fraction while individual-level governance
+alone would not: pair-wise monitoring disrupts coordinated exploitation
+patterns before they cascade, even when individual transactions appear
+legitimate.
 
-This points to collusion detection as a qualitatively different kind of
-governance lever. Transaction taxes and circuit breakers operate on individual
-agents; collusion detection operates on interaction structure. The red-team
-scenarios had collusion detection enabled at a lower correlation threshold
-(0.6) but still collapsed — suggesting that at 50% adversarial fraction, even
-structural monitoring is overwhelmed. The effective range of collusion
-detection appears to be roughly 25-40% adversarial fraction: below 25%,
-individual-level governance suffices; above 40-50%, no tested configuration
-prevented collapse.
+The red-team scenarios had collusion detection at a lower correlation
+threshold (0.6 vs. 0.7) but still collapsed at 50% adversarial fraction,
+bounding the effective range of structural monitoring to roughly 25-40%:
+below 25%, individual governance suffices; above 40-50%, even structural
+monitoring is overwhelmed. This bound may reflect a fundamental information-
+theoretic limit — when adversarial agents constitute half the interaction
+graph, the signal-to-noise ratio in pair-wise patterns drops below what any
+frequency-based detector can resolve.
 
 ### 5.3 The Welfare-Toxicity Trade-off
 
@@ -863,6 +890,8 @@ Behavior. *UIST 2023*.
 |----------|--------|------------|------------------|-----------------------|
 | baseline | 5 | 4.98 | 1.00 | 0.96 |
 | adversarial_redteam_v1 | 8 | 3.80 | 0.48 | 0.56 |
+| adversarial_redteam_v2 | 8 | 3.80 | 0.48 | 0.66 |
+| adversarial_redteam_v3 | 8 | 3.49 | 0.44 | 0.65 |
 | collusion_detection | 8 | 6.29 | 0.79 | 1.50 |
 | emergent_capabilities | 8 | 44.90 | 5.61 | 2.65 |
 | incoherence_short | 3 | 0.99 | 0.33 | 0.29 |
