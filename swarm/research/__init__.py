@@ -21,6 +21,12 @@ from swarm.research.agents import (
     ReviewAgent,
     WritingAgent,
 )
+from swarm.research.annotator import (
+    PaperAnnotation,
+    PaperAnnotator,
+    RiskProfile,
+    TestableClaim,
+)
 from swarm.research.pdf_export import (
     PDFExportError,
     check_pdflatex,
@@ -40,6 +46,7 @@ from swarm.research.reflexivity import (
     ReflexivityAnalyzer,
     ShadowSimulation,
 )
+from swarm.research.scenario_gen import ScenarioGenerator
 from swarm.research.submission import (
     AgentxivValidator,
     SubmissionValidator,
@@ -48,6 +55,8 @@ from swarm.research.submission import (
     submit_with_validation,
     update_with_validation,
 )
+from swarm.research.validation import ValidationResult as PaperValidationResult
+from swarm.research.validation import ValidationWorkflow
 from swarm.research.workflow import ResearchWorkflow, WorkflowConfig
 
 __all__ = [
@@ -92,4 +101,12 @@ __all__ = [
     "get_validator",
     "submit_with_validation",
     "update_with_validation",
+    # AgentXiv bridge (annotator + scenario generation)
+    "PaperAnnotator",
+    "PaperAnnotation",
+    "RiskProfile",
+    "TestableClaim",
+    "ScenarioGenerator",
+    "ValidationWorkflow",
+    "PaperValidationResult",
 ]

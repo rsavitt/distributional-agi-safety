@@ -163,6 +163,25 @@ def parse_governance_config(data: Dict[str, Any]) -> GovernanceConfig:
         collusion_clear_history_on_epoch=data.get(
             "collusion_clear_history_on_epoch", False
         ),
+        # Security detection
+        security_enabled=data.get("security_enabled", False),
+        security_injection_threshold=data.get("security_injection_threshold", 0.3),
+        security_manipulation_threshold=data.get(
+            "security_manipulation_threshold", 0.5
+        ),
+        security_laundering_trust_gap=data.get("security_laundering_trust_gap", 0.3),
+        security_contagion_velocity=data.get("security_contagion_velocity", 2.0),
+        security_min_chain_length=data.get("security_min_chain_length", 3),
+        security_min_interactions=data.get("security_min_interactions", 5),
+        security_penalty_threshold=data.get("security_penalty_threshold", 0.3),
+        security_quarantine_threshold=data.get("security_quarantine_threshold", 0.7),
+        security_penalty_multiplier=data.get("security_penalty_multiplier", 1.0),
+        security_realtime_penalty=data.get("security_realtime_penalty", False),
+        security_realtime_threshold=data.get("security_realtime_threshold", 0.5),
+        security_realtime_rate=data.get("security_realtime_rate", 0.2),
+        security_clear_history_on_epoch=data.get(
+            "security_clear_history_on_epoch", False
+        ),
         # Variance-aware governance
         self_ensemble_enabled=data.get("self_ensemble_enabled", False),
         self_ensemble_samples=data.get("self_ensemble_samples", 5),

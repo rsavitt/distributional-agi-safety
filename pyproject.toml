@@ -62,10 +62,10 @@ dashboard = [
     "plotly>=5.0",
 ]
 bridges = [
-    "swarm-concordia",
-    "swarm-openclaw",
     "swarm-gastown",
-    "swarm-agentxiv",
+]
+concordia = [
+    "concordia>=1.0",
 ]
 docs = [
     "mkdocs-material>=9.5",

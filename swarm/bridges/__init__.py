@@ -1,3 +1,10 @@
-"""SWARM integration bridges for external systems."""
+"""SWARM integration bridges for external systems.
+
+Available bridge subpackages (lazy import to avoid pulling in optional deps):
+
+    swarm.bridges.claude_code  — Claude Code controller bridge
+    swarm.bridges.concordia    — Concordia LLM agent simulation bridge
+    swarm.bridges.openclaw     — REST service layer bridge
+"""
 
 __all__: list[str] = []
