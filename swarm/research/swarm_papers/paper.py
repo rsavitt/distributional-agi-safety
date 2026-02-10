@@ -152,12 +152,20 @@ Future runs should incorporate stronger validators and richer task suites.
 
         df = pd.DataFrame(rows)
         df["Accuracy"] = df["Accuracy"].map(lambda x: f"{x:.3f}")
-        df["Tokens"] = df["Tokens"].map(lambda x: f"{x:.1f}")
+
+        # Hide Tokens column when all values are zero (no LLM solvers)
+        has_tokens = any(r["Tokens"] > 0 for r in rows)
+        if has_tokens:
+            df["Tokens"] = df["Tokens"].map(lambda x: f"{x:.1f}")
+            col_format = "llrl"
+        else:
+            df = df.drop(columns=["Tokens"])
+            col_format = "lll"
 
         latex = df.to_latex(
             index=False,
             escape=True,
-            column_format="llrl",
+            column_format=col_format,
             position="h",
         )
         # Add booktabs rules

@@ -1855,30 +1855,32 @@ class TrackARunner:
         )
         images[fig2_path.name] = _encode_image(fig2_path)
 
-        # Figure 3: Accuracy vs tokens
-        fig3, ax3 = plt.subplots(figsize=(10, 5))
-        ax3.scatter(tokens, accuracies, color="#55A868", s=60)
-        # Stagger annotations to reduce overlap
-        offsets = [(6, 4), (-6, -12), (6, -12), (-6, 4), (10, 0), (-10, 0)]
-        for i, (name, x_val, y_val) in enumerate(zip(names, tokens, accuracies, strict=False)):
-            offset = offsets[i % len(offsets)]
-            ax3.annotate(name, (x_val, y_val), textcoords="offset points", xytext=offset, fontsize=7)
-        ax3.set_xlabel("Avg Tokens")
-        ax3.set_ylabel("Accuracy")
-        ax3.set_title("Efficiency Tradeoff")
-        ax3.grid(True, linestyle="--", alpha=0.4)
-        fig3.tight_layout()
-        fig3_path = self.output_dir / "figure_efficiency.png"
-        fig3.savefig(fig3_path, dpi=150)
-        plt.close(fig3)
+        # Figure 3: Accuracy vs tokens (skip when no LLM solvers)
+        has_token_data = any(t > 0 for t in tokens)
+        if has_token_data:
+            fig3, ax3 = plt.subplots(figsize=(10, 5))
+            ax3.scatter(tokens, accuracies, color="#55A868", s=60)
+            # Stagger annotations to reduce overlap
+            offsets = [(6, 4), (-6, -12), (6, -12), (-6, 4), (10, 0), (-10, 0)]
+            for i, (name, x_val, y_val) in enumerate(zip(names, tokens, accuracies, strict=False)):
+                offset = offsets[i % len(offsets)]
+                ax3.annotate(name, (x_val, y_val), textcoords="offset points", xytext=offset, fontsize=7)
+            ax3.set_xlabel("Avg Tokens")
+            ax3.set_ylabel("Accuracy")
+            ax3.set_title("Efficiency Tradeoff")
+            ax3.grid(True, linestyle="--", alpha=0.4)
+            fig3.tight_layout()
+            fig3_path = self.output_dir / "figure_efficiency.png"
+            fig3.savefig(fig3_path, dpi=150)
+            plt.close(fig3)
 
-        figures.append(
-            PaperFigure(
-                filename=fig3_path.name,
-                caption="Accuracy vs average token cost.",
+            figures.append(
+                PaperFigure(
+                    filename=fig3_path.name,
+                    caption="Accuracy vs average token cost.",
+                )
             )
-        )
-        images[fig3_path.name] = _encode_image(fig3_path)
+            images[fig3_path.name] = _encode_image(fig3_path)
 
         if summary.family_metrics:
             fig4, ax4 = plt.subplots(figsize=(12, 8))
