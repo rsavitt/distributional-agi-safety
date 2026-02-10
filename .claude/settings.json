@@ -24,6 +24,12 @@
             "command": "bash .claude/hooks/post_write_gitignore_check.sh",
             "timeout": 10,
             "statusMessage": "Checking gitignore coverage"
+          },
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/post_write_lint_check.sh",
+            "timeout": 15,
+            "statusMessage": "Linting Python file"
           }
         ]
       },
@@ -41,6 +47,12 @@
             "command": "bash .claude/hooks/post_write_gitignore_check.sh",
             "timeout": 10,
             "statusMessage": "Checking gitignore coverage"
+          },
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/post_write_lint_check.sh",
+            "timeout": 15,
+            "statusMessage": "Linting Python file"
           }
         ]
       }
