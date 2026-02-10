@@ -8,22 +8,35 @@
 
 We study governance trade-offs in multi-agent AI systems using a probabilistic
 simulation framework that replaces binary safety labels with calibrated soft
-scores p = P(v = +1). Across 11 scenarios (209 total epochs, 81 agent-slots),
-we find that ecosystem outcomes cluster into three regimes: cooperative
-(acceptance > 0.93, toxicity < 0.30), contested (acceptance 0.42-0.94, toxicity
-0.33-0.37), and adversarial collapse (acceptance < 0.56, collapse by epoch
-12-14). Collapse occurred exclusively when adversarial fraction reached 50%,
-and governance tuning delayed but did not prevent it — shifting collapse from
-epoch 12 to 14 across three red-team variants. Collusion detection proved
-critical: a scenario with 37.5% adversarial agents avoided collapse entirely
-when pair-wise frequency and correlation monitoring were enabled, while
-comparable scenarios without it collapsed. Incoherence metrics scaled
-sub-linearly with agent count, while welfare scaled super-linearly, suggesting
-that larger cooperative populations are disproportionately productive but also
-harder to monitor. These results formalize the intuition from market
-microstructure theory that adverse selection in agent ecosystems is
-regime-dependent: governance interventions that suffice under moderate
-adversarial pressure fail abruptly beyond a critical threshold.
+scores p = P(v = +1). Across 11 scenarios (209 total epochs, 81 agent-slots)
+and a complementary 500-task benchmark, we find that ecosystem outcomes
+cluster into three regimes: cooperative (acceptance > 0.93, toxicity < 0.30),
+contested (acceptance 0.42-0.94, toxicity 0.33-0.37), and adversarial
+collapse (acceptance < 0.56, collapse by epoch 12-14). Collapse occurred
+exclusively when adversarial fraction reached 50%, and governance tuning
+delayed but did not prevent it — shifting collapse from epoch 12 to 14 across
+three red-team variants. Epoch-by-epoch analysis reveals the collapse
+mechanism: a cascading rejection spiral in which acceptance rate drops below
+~25%, reducing interaction volume below the threshold needed to sustain
+positive welfare. Quality gap — the difference in expected interaction quality
+between accepted and rejected interactions — acts as a leading indicator,
+remaining persistently elevated (0.19-0.21) in collapsing scenarios versus
+episodic in stable ones. Collusion detection proved critical: a scenario with
+37.5% adversarial agents avoided collapse entirely when pair-wise frequency
+and correlation monitoring were enabled. In cooperative regimes, capability
+complementarity and network amplification drove welfare to 44.9/epoch (9x
+the baseline), demonstrating that multi-agent systems can achieve outsized
+returns when adversarial pressure is absent. Incoherence metrics scaled
+sub-linearly with agent count, while welfare scaled super-linearly (~n^1.9),
+suggesting that larger cooperative populations are disproportionately
+productive but also harder to monitor. A multi-agent problem-solving benchmark
+(Track A) validates these dynamics: a single adversarial agent reduces
+accuracy by 20-24%, and adversary-majority conditions produce the lowest
+accuracy (0.702), paralleling the simulation's critical threshold. These
+results formalize the intuition from market microstructure theory that adverse
+selection in agent ecosystems is regime-dependent: governance interventions
+that suffice under moderate adversarial pressure fail abruptly beyond a
+critical threshold.
 
 ## 1. Introduction
 
@@ -264,12 +277,17 @@ acceptance threshold admits borderline interactions.
 
 Quality gap = E[p|accepted] - E[p|rejected]. Positive values indicate the
 governance mechanism successfully separates high-quality from low-quality
-interactions. Dashes indicate scenarios where quality gap was not logged in
-the epoch event stream (all interactions accepted, or event logs not
-retained). The adversarial scenarios show persistently elevated quality gaps
-(0.19-0.21), reflecting the governance mechanism's attempt to filter
-adversarial interactions — but the sustained pressure ultimately overwhelms
-this filtering capacity, leading to collapse.
+interactions. Dashes indicate scenarios where epoch-level quality gap was not
+retained in the event log; emergent_capabilities and incoherence_short have
+near-zero quality gap by construction (acceptance rates of 0.998 and 1.000
+leave too few rejected interactions for meaningful computation).
+The adversarial scenarios show persistently elevated quality gaps (0.19-0.21),
+reflecting the governance mechanism's attempt to filter adversarial
+interactions — but the sustained pressure ultimately overwhelms this filtering
+capacity, leading to collapse. The marketplace (0.247) and network (0.245)
+scenarios show comparable quality gaps in the contested regime, indicating
+that governance is actively separating interaction quality even without
+adversarial collapse.
 
 ### 4.2 Regime Classification
 
@@ -313,8 +331,9 @@ stronger than the ~n^1.9 observed.
 ### 4.4 Collapse Dynamics
 
 Epoch-by-epoch analysis of the three red-team variants reveals the mechanism
-of collapse, not just its timing. Table 4.4a shows welfare trajectories for
-the critical pre-collapse window.
+of collapse, not just its timing. The following table shows welfare
+trajectories and acceptance rates for the critical pre-collapse window
+(see also Figure 7 for the full timeline overlay).
 
 | Epoch | v1 Welfare | v1 Accept% | v2 Welfare | v2 Accept% | v3 Welfare | v3 Accept% |
 |-------|-----------|-----------|-----------|-----------|-----------|-----------|
@@ -519,6 +538,8 @@ that the welfare cost of adversarial pressure is not linear but
 multiplicative: each adversarial agent degrades not just its own interactions
 but the productivity of the surrounding cooperative network.
 
+### 5.4 Emergent Capabilities and the Cooperative Ceiling
+
 The emergent capabilities result merits closer examination. The scenario
 deployed 8 agents — 6 honest with specialized capabilities (research/analysis,
 planning/execution, verification/communication) and 2 opportunistic
@@ -554,14 +575,16 @@ This scenario demonstrates that the welfare ceiling of cooperative multi-agent
 systems is far higher than contested or adversarial scenarios suggest. The
 ratio of emergent-to-baseline welfare (44.9/5.0 = 9.0x) with only 60% more
 agents (8 vs. 5) implies that the composition and capability structure of the
-agent population matters at least as much as its size. The practical
-implication is that multi-agent system designers can achieve outsized welfare
-gains by investing in capability diversity and cooperative infrastructure —
-but these gains are fragile, as even small adversarial fractions (the
-baseline's 20% deceptive agent reduces welfare by 89%) can dramatically
-reduce the cooperative surplus.
+agent population matters at least as much as its size — though this comparison
+is confounded by differences in network topology (complete vs. none),
+governance parameters (5 levers vs. 0), and agent composition (0% vs. 20%
+adversarial). The practical implication is that multi-agent system designers
+can achieve outsized welfare gains by investing in capability diversity and
+cooperative infrastructure, but these gains are fragile: introducing even
+moderate adversarial pressure dramatically reduces cooperative surplus, as
+the contested regime scenarios demonstrate.
 
-### 5.4 Incoherence and Scale
+### 5.5 Incoherence and Scale
 
 The incoherence series (3, 6, 10 agents) reveals two scaling dynamics,
 consistent with Anthropic's "hot mess" framing of variance-dominated failure
@@ -581,7 +604,7 @@ multi-agent systems, but it also raises the stakes of the adversarial
 threshold: a collapse in a large ecosystem destroys disproportionately more
 value.
 
-### 5.5 Implications for Multi-Agent System Design
+### 5.6 Implications for Multi-Agent System Design
 
 These results suggest three practical design principles:
 
@@ -603,7 +626,7 @@ These results suggest three practical design principles:
    that tightens as adversarial indicators rise would better track the
    operating regime.
 
-### 5.6 Future Work
+### 5.7 Future Work
 
 Several directions follow naturally from these findings:
 
@@ -832,7 +855,7 @@ Based on observed data, the regime boundaries can be approximated as:
 | Collusion-buffered ceiling | ~37.5% | Collusion detection active | Toxicity > 0.35 but welfare positive |
 
 Note: These boundaries are estimated from single-seed runs and should be
-validated with multi-seed sweeps (see Section 5.6).
+validated with multi-seed sweeps (see Section 5.7).
 
 ---
 
