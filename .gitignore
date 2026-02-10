@@ -44,7 +44,7 @@ credentials/
 
 # Relocated directories (prevent re-creation at root)
 submissions/
-bridges/
+/bridges/
 swarm-api/
 examples/demo/
 
