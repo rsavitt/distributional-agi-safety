@@ -350,11 +350,12 @@ but the productivity of the surrounding cooperative network.
 
 ### 4.4 Incoherence and Scale
 
-The incoherence series (3, 6, 10 agents) reveals two scaling dynamics. Toxicity
-saturated quickly: it jumped from 0.183 to 0.343 between 3 and 6 agents, then
-plateaued at 0.341 for 10 agents. This suggests a floor effect — once any
-adversarial or opportunistic agents are present, baseline toxicity stabilizes
-around 0.34 regardless of further scaling. Acceptance rate, by contrast,
+The incoherence series (3, 6, 10 agents) reveals two scaling dynamics,
+consistent with Anthropic's "hot mess" framing of variance-dominated failure
+[12]. Toxicity saturated quickly: it jumped from 0.183 to 0.343 between 3
+and 6 agents, then plateaued at 0.341 for 10 agents. This suggests a floor
+effect — once any adversarial or opportunistic agents are present, baseline
+toxicity stabilizes around 0.34 regardless of further scaling. Acceptance rate, by contrast,
 declined steadily (1.000 to 0.940 to 0.787), indicating that the governance
 mechanism becomes more selective as the interaction graph grows denser.
 
