@@ -106,6 +106,18 @@ Run the demo:
 python examples/mvp_demo.py
 ```
 
+### Interactive Notebook
+
+The **[quickstart notebook](examples/quickstart.ipynb)** runs two scenarios end-to-end in ~5 minutes with no API keys: a cooperative baseline and an adversarial red-team that collapses around epoch 12. Includes diagnostic plots and a per-agent payoff breakdown.
+
+```bash
+jupyter notebook examples/quickstart.ipynb
+```
+
+### Blog Post
+
+For a narrative walkthrough of our findings across 11 scenarios — including the phase transition at 37.5-50% adversarial fraction, why governance tuning delays but doesn't prevent collapse, and why collusion detection is the critical lever — see the **[blog post](docs/posts/swarm_blog_post.md)**.
+
 ## CLI Quick Start
 
 Run simulations directly from the command line:
