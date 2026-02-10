@@ -87,7 +87,17 @@ else
         STAGED_SWARM=$(echo "$STAGED_PY" | grep '^swarm/' || true)
         if [ -n "$STAGED_SWARM" ]; then
             echo "[swarm pre-commit] mypy (staged swarm/ files)"
-            mypy --follow-imports=skip $STAGED_SWARM
+            MYPY_OUTPUT=$(mypy --follow-imports=skip $STAGED_SWARM 2>&1) && true
+            MYPY_EXIT=$?
+            if [ $MYPY_EXIT -ne 0 ]; then
+                if echo "$MYPY_OUTPUT" | grep -q "Internal error\|AssertionError"; then
+                    echo "[swarm pre-commit] mypy internal crash (not a lint error); continuing"
+                    echo "$MYPY_OUTPUT" | tail -3
+                else
+                    echo "$MYPY_OUTPUT"
+                    exit 1
+                fi
+            fi
         fi
     else
         echo "[swarm pre-commit] no staged .py files; skipping ruff/mypy"

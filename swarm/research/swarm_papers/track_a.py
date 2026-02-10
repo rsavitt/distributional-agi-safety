@@ -14,6 +14,7 @@ from pathlib import Path
 from statistics import mean
 
 from swarm.research.pdf_export import PDFExportError, paper_to_pdf
+from swarm.research.platforms import Paper
 from swarm.research.swarm_papers.agentrxiv_bridge import AgentRxivBridge
 from swarm.research.swarm_papers.memory import (
     BasicAudit,
@@ -29,7 +30,33 @@ from swarm.research.swarm_papers.paper import (
     PaperBuilder,
     PaperContext,
     PaperFigure,
+    RelatedWorkItem,
 )
+
+
+def _build_related_work(
+    papers: list[Paper],
+) -> tuple[list[RelatedWorkItem], str]:
+    """Convert AgentRxiv papers to RelatedWorkItem list and BibTeX string."""
+    items: list[RelatedWorkItem] = []
+    bib_lines: list[str] = []
+    for i, paper in enumerate(papers):
+        cite_key = f"agentrxiv{i + 1}"
+        items.append(
+            RelatedWorkItem(
+                title=paper.title or "Untitled",
+                cite_key=cite_key,
+                paper_id=paper.paper_id or "",
+            )
+        )
+        bib_lines.append(
+            f"@misc{{{cite_key},\n"
+            f"  title = {{{paper.title or 'Untitled'}}},\n"
+            f"  note = {{AgentRxiv: {paper.paper_id or 'unknown'}}},\n"
+            f"}}"
+        )
+    return items, "\n\n".join(bib_lines)
+
 
 try:  # optional dependency
     from swarm.agents.llm_config import LLMConfig, LLMProvider
@@ -151,10 +178,12 @@ class RunSummary:
     task_count: int
     conditions: list[ConditionMetrics]
     memory_artifacts: list[MemoryArtifact]
-    related_work: list[str]
-    family_metrics: dict[str, dict[str, float]]
+    related_work: list["RelatedWorkItem"]
+    bib_entries: str
+    family_metrics: dict[str, dict[str, dict[str, float]]]
     critique_summary: CritiqueSummary
     reputation_summary: dict[str, dict[str, float]]
+    reputation_drift: list[dict[str, object]]
 
 
 @dataclass
@@ -749,6 +778,9 @@ class SimpleCritic:
             return "missing answer"
 
         if task.metadata.get("family") == "logic_grid":
+            options = task.metadata.get("options", [])
+            if options and any(ans not in {opt.lower() for opt in options} for ans in answers):
+                return "invalid entity for logic grid"
             if len(set(answers)) > 1:
                 return "logic grid inconsistency"
             return None
@@ -759,6 +791,29 @@ class SimpleCritic:
                 numeric_answers.append(float(ans))
             except Exception:
                 return "non-numeric answer in numeric task"
+
+        family = task.metadata.get("family", "numeric")
+        expr = task.metadata.get("expression", "")
+        expected = _safe_eval(expr) if expr else None
+
+        if expected is not None:
+            diffs = [abs(val - expected) for val in numeric_answers]
+            if all(diff > 1e-3 for diff in diffs):
+                if family == "symbolic":
+                    return "symbolic evaluation mismatch"
+                if family == "algebra":
+                    return "no solver matches derived solution"
+                return "derived-solution mismatch"
+
+            if expected.is_integer():
+                if any(abs(val - round(val)) > 1e-6 for val in numeric_answers):
+                    if family in ("arithmetic", "word"):
+                        return "non-integer answer for integer arithmetic"
+                    if family == "algebra":
+                        return "non-integer solution for linear equation"
+
+        if family == "word" and any(val < 0 for val in numeric_answers):
+            return "negative answer in word problem"
 
         spread = max(numeric_answers) - min(numeric_answers)
         top_conf = sorted((sol.confidence for sol in solutions), reverse=True)
@@ -877,6 +932,8 @@ class TrackARunner:
         self._agentrxiv_cache: list[MemoryArtifact] = []
         self._agentrxiv_loaded = False
         self.reputation = ReputationTracker()
+        self._reputation_history: list[dict[str, object]] = []
+        self._episode_index = 0
 
     def run(self) -> RunSummary:
         tasks = TrackATaskGenerator(self.config.seed).generate(
@@ -885,17 +942,14 @@ class TrackARunner:
         baseline_acc = None
         condition_metrics: list[ConditionMetrics] = []
         memory_artifacts: list[MemoryArtifact] = []
-        family_metrics: dict[str, dict[str, float]] = {}
+        family_metrics: dict[str, dict[str, dict[str, float]]] = {}
         all_logs: list[EpisodeLog] = []
 
-        related_work = []
+        related_work: list[RelatedWorkItem] = []
+        bib_entries = ""
         if self.agentrxiv and self.agentrxiv.available():
-            related_work = [
-                f"{paper.title or 'Untitled'} ({paper.paper_id})"
-                for paper in self.agentrxiv.related_work(
-                    self.config.query, limit=5
-                )
-            ]
+            papers = self.agentrxiv.related_work(self.config.query, limit=5)
+            related_work, bib_entries = _build_related_work(papers)
 
         for condition in self.config.conditions:
             logs = self._run_condition(condition, tasks)
@@ -916,9 +970,11 @@ class TrackARunner:
             conditions=condition_metrics,
             memory_artifacts=memory_artifacts,
             related_work=related_work,
+            bib_entries=bib_entries,
             family_metrics=family_metrics,
             critique_summary=self._summarize_critiques(all_logs),
             reputation_summary=self.reputation.snapshot(),
+            reputation_drift=self._reputation_history,
         )
         self._write_summary(summary)
         self._write_paper(summary)
@@ -1025,6 +1081,7 @@ class TrackARunner:
             logs.append(log)
             self._append_episode(log)
             self.reputation.update(solutions, task.answer)
+            self._record_reputation(condition.name)
 
         return logs
 
@@ -1229,7 +1286,15 @@ class TrackARunner:
                 for cond in summary.conditions
             ],
             "memory_artifacts": [artifact.to_dict() for artifact in summary.memory_artifacts],
-            "related_work": summary.related_work,
+            "related_work": [
+                {
+                    "title": item.title,
+                    "cite_key": item.cite_key,
+                    "paper_id": item.paper_id,
+                }
+                for item in summary.related_work
+            ],
+            "bib_entries": summary.bib_entries,
             "family_metrics": summary.family_metrics,
             "critique_summary": {
                 "total_flags": summary.critique_summary.total_flags,
@@ -1237,6 +1302,7 @@ class TrackARunner:
                 "top_reasons": summary.critique_summary.top_reasons,
             },
             "reputation_summary": summary.reputation_summary,
+            "reputation_drift": summary.reputation_drift,
         }
         self.summary_path.write_text(json.dumps(payload, indent=2))
 
@@ -1267,12 +1333,16 @@ class TrackARunner:
             memory_items=summary.memory_artifacts,
             critique_summary=summary.critique_summary,
             family_metrics=summary.family_metrics,
+            bib=summary.bib_entries,
             figures=figures,
             images=images,
         )
         paper = builder.build(context)
         tex_path = self.output_dir / "paper.tex"
         tex_path.write_text(paper.source)
+        if summary.bib_entries:
+            bib_path = self.output_dir / "references.bib"
+            bib_path.write_text(summary.bib_entries)
 
         if self.config.enable_pdf:
             try:
@@ -1377,7 +1447,13 @@ class TrackARunner:
             for cond in conditions:
                 row = []
                 for family in families:
-                    row.append(summary.family_metrics.get(cond, {}).get(family, 0.0))
+                    # Access nested structure: {condition: {family: {metric: value}}}
+                    family_data = summary.family_metrics.get(cond, {}).get(family, {})
+                    if isinstance(family_data, dict):
+                        row.append(family_data.get("accuracy", 0.0))
+                    else:
+                        # Backward compatibility with old float format
+                        row.append(float(family_data) if family_data else 0.0)
                 matrix.append(row)
             im = ax4.imshow(matrix, vmin=0.0, vmax=1.0, cmap="Blues")
             ax4.set_xticks(range(len(families)))
@@ -1402,21 +1478,56 @@ class TrackARunner:
             )
             images[fig4_path.name] = _encode_image(fig4_path)
 
+        if summary.reputation_drift:
+            fig5, ax5 = plt.subplots(figsize=(7, 3.6))
+            series = _build_reputation_series(summary.reputation_drift)
+            for label, points in series.items():
+                xs = [p[0] for p in points]
+                ys = [p[1] for p in points]
+                ax5.plot(xs, ys, label=label)
+            ax5.set_xlabel("Episode")
+            ax5.set_ylabel("EMA Accuracy")
+            ax5.set_title("Reputation Drift Over Episodes")
+            ax5.set_ylim(0.0, 1.0)
+            ax5.grid(True, linestyle="--", alpha=0.4)
+            ax5.legend(fontsize=7, ncol=2, frameon=False)
+            fig5.tight_layout()
+            fig5_path = self.output_dir / "figure_reputation_drift.png"
+            fig5.savefig(fig5_path, dpi=150)
+            plt.close(fig5)
+
+            figures.append(
+                PaperFigure(
+                    filename=fig5_path.name,
+                    caption="EMA reputation trajectories for key solvers/roles.",
+                )
+            )
+            images[fig5_path.name] = _encode_image(fig5_path)
+
         return figures, images
 
-    def _compute_family_metrics(self, logs: list[EpisodeLog]) -> dict[str, float]:
-        family_totals: dict[str, list[int]] = {}
+    def _compute_family_metrics(self, logs: list[EpisodeLog]) -> dict[str, dict[str, float]]:
+        """Compute per-family metrics including accuracy and token efficiency."""
+        family_totals: dict[str, list] = {}  # [correct, total, tokens]
         for log in logs:
             family = log.family or "unknown"
             if family not in family_totals:
-                family_totals[family] = [0, 0]
+                family_totals[family] = [0, 0, 0]
             family_totals[family][1] += 1
+            family_totals[family][2] += log.tokens
             if log.correct:
                 family_totals[family][0] += 1
-        return {
-            family: (counts[0] / counts[1]) if counts[1] else 0.0
-            for family, counts in family_totals.items()
-        }
+
+        result: dict[str, dict[str, float]] = {}
+        for family, (correct, total, tokens) in family_totals.items():
+            accuracy = correct / total if total else 0.0
+            # Token efficiency: correct answers per 1000 tokens
+            token_eff = (correct / tokens * 1000) if tokens > 0 else 0.0
+            result[family] = {
+                "accuracy": accuracy,
+                "token_eff": token_eff,
+            }
+        return result
 
     def _summarize_critiques(self, logs: list[EpisodeLog]) -> CritiqueSummary:
         total = len(logs)
@@ -1435,6 +1546,22 @@ class TrackARunner:
             flag_rate=len(flagged) / total,
             top_reasons=top_reasons,
         )
+
+    def _record_reputation(self, condition_name: str) -> None:
+        snapshot = {
+            "episode": self._episode_index,
+            "condition": condition_name,
+            "solvers": {},
+            "roles": {},
+        }
+        for key in ("precise", "creative", "adversary"):
+            if key in self.reputation.solver_stats:
+                snapshot["solvers"][key] = self.reputation.solver_stats[key].ema_accuracy
+        for key in ("precise solver", "creative solver", "adversary"):
+            if key in self.reputation.role_stats:
+                snapshot["roles"][key] = self.reputation.role_stats[key].ema_accuracy
+        self._reputation_history.append(snapshot)
+        self._episode_index += 1
 
 
 def _safe_eval(expr: str) -> float:
@@ -1622,11 +1749,18 @@ def _majority_answer(solutions: list[Solution]) -> str | None:
     return max(counts.items(), key=lambda item: item[1])[0]
 
 
-def _family_order(family_metrics: dict[str, dict[str, float]]) -> list[str]:
+def _family_order(family_metrics: dict[str, dict[str, dict[str, float]]]) -> list[str]:
+    """Extract and order family names from nested metrics structure."""
     preferred = ["arithmetic", "algebra", "logic_grid", "symbolic", "word"]
     families = set()
-    for metrics in family_metrics.values():
-        families.update(metrics.keys())
+    for condition_metrics in family_metrics.values():
+        # condition_metrics is {family: {metric: value}}
+        for family_name, family_data in condition_metrics.items():
+            # Skip if this is actually a metric key (backward compat check)
+            if isinstance(family_data, dict):
+                families.add(family_name)
+            elif family_name not in ("accuracy", "token_eff"):
+                families.add(family_name)
     ordered = [fam for fam in preferred if fam in families]
     remainder = sorted(fam for fam in families if fam not in ordered)
     return ordered + remainder
@@ -1634,6 +1768,25 @@ def _family_order(family_metrics: dict[str, dict[str, float]]) -> list[str]:
 
 def _family_label(family: str) -> str:
     return "logic" if family == "logic_grid" else family
+
+
+def _build_reputation_series(
+    history: list[dict[str, object]],
+) -> dict[str, list[tuple[int, float]]]:
+    series: dict[str, list[tuple[int, float]]] = {}
+    for snapshot in history:
+        episode = int(snapshot.get("episode", 0))
+        solvers = snapshot.get("solvers", {})
+        roles = snapshot.get("roles", {})
+        if isinstance(solvers, dict):
+            for name, value in solvers.items():
+                label = f"solver:{name}"
+                series.setdefault(label, []).append((episode, float(value)))
+        if isinstance(roles, dict):
+            for name, value in roles.items():
+                label = f"role:{name}"
+                series.setdefault(label, []).append((episode, float(value)))
+    return series
 
 
 def _clamp(value: float) -> float:
@@ -1659,3 +1812,33 @@ def _adjust_llm_config(config: "LLMConfig", temperature: float) -> "LLMConfig":
         prompt_audit_hash_system_prompt=config.prompt_audit_hash_system_prompt,
         prompt_audit_max_chars=config.prompt_audit_max_chars,
     )
+
+
+def _build_related_work(papers: list) -> tuple[list[RelatedWorkItem], str]:
+    """Convert papers from AgentRxiv to RelatedWorkItem objects and BibTeX."""
+    items: list[RelatedWorkItem] = []
+    bib_lines: list[str] = []
+
+    for paper in papers:
+        paper_id = getattr(paper, "paper_id", "") or ""
+        title = getattr(paper, "title", "") or "Untitled"
+        # Create a cite key from paper_id or title
+        cite_key = paper_id.replace("-", "_") if paper_id else title[:20].replace(" ", "_").lower()
+
+        items.append(RelatedWorkItem(
+            title=title,
+            cite_key=cite_key,
+            paper_id=paper_id,
+        ))
+
+        # Generate BibTeX entry
+        authors = getattr(paper, "authors", "") or "Unknown"
+        year = getattr(paper, "year", "") or datetime.now().year
+        bib_lines.append(f"""@article{{{cite_key},
+  title = {{{title}}},
+  author = {{{authors}}},
+  year = {{{year}}},
+  note = {{AgentRxiv: {paper_id}}},
+}}""")
+
+    return items, "\n\n".join(bib_lines)
