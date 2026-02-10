@@ -4,7 +4,34 @@
       "Bash(ruff:*)",
       "Bash(mypy:*)",
       "Bash(git status)",
-      "Bash(git diff:*)"
+      "Bash(git diff:*)",
+      "Bash(bash .claude/hooks/scan_secrets.sh:*)"
+    ]
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/post_write_secrets_check.sh",
+            "timeout": 10,
+            "statusMessage": "Scanning for secrets"
+          }
+        ]
+      },
+      {
+        "matcher": "Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/post_write_secrets_check.sh",
+            "timeout": 10,
+            "statusMessage": "Scanning for secrets"
+          }
+        ]
+      }
     ]
   }
 }

@@ -87,6 +87,40 @@ class TestParseGovernanceConfig:
         assert config.audit_penalty_multiplier == 3.0
         assert config.audit_threshold_p == 0.6
 
+    def test_parses_security(self):
+        """Should parse security detection settings."""
+        data = {
+            "security_enabled": True,
+            "security_injection_threshold": 0.35,
+            "security_manipulation_threshold": 0.6,
+            "security_laundering_trust_gap": 0.3,
+            "security_contagion_velocity": 2.0,
+            "security_min_chain_length": 3,
+            "security_min_interactions": 5,
+            "security_penalty_threshold": 0.35,
+            "security_quarantine_threshold": 0.7,
+            "security_penalty_multiplier": 1.2,
+            "security_realtime_penalty": True,
+            "security_realtime_threshold": 0.6,
+            "security_realtime_rate": 0.2,
+            "security_clear_history_on_epoch": False,
+        }
+        config = parse_governance_config(data)
+        assert config.security_enabled
+        assert config.security_injection_threshold == pytest.approx(0.35)
+        assert config.security_manipulation_threshold == pytest.approx(0.6)
+        assert config.security_laundering_trust_gap == pytest.approx(0.3)
+        assert config.security_contagion_velocity == pytest.approx(2.0)
+        assert config.security_min_chain_length == 3
+        assert config.security_min_interactions == 5
+        assert config.security_penalty_threshold == pytest.approx(0.35)
+        assert config.security_quarantine_threshold == pytest.approx(0.7)
+        assert config.security_penalty_multiplier == pytest.approx(1.2)
+        assert config.security_realtime_penalty
+        assert config.security_realtime_threshold == pytest.approx(0.6)
+        assert config.security_realtime_rate == pytest.approx(0.2)
+        assert not config.security_clear_history_on_epoch
+
     def test_validates_config(self):
         """Should raise on invalid config values."""
         data = {"transaction_tax_rate": 1.5}  # Invalid: > 1.0
@@ -267,6 +301,56 @@ simulation:
             assert gov.freeze_threshold_toxicity == 0.5
             assert gov.audit_enabled
             assert gov.audit_probability == 0.2
+
+    def test_loads_security_governance_from_yaml(self):
+        """Should parse security_* governance fields from YAML."""
+        yaml_content = """
+scenario_id: test_security
+agents:
+  - type: honest
+    count: 1
+
+governance:
+  security_enabled: true
+  security_injection_threshold: 0.35
+  security_manipulation_threshold: 0.6
+  security_laundering_trust_gap: 0.3
+  security_contagion_velocity: 2.0
+  security_min_chain_length: 3
+  security_min_interactions: 5
+  security_penalty_threshold: 0.35
+  security_quarantine_threshold: 0.7
+  security_penalty_multiplier: 1.2
+  security_realtime_penalty: true
+  security_realtime_threshold: 0.6
+  security_realtime_rate: 0.2
+  security_clear_history_on_epoch: false
+
+simulation:
+  n_epochs: 1
+  steps_per_epoch: 1
+"""
+        with NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
+            f.write(yaml_content)
+            f.flush()
+
+            scenario = load_scenario(Path(f.name))
+
+            gov = scenario.orchestrator_config.governance_config
+            assert gov.security_enabled
+            assert gov.security_injection_threshold == pytest.approx(0.35)
+            assert gov.security_manipulation_threshold == pytest.approx(0.6)
+            assert gov.security_laundering_trust_gap == pytest.approx(0.3)
+            assert gov.security_contagion_velocity == pytest.approx(2.0)
+            assert gov.security_min_chain_length == 3
+            assert gov.security_min_interactions == 5
+            assert gov.security_penalty_threshold == pytest.approx(0.35)
+            assert gov.security_quarantine_threshold == pytest.approx(0.7)
+            assert gov.security_penalty_multiplier == pytest.approx(1.2)
+            assert gov.security_realtime_penalty
+            assert gov.security_realtime_threshold == pytest.approx(0.6)
+            assert gov.security_realtime_rate == pytest.approx(0.2)
+            assert not gov.security_clear_history_on_epoch
 
     def test_loads_observation_noise_from_yaml(self):
         """Should parse observation noise simulation settings."""

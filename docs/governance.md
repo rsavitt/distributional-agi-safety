@@ -143,6 +143,32 @@ Run the collusion detection scenario:
 python examples/run_scenario.py scenarios/collusion_detection.yaml
 ```
 
+## Security Detection
+
+Security detection flags injection, manipulation, laundering, and contagion
+patterns in interaction chains. It can apply penalties, quarantine agents,
+and optionally enforce real-time penalties on high-risk interactions.
+
+### Security YAML Configuration
+
+```yaml
+governance:
+  security_enabled: true
+  security_injection_threshold: 0.35
+  security_manipulation_threshold: 0.6
+  security_laundering_trust_gap: 0.3
+  security_contagion_velocity: 2.0
+  security_min_chain_length: 3
+  security_min_interactions: 5
+  security_penalty_threshold: 0.35
+  security_quarantine_threshold: 0.7
+  security_penalty_multiplier: 1.2
+  security_realtime_penalty: true
+  security_realtime_threshold: 0.6
+  security_realtime_rate: 0.2
+  security_clear_history_on_epoch: false
+```
+
 ## Sybil Detection
 
 The Sybil detection system identifies agents that appear to be controlled by the same entity, using behavioral similarity analysis of interaction patterns. Inspired by the identity infrastructure proposed in [Tomasev et al. (2025)](https://arxiv.org/abs/2509.10147).

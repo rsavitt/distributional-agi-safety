@@ -54,6 +54,29 @@ Configuration for all governance levers.
 | `collusion_detection` | bool | False | Enable detection |
 | `collusion_threshold` | float | 0.8 | Correlation threshold |
 
+## Security YAML Keys
+
+Security detection can be configured via scenario YAML using the `security_*`
+governance keys below:
+
+```yaml
+governance:
+  security_enabled: true
+  security_injection_threshold: 0.35
+  security_manipulation_threshold: 0.6
+  security_laundering_trust_gap: 0.3
+  security_contagion_velocity: 2.0
+  security_min_chain_length: 3
+  security_min_interactions: 5
+  security_penalty_threshold: 0.35
+  security_quarantine_threshold: 0.7
+  security_penalty_multiplier: 1.2
+  security_realtime_penalty: true
+  security_realtime_threshold: 0.6
+  security_realtime_rate: 0.2
+  security_clear_history_on_epoch: false
+```
+
 ## Individual Levers
 
 ### TransactionTax
