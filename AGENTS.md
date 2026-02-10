@@ -9,6 +9,11 @@ This repo maintains task-focused LLM agent personas in `.claude/agents/*.md`. Us
 - Red-teaming and adversarial strategies: `Adversary Designer`
 - Reproducibility, benchmarks, and hygiene: `Reproducibility Sheriff`
 
+## Hooks
+- Pre-commit runs from `.claude/hooks/pre-commit` via `.git/hooks/pre-commit`.
+- If `pre-commit` is installed, the hook runs `.pre-commit-config.yaml` hooks; otherwise it falls back to inline ruff/mypy.
+- Set `SKIP_SWARM_HOOKS=1` to bypass the hook.
+
 ## Scenario Architect
 Focus: designs scenarios that isolate a single mechanism and are easy to reproduce.
 Optimizes for:

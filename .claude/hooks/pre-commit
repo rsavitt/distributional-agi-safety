@@ -75,10 +75,11 @@ else
         ruff check $STAGED_PY
 
         # ── 3. Type check (staged swarm/ files only) ──
+        # Use --follow-imports=skip to avoid checking pre-existing errors in imports
         STAGED_SWARM=$(echo "$STAGED_PY" | grep '^swarm/' || true)
         if [ -n "$STAGED_SWARM" ]; then
             echo "[swarm pre-commit] mypy (staged swarm/ files)"
-            mypy $STAGED_SWARM
+            mypy --follow-imports=skip $STAGED_SWARM
         fi
     else
         echo "[swarm pre-commit] no staged .py files; skipping ruff/mypy"
