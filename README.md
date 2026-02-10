@@ -3,6 +3,8 @@
 [![CI](https://github.com/swarm-ai-safety/swarm/actions/workflows/ci.yml/badge.svg)](https://github.com/swarm-ai-safety/swarm/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
+[![arXiv](https://img.shields.io/badge/arXiv-2512.16856-b31b1b.svg)](https://arxiv.org/abs/2512.16856)
+[![PyPI](https://img.shields.io/pypi/v/swarm-safety.svg)](https://pypi.org/project/swarm-safety/)
 [![ClawXiv Bridge](https://img.shields.io/badge/ClawXiv-Bridge-blue)](https://github.com/swarm-ai-safety/swarm/blob/main/docs/bridges/clawxiv.md)
 
 <img src="https://github.com/swarm-ai-safety/swarm/raw/main/docs/images/swarm-hero.gif" alt="SWARM dashboard showing emergent risk metrics" width="100%">
@@ -36,6 +38,15 @@ If you care about AGI safety research, SWARM gives you a practical way to:
   one-off anecdotes.
 - Separate sandbox wins from deployment reality using explicit transferability
   caveats.
+
+## Who Should Use SWARM?
+
+| If you are... | SWARM helps you... |
+|---|---|
+| **AI safety researcher** | Empirically test multi-agent failure modes with reproducible scenarios and soft-label metrics |
+| **ML engineer building agent systems** | Stress-test governance mechanisms against adversarial and deceptive agents before deployment |
+| **Policy / governance researcher** | Quantify trade-offs between safety interventions and system welfare across regimes |
+| **Red-teaming practitioner** | Run coordinated adversarial attack scenarios with 8 attack vectors and automatic scoring |
 
 ## Questions You Can Study Quickly
 
@@ -173,6 +184,23 @@ Instead of binary labels (good/bad), interactions carry a probability `p = P(v =
 | **Adversarial** | Targets honest agents, coordinates with allies, disrupts ecosystem |
 | **LLM** | Behavior determined by LLM with configurable persona ([details](docs/llm-agents.md)) |
 
+## How SWARM Compares
+
+| Feature | SWARM | Concordia | AgentBench | METR | Inspect (AISI) |
+|---|---|---|---|---|---|
+| Multi-agent interaction modeling | Primary focus | Primary focus | Limited | Limited | Limited |
+| Soft probabilistic labels | Core design | No | No | No | No |
+| Adverse selection metrics | Yes (toxicity, quality gap) | No | No | No | No |
+| Configurable governance levers | 6 built-in | None | None | None | Compliance rules |
+| Collusion detection | Yes (pair-wise, structural) | No | No | No | No |
+| Replay-based incoherence | Yes | No | No | No | No |
+| LLM agent support | Yes (Anthropic, OpenAI, Ollama) | Yes | Yes | Yes | Yes |
+| Scenario configs (YAML) | 23 built-in | Custom | Benchmark suites | Task suites | Eval suites |
+| Framework bridges | Concordia, OpenClaw, GasTown, AgentXiv, ClawXiv | — | — | — | — |
+| License | MIT | Apache 2.0 | MIT | Varies | MIT |
+
+SWARM is complementary to these frameworks, not competitive. The [Concordia bridge](docs/bridges/concordia.md) lets you run Concordia agents through SWARM's governance and metrics layer. See [full comparison](docs/comparison.md).
+
 ## Architecture
 
 ```
@@ -272,6 +300,18 @@ make ci
 ```
 
 Machine-readable citation metadata: [`CITATION.cff`](CITATION.cff)
+
+## Papers
+
+- **[Distributional AGI Safety: Governance Trade-offs in Multi-Agent Systems Under Adversarial Pressure](docs/papers/distributional_agi_safety.md)** — 11 scenarios, 209 epochs, three regimes. [arXiv:2512.16856](https://arxiv.org/abs/2512.16856)
+- **[Governance Mechanisms for Multi-Agent Safety](docs/papers/governance_mechanisms_multi_agent_safety.md)** — Cross-archetype empirical study of 7 scenario types
+- **[Collusion Dynamics and Network Resilience](docs/papers/collusion_dynamics_network_resilience.md)** — Progressive decline vs sustained operation under network topology effects
+
+## Community
+
+- [Documentation](https://docs.swarm-ai.org) — Full guides, API reference, and research notes
+- [GitHub Issues](https://github.com/swarm-ai-safety/swarm/issues) — Bug reports, feature requests, and [agent bounties](CONTRIBUTING.md)
+- [Twitter/X](https://x.com/ResearchSwarmAI) — @ResearchSwarmAI
 
 ## References
 
