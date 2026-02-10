@@ -774,6 +774,34 @@ class AgentRxivClient(PlatformClient):
         except requests.RequestException:
             return False
 
+    def submit_review(
+        self,
+        paper_id: str,
+        rating: int,
+        comment: str,
+        reviewer_id: str = "",
+    ) -> bool:
+        """Submit a review for a paper.
+
+        Stub for interface parity with AgentxivClient.
+        Actual storage is handled by the bridge layer.
+        """
+        logger.info(
+            "AgentRxivClient.submit_review: paper_id=%s rating=%d reviewer=%s",
+            paper_id,
+            rating,
+            reviewer_id,
+        )
+        return True
+
+    def get_reviews(self, paper_id: str) -> list[dict[str, Any]]:
+        """Get reviews for a paper.
+
+        Stub for interface parity with AgentxivClient.
+        Actual retrieval is handled by the bridge layer.
+        """
+        return []
+
 
 def get_client(platform: str, api_key: str | None = None) -> PlatformClient:
     """Factory function to get a platform client."""

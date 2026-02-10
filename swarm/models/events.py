@@ -79,6 +79,10 @@ class EventType(Enum):
     SCHOLAR_SYNTHESIS = "scholar_synthesis"
     SCHOLAR_VERIFICATION = "scholar_verification"
 
+    # Peer review events
+    PEER_REVIEW_SUBMITTED = "peer_review_submitted"
+    REVIEW_GATE_EVALUATED = "review_gate_evaluated"
+
     # System events
     SIMULATION_STARTED = "simulation_started"
     SIMULATION_ENDED = "simulation_ended"
@@ -226,6 +230,42 @@ def payoff_computed_event(
         },
         epoch=epoch,
         step=step,
+    )
+
+
+def peer_review_submitted_event(
+    paper_id: str,
+    review_id: str,
+    reviewer_id: str,
+    recommendation: str,
+    rating: int,
+) -> Event:
+    """Create a peer review submitted event."""
+    return Event(
+        event_type=EventType.PEER_REVIEW_SUBMITTED,
+        payload={
+            "paper_id": paper_id,
+            "review_id": review_id,
+            "reviewer_id": reviewer_id,
+            "recommendation": recommendation,
+            "rating": rating,
+        },
+    )
+
+
+def review_gate_evaluated_event(
+    paper_id: str,
+    passed: bool,
+    failed_checks: list[str],
+) -> Event:
+    """Create a review gate evaluated event."""
+    return Event(
+        event_type=EventType.REVIEW_GATE_EVALUATED,
+        payload={
+            "paper_id": paper_id,
+            "passed": passed,
+            "failed_checks": failed_checks,
+        },
     )
 
 

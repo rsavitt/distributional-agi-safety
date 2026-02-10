@@ -1,6 +1,7 @@
 """Research agents for the structured research workflow."""
 
 import re
+import uuid
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -151,6 +152,111 @@ class Review:
     @property
     def all_critiques_addressed(self) -> bool:
         return all(c.addressed for c in self.critiques)
+
+
+@dataclass
+class PeerReview:
+    """A peer review of a paper, linking Review output to a specific paper."""
+
+    review_id: str
+    paper_id: str
+    reviewer_id: str
+    critiques: list[Critique] = field(default_factory=list)
+    recommendation: str = ""  # accept, minor_revision, major_revision, reject
+    summary: str = ""
+    rating: int = 3  # 1-5 scale
+    timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+
+    @property
+    def high_severity_count(self) -> int:
+        return len([c for c in self.critiques if c.severity in ("high", "critical")])
+
+    @property
+    def all_critiques_addressed(self) -> bool:
+        return all(c.addressed for c in self.critiques)
+
+    def to_review(self) -> "Review":
+        """Downcast to Review for QualityGate compatibility."""
+        return Review(
+            critiques=self.critiques,
+            recommendation=self.recommendation,
+            summary=self.summary,
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "review_id": self.review_id,
+            "paper_id": self.paper_id,
+            "reviewer_id": self.reviewer_id,
+            "critiques": [
+                {
+                    "severity": c.severity,
+                    "category": c.category,
+                    "issue": c.issue,
+                    "suggestion": c.suggestion,
+                    "addressed": c.addressed,
+                }
+                for c in self.critiques
+            ],
+            "recommendation": self.recommendation,
+            "summary": self.summary,
+            "rating": self.rating,
+            "timestamp": self.timestamp.isoformat(),
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "PeerReview":
+        critiques = [
+            Critique(
+                severity=c.get("severity", "low"),
+                category=c.get("category", ""),
+                issue=c.get("issue", ""),
+                suggestion=c.get("suggestion", ""),
+                addressed=c.get("addressed", False),
+            )
+            for c in data.get("critiques", [])
+        ]
+        ts = data.get("timestamp")
+        if isinstance(ts, str):
+            timestamp = datetime.fromisoformat(ts)
+        else:
+            timestamp = datetime.now(timezone.utc)
+        return cls(
+            review_id=data.get("review_id", ""),
+            paper_id=data.get("paper_id", ""),
+            reviewer_id=data.get("reviewer_id", ""),
+            critiques=critiques,
+            recommendation=data.get("recommendation", ""),
+            summary=data.get("summary", ""),
+            rating=data.get("rating", 3),
+            timestamp=timestamp,
+        )
+
+
+_RECOMMENDATION_RATINGS: dict[str, int] = {
+    "accept": 5,
+    "minor_revision": 4,
+    "major_revision": 2,
+    "reject": 1,
+}
+
+
+def review_to_peer_review(
+    review: "Review",
+    paper_id: str,
+    reviewer_id: str,
+) -> PeerReview:
+    """Convert a ReviewAgent output into a PeerReview."""
+    rating = _RECOMMENDATION_RATINGS.get(review.recommendation, 3)
+    return PeerReview(
+        review_id=str(uuid.uuid4()),
+        paper_id=paper_id,
+        reviewer_id=reviewer_id,
+        critiques=review.critiques,
+        recommendation=review.recommendation,
+        summary=review.summary,
+        rating=rating,
+    )
 
 
 class ResearchAgent(ABC):
