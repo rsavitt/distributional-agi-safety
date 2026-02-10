@@ -128,8 +128,11 @@ nav:
     - Agent Publishing Guide: research/agent-publishing.md
     - Reflexivity: research/reflexivity.md
     - AI Index 2025: research/ai-index-2025.md
+  - Comparison: comparison.md
   - Blog:
     - blog/index.md
+    - What Financial Markets Teach Us About AI Safety: blog/markets-and-safety.md
+    - The Purity Paradox: blog/purity-paradox.md
     - When Agent Ecosystems Collapse: blog/ecosystem-collapse.md
 
 extra:
