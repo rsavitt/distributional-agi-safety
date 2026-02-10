@@ -350,9 +350,8 @@ class LiveSWEClient:
                 allowed_dir = Path(self.config.trajectory_dir).resolve()
                 if not traj_path.is_relative_to(allowed_dir):
                     logger.warning(
-                        "Trajectory path %s is outside configured "
+                        "Rejected trajectory path outside configured "
                         "trajectory_dir %s — skipping",
-                        traj_path,
                         allowed_dir,
                     )
                     traj_path = None  # type: ignore[assignment]
