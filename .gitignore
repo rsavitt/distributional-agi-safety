@@ -58,6 +58,11 @@ examples/demo/
 secrets.yaml
 secrets.json
 
+# Runtime artifacts
+.DS_Store
+sandboxes/
+*.db
+
 # Allow secrets scanner tooling (matched by *_secret* above)
 !.claude/hooks/scan_secrets.sh
 !.claude/hooks/post_write_secrets_check.sh
