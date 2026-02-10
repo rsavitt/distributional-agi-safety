@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Iterable
+from typing import Any, Iterable
 
 import pandas as pd
 
@@ -164,7 +164,7 @@ Future runs should incorporate stronger validators and richer task suites.
         latex = latex.replace("\\toprule", "\\toprule")
         latex = latex.replace("\\midrule", "\\midrule")
         latex = latex.replace("\\bottomrule", "\\bottomrule")
-        return latex
+        return str(latex)
 
     def _render_memory(self, items: list[MemoryArtifact]) -> str:
         if not items:
@@ -302,7 +302,7 @@ Future runs should incorporate stronger validators and richer task suites.
     ) -> str:
         """Render a family metrics table using pandas DataFrame."""
         # Build data dictionary
-        data: dict[str, list[float]] = {"Family": []}
+        data: dict[str, list[Any]] = {"Family": []}
         display_names = []
 
         for cond in condition_names:
@@ -312,7 +312,7 @@ Future runs should incorporate stronger validators and richer task suites.
 
         for family in families:
             data["Family"].append(_family_label(family))
-            for cond, display in zip(condition_names, display_names):
+            for cond, display in zip(condition_names, display_names, strict=False):
                 value = family_metrics.get(cond, {}).get(family, {}).get(metric_key, 0.0)
                 data[display].append(value)
 

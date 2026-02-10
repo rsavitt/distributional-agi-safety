@@ -242,7 +242,7 @@ class LiveSWEClient:
         if isinstance(content, list):
             # Handle multi-part content (e.g. tool_use blocks)
             content = " ".join(
-                p.get("text", p.get("content", ""))
+                str(p.get("text") or p.get("content") or "")
                 for p in content
                 if isinstance(p, dict)
             )
@@ -266,7 +266,7 @@ class LiveSWEClient:
                     if name in ("bash", "execute_bash", "terminal"):
                         args = tc.get("input", tc.get("arguments", {}))
                         if isinstance(args, dict):
-                            bash_command = args.get("command", args.get("cmd", ""))
+                            bash_command = str(args.get("command") or args.get("cmd") or "")
                         elif isinstance(args, str):
                             bash_command = args
 

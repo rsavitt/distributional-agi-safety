@@ -11,7 +11,7 @@ Usage:
 
 import argparse
 import sys
-from typing import List, Optional
+from typing import Any, List, Optional
 
 from rich.console import Console
 from rich.panel import Panel
@@ -29,7 +29,7 @@ def _make_bridge(
     root: Optional[str] = None,
 ) -> WorktreeBridge:
     """Construct a WorktreeBridge and discover existing sandboxes."""
-    kwargs = {}
+    kwargs: dict[str, Any] = {}
     if repo is not None:
         kwargs["repo_path"] = repo
     if root is not None:

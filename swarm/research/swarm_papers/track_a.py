@@ -61,7 +61,7 @@ class ReasoningTask:
     task_id: str
     prompt: str
     answer: str
-    metadata: dict[str, str] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -173,8 +173,8 @@ class RunSummary:
     bib_entries: str
     family_metrics: dict[str, dict[str, dict[str, float]]]
     critique_summary: CritiqueSummary
-    reputation_summary: dict[str, dict[str, float]]
-    reputation_drift: list[dict[str, object]]
+    reputation_summary: dict[str, dict[str, dict[str, float]]]
+    reputation_drift: list[dict[str, Any]]
     peer_reviews: list[dict] = field(default_factory=list)
     review_gate_passed: bool | None = None
 
@@ -884,9 +884,9 @@ class HeuristicSolver(BaseSolver):
         self._rng = random.Random(seed)
 
     def solve(self, task: ReasoningTask, memory_hint: str) -> Solution:
-        expr = task.metadata.get("expression", "")
+        expr: str = task.metadata.get("expression", "")
         solution = task.metadata.get("solution")
-        options = task.metadata.get("options", [])
+        options: list[str] = task.metadata.get("options", [])
 
         if solution is not None:
             answer_str = str(solution)
@@ -937,9 +937,9 @@ class AdversarialSolver(BaseSolver):
 
     def solve(self, task: ReasoningTask, memory_hint: str) -> Solution:
         # First compute the correct answer
-        expr = task.metadata.get("expression", "")
+        expr: str = task.metadata.get("expression", "")
         solution = task.metadata.get("solution")
-        options = task.metadata.get("options", [])
+        options: list[str] = task.metadata.get("options", [])
 
         if solution is not None:
             correct_answer = str(solution)
@@ -1135,7 +1135,7 @@ class SimpleCritic:
             return "missing answer"
 
         if task.metadata.get("family") == "logic_grid":
-            options = task.metadata.get("options", [])
+            options: list[str] = task.metadata.get("options", [])
             if options and any(ans not in {opt.lower() for opt in options} for ans in answers):
                 return "invalid entity for logic grid"
             if len(set(answers)) > 1:
@@ -1259,7 +1259,7 @@ class ReputationTracker:
             rates.append(stats.deviation_count / stats.total)
         return max(rates) if rates else 0.0
 
-    def snapshot(self) -> dict[str, dict[str, float]]:
+    def snapshot(self) -> dict[str, dict[str, dict[str, float]]]:
         def _pack(stats: ReputationStats) -> dict[str, float]:
             rate = stats.correct / stats.total if stats.total else 0.0
             dev = stats.deviation_count / stats.total if stats.total else 0.0
@@ -1986,7 +1986,7 @@ class TrackARunner:
 
         return figures, images
 
-    def _write_reputation_csv(self, drift: list[dict[str, object]]) -> None:
+    def _write_reputation_csv(self, drift: list[dict[str, Any]]) -> None:
         path = self.output_dir / "reputation_drift.csv"
         if not drift:
             return
@@ -2060,18 +2060,20 @@ class TrackARunner:
         )
 
     def _record_reputation(self, condition_name: str) -> None:
-        snapshot = {
-            "episode": self._episode_index,
-            "condition": condition_name,
-            "solvers": {},
-            "roles": {},
-        }
+        solvers: dict[str, float] = {}
+        roles: dict[str, float] = {}
         for key in ("precise", "creative", "adversary"):
             if key in self.reputation.solver_stats:
-                snapshot["solvers"][key] = self.reputation.solver_stats[key].ema_accuracy
+                solvers[key] = self.reputation.solver_stats[key].ema_accuracy
         for key in ("precise solver", "creative solver", "adversary"):
             if key in self.reputation.role_stats:
-                snapshot["roles"][key] = self.reputation.role_stats[key].ema_accuracy
+                roles[key] = self.reputation.role_stats[key].ema_accuracy
+        snapshot: dict[str, Any] = {
+            "episode": self._episode_index,
+            "condition": condition_name,
+            "solvers": solvers,
+            "roles": roles,
+        }
         self._reputation_history.append(snapshot)
         self._episode_index += 1
 
@@ -2283,7 +2285,7 @@ def _family_label(family: str) -> str:
 
 
 def _build_reputation_series(
-    history: list[dict[str, object]],
+    history: list[dict[str, Any]],
 ) -> dict[str, list[tuple[int, float]]]:
     series: dict[str, list[tuple[int, float]]] = {}
     for snapshot in history:
