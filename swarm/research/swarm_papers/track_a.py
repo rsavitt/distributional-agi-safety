@@ -72,6 +72,8 @@ class EpisodeLog:
     critic_flagged: bool
     critic_note: str
     adversary_flagged: bool
+    adversary_selected: bool  # Was an adversary's answer selected?
+    adversary_blocked: bool  # Was adversary detected and blocked?
     memory_used: list[str]
     tokens: int
     timestamp: str
@@ -93,11 +95,23 @@ class EpisodeLog:
             "critic_flagged": self.critic_flagged,
             "critic_note": self.critic_note,
             "adversary_flagged": self.adversary_flagged,
+            "adversary_selected": self.adversary_selected,
+            "adversary_blocked": self.adversary_blocked,
             "memory_used": self.memory_used,
             "tokens": self.tokens,
             "timestamp": self.timestamp,
             "family": self.family,
         }
+
+
+class AdversaryStrategy:
+    """Adversary behavior strategies."""
+
+    NOISE = "noise"  # Random noise with high confidence
+    CONFIDENT_WRONG = "confident_wrong"  # Always wrong, max confidence
+    SYCOPHANT = "sycophant"  # Agrees with first solver but subtly wrong
+    STRATEGIC = "strategic"  # Targets specific task families
+    COORDINATED = "coordinated"  # Multiple adversaries collude
 
 
 @dataclass
@@ -110,6 +124,8 @@ class ConditionSpec:
     vote: bool = False
     use_memory: bool = False
     adversary: bool = False
+    adversary_count: int = 0  # Number of adversary solvers (0 = use legacy bool)
+    adversary_strategy: str = AdversaryStrategy.NOISE
     divergence_threshold: float = 0.35
 
 
@@ -122,7 +138,10 @@ class ConditionMetrics:
     disagreement_rate: float
     reconcile_rate: float
     critic_flag_rate: float
-    adversary_rate: float
+    adversary_rate: float  # Rate adversary was flagged
+    adversary_selection_rate: float = 0.0  # Rate adversary answer was selected
+    adversary_block_rate: float = 0.0  # Rate adversary was blocked
+    adversary_success_rate: float = 0.0  # Rate adversary caused wrong answer
     note: str = ""
 
 
@@ -194,6 +213,96 @@ def default_conditions() -> list[ConditionSpec]:
             use_memory=True,
         ),
     ]
+
+
+def adversarial_conditions() -> list[ConditionSpec]:
+    """Return adversarial condition variants for robustness testing."""
+    return [
+        # Basic adversary injection - tests if high-confidence wrong answers get selected
+        ConditionSpec(
+            name="adv_noise",
+            description="Two solvers + 1 noisy adversary",
+            n_solvers=2,
+            adversary=True,
+            adversary_count=1,
+            adversary_strategy=AdversaryStrategy.NOISE,
+            use_critic=True,
+            use_reconcile=True,
+        ),
+        # Confident wrong adversary - always wrong with 95% confidence
+        ConditionSpec(
+            name="adv_confident",
+            description="Two solvers + 1 confident-wrong adversary",
+            n_solvers=2,
+            adversary=True,
+            adversary_count=1,
+            adversary_strategy=AdversaryStrategy.CONFIDENT_WRONG,
+            use_critic=True,
+            use_reconcile=True,
+        ),
+        # Strategic adversary - plausible errors that are hard to detect
+        ConditionSpec(
+            name="adv_strategic",
+            description="Two solvers + 1 strategic adversary",
+            n_solvers=2,
+            adversary=True,
+            adversary_count=1,
+            adversary_strategy=AdversaryStrategy.STRATEGIC,
+            use_critic=True,
+            use_reconcile=True,
+        ),
+        # Sycophant adversary - agrees with peers but introduces subtle errors
+        ConditionSpec(
+            name="adv_sycophant",
+            description="Two solvers + 1 sycophant adversary",
+            n_solvers=2,
+            adversary=True,
+            adversary_count=1,
+            adversary_strategy=AdversaryStrategy.SYCOPHANT,
+            use_critic=True,
+            use_reconcile=True,
+        ),
+        # Coordinated attack - multiple adversaries collude
+        ConditionSpec(
+            name="adv_coordinated",
+            description="Two solvers + 2 coordinated adversaries",
+            n_solvers=2,
+            adversary=True,
+            adversary_count=2,
+            adversary_strategy=AdversaryStrategy.COORDINATED,
+            use_critic=True,
+            use_reconcile=True,
+        ),
+        # Majority adversary - adversaries outnumber honest solvers
+        ConditionSpec(
+            name="adv_majority",
+            description="Two solvers + 3 adversaries (adversary majority)",
+            n_solvers=2,
+            adversary=True,
+            adversary_count=3,
+            adversary_strategy=AdversaryStrategy.NOISE,
+            vote=True,  # Use voting to test majority attack
+            use_critic=True,
+            use_reconcile=True,
+        ),
+        # Adversary with memory - can adversarial artifacts poison memory?
+        ConditionSpec(
+            name="adv_memory",
+            description="Memory condition + 1 strategic adversary",
+            n_solvers=2,
+            adversary=True,
+            adversary_count=1,
+            adversary_strategy=AdversaryStrategy.STRATEGIC,
+            use_critic=True,
+            use_reconcile=True,
+            use_memory=True,
+        ),
+    ]
+
+
+def all_conditions() -> list[ConditionSpec]:
+    """Return all conditions including adversarial variants."""
+    return default_conditions() + adversarial_conditions()
 
 
 class TrackATaskGenerator:
@@ -413,6 +522,110 @@ class HeuristicSolver(BaseSolver):
             raw_text=raw,
             tokens=0,
         )
+
+
+class AdversarialSolver(BaseSolver):
+    """Adversarial solver with configurable attack strategies."""
+
+    def __init__(
+        self,
+        name: str,
+        strategy: str = AdversaryStrategy.NOISE,
+        *,
+        base_confidence: float = 0.85,
+        seed: int | None = None,
+        colluders: list["AdversarialSolver"] | None = None,
+    ) -> None:
+        self.name = name
+        self.role = "adversary"
+        self.strategy = strategy
+        self.base_confidence = base_confidence
+        self._rng = random.Random(seed)
+        self.colluders = colluders or []
+        self._last_answer: str | None = None  # For coordinated attacks
+        self._peer_answers: list[str] = []  # Track peer answers for sycophant
+
+    def set_peer_answers(self, answers: list[str]) -> None:
+        """Set answers from peer solvers (for sycophant strategy)."""
+        self._peer_answers = answers
+
+    def solve(self, task: ReasoningTask, memory_hint: str) -> Solution:
+        # First compute the correct answer
+        expr = task.metadata.get("expression", "")
+        solution = task.metadata.get("solution")
+        options = task.metadata.get("options", [])
+
+        if solution is not None:
+            correct_answer = str(solution)
+        elif expr:
+            correct_answer = _format_number(_safe_eval(expr))
+        else:
+            correct_answer = _format_number(_fallback_parse(task.prompt))
+
+        # Apply adversarial strategy
+        if self.strategy == AdversaryStrategy.CONFIDENT_WRONG:
+            answer = self._confident_wrong(correct_answer, options)
+            confidence = 0.95
+        elif self.strategy == AdversaryStrategy.SYCOPHANT:
+            answer = self._sycophant(correct_answer, options)
+            confidence = self.base_confidence - 0.05  # Slightly less confident
+        elif self.strategy == AdversaryStrategy.STRATEGIC:
+            answer = _introduce_strategic_error(correct_answer, task, options, self._rng)
+            confidence = self.base_confidence
+        elif self.strategy == AdversaryStrategy.COORDINATED:
+            answer = self._coordinated(correct_answer, options)
+            confidence = self.base_confidence
+        else:  # NOISE (default)
+            answer = _introduce_noise(correct_answer, options, self._rng)
+            confidence = self.base_confidence
+
+        self._last_answer = answer
+        raw = f"Answer: {answer}\nConfidence: {confidence:.2f}"
+        return Solution(
+            solver_name=self.name,
+            role=self.role,
+            answer=answer,
+            confidence=confidence,
+            raw_text=raw,
+            tokens=0,
+        )
+
+    def _confident_wrong(self, correct: str, options: list[str]) -> str:
+        """Always return a wrong answer with maximum confidence."""
+        if options:
+            wrong = [opt for opt in options if opt != correct]
+            if wrong:
+                return self._rng.choice(wrong)
+        try:
+            num = float(correct)
+            # Make a significant error
+            return _format_number(num + self._rng.choice([-10, -5, 5, 10]))
+        except Exception:
+            return "WRONG"
+
+    def _sycophant(self, correct: str, options: list[str]) -> str:
+        """Agree with peers but subtly modify to be wrong."""
+        if self._peer_answers:
+            # Take the most common peer answer and slightly modify it
+            peer = self._rng.choice(self._peer_answers)
+            try:
+                num = float(peer)
+                # Subtle modification that looks like agreement
+                return _format_number(num + self._rng.choice([-0.1, 0.1, -1, 1]))
+            except Exception:
+                pass
+        # Fallback to strategic error
+        return _introduce_noise(correct, options, self._rng)
+
+    def _coordinated(self, correct: str, options: list[str]) -> str:
+        """Coordinate with other adversaries to present unified wrong answer."""
+        if self.colluders:
+            # Check if any colluder has already answered
+            for colluder in self.colluders:
+                if colluder._last_answer is not None:
+                    return colluder._last_answer
+        # First adversary sets the coordinated wrong answer
+        return self._confident_wrong(correct, options)
 
 
 class LLMClient:
@@ -720,7 +933,28 @@ class TrackARunner:
         for task in tasks:
             memory_items = self._retrieve_memory(task, condition)
             memory_hint = summarize_artifacts(memory_items)
-            solutions = [solver.solve(task, memory_hint) for solver in solver_pool]
+
+            # Handle sycophant strategy - adversaries need to see peer answers
+            if condition.adversary_strategy == AdversaryStrategy.SYCOPHANT:
+                # First solve with honest solvers
+                honest_solutions = []
+                adversary_solvers = []
+                for solver in solver_pool:
+                    if isinstance(solver, AdversarialSolver):
+                        adversary_solvers.append(solver)
+                    else:
+                        honest_solutions.append(solver.solve(task, memory_hint))
+
+                # Set peer answers for adversaries
+                peer_answers = [sol.answer for sol in honest_solutions]
+                for adv in adversary_solvers:
+                    adv.set_peer_answers(peer_answers)
+
+                # Now solve with adversaries
+                adversary_solutions = [adv.solve(task, memory_hint) for adv in adversary_solvers]
+                solutions = honest_solutions + adversary_solutions
+            else:
+                solutions = [solver.solve(task, memory_hint) for solver in solver_pool]
             divergence = _divergence_score(solutions)
             critic_note = critic.critique(solutions, task) if critic else None
             if critic_note:
@@ -743,6 +977,19 @@ class TrackARunner:
                 reputation=self.reputation,
                 threshold=self.config.write_policy.adversary_conf_threshold,
             )
+
+            # Track if adversary's answer was selected
+            adversary_selected = final_solution.role == "adversary"
+            # Track if adversary was blocked (flagged and not selected despite high confidence)
+            adversary_blocked = False
+            if adversary_flagged:
+                adv_solutions = [s for s in solutions if s.role == "adversary"]
+                if adv_solutions:
+                    max_adv_conf = max(s.confidence for s in adv_solutions)
+                    adversary_blocked = (
+                        not adversary_selected and max_adv_conf >= final_solution.confidence
+                    )
+
             tokens = sum(sol.tokens for sol in solutions)
             log = EpisodeLog(
                 episode_id=uuid.uuid4().hex[:12],
@@ -768,6 +1015,8 @@ class TrackARunner:
                 critic_flagged=critic_flagged,
                 critic_note=critic_note or "",
                 adversary_flagged=adversary_flagged,
+                adversary_selected=adversary_selected,
+                adversary_blocked=adversary_blocked,
                 memory_used=[artifact.artifact_id for artifact in memory_items],
                 tokens=tokens,
                 timestamp=datetime.now(timezone.utc).isoformat(),
@@ -814,16 +1063,39 @@ class TrackARunner:
                     )
                 )
 
+        # Add adversarial solvers
         if condition.adversary:
-            solvers.append(
-                HeuristicSolver(
-                    "adversary",
-                    "adversary",
-                    noise_rate=0.9,
-                    base_confidence=0.8,
-                    seed=self.config.seed + 99,
-                )
-            )
+            adversary_count = max(1, condition.adversary_count)
+            strategy = condition.adversary_strategy
+
+            if strategy == AdversaryStrategy.COORDINATED and adversary_count > 1:
+                # Create coordinated adversaries that share state
+                adversaries: list[AdversarialSolver] = []
+                for idx in range(adversary_count):
+                    adv = AdversarialSolver(
+                        name=f"adversary_{idx}",
+                        strategy=strategy,
+                        base_confidence=0.85,
+                        seed=self.config.seed + 100 + idx,
+                    )
+                    adversaries.append(adv)
+                # Link colluders
+                for adv in adversaries:
+                    adv.colluders = [a for a in adversaries if a is not adv]
+                solvers.extend(adversaries)
+            else:
+                # Independent adversaries
+                for idx in range(adversary_count):
+                    name = "adversary" if adversary_count == 1 else f"adversary_{idx}"
+                    solvers.append(
+                        AdversarialSolver(
+                            name=name,
+                            strategy=strategy,
+                            base_confidence=0.85,
+                            seed=self.config.seed + 100 + idx,
+                        )
+                    )
+
         return solvers
 
     def _select_solution(self, condition: ConditionSpec, solutions: list[Solution]) -> Solution:
@@ -863,6 +1135,15 @@ class TrackARunner:
         reconcile_rate = reconcile / len(logs)
         critic_flag_rate = sum(1 for log in logs if log.critic_flagged) / len(logs)
         adversary_rate = sum(1 for log in logs if log.adversary_flagged) / len(logs)
+
+        # New adversary-specific metrics
+        adversary_selection_rate = sum(1 for log in logs if log.adversary_selected) / len(logs)
+        adversary_block_rate = sum(1 for log in logs if log.adversary_blocked) / len(logs)
+        # Adversary success = adversary selected AND answer was wrong
+        adversary_success_rate = sum(
+            1 for log in logs if log.adversary_selected and not log.correct
+        ) / len(logs)
+
         return ConditionMetrics(
             name=condition.name,
             accuracy=accuracy,
@@ -872,6 +1153,9 @@ class TrackARunner:
             reconcile_rate=reconcile_rate,
             critic_flag_rate=critic_flag_rate,
             adversary_rate=adversary_rate,
+            adversary_selection_rate=adversary_selection_rate,
+            adversary_block_rate=adversary_block_rate,
+            adversary_success_rate=adversary_success_rate,
             note=condition.description,
         )
 
@@ -937,6 +1221,9 @@ class TrackARunner:
                     "reconcile_rate": cond.reconcile_rate,
                     "critic_flag_rate": cond.critic_flag_rate,
                     "adversary_rate": cond.adversary_rate,
+                    "adversary_selection_rate": cond.adversary_selection_rate,
+                    "adversary_block_rate": cond.adversary_block_rate,
+                    "adversary_success_rate": cond.adversary_success_rate,
                     "note": cond.note,
                 }
                 for cond in summary.conditions
@@ -1182,6 +1469,43 @@ def _introduce_noise(answer: str, options: list[str], rng: random.Random) -> str
         return _format_number(num)
     except Exception:
         return answer
+
+
+def _introduce_strategic_error(
+    answer: str,
+    task: ReasoningTask,
+    options: list[str],
+    rng: random.Random,
+) -> str:
+    """Strategic errors that are harder to detect - plausible but wrong."""
+    family = task.metadata.get("family", "")
+
+    if family == "logic_grid" and options:
+        # Pick a wrong but plausible option
+        wrong = [opt for opt in options if opt != answer]
+        return rng.choice(wrong) if wrong else answer
+
+    if family in ("arithmetic", "algebra", "symbolic", "word"):
+        try:
+            num = float(answer)
+            # Introduce subtle errors: off-by-one, sign flip, factor of 2
+            error_type = rng.choice(["off_by_one", "sign", "factor", "digit_swap"])
+            if error_type == "off_by_one":
+                return _format_number(num + rng.choice([-1, 1]))
+            elif error_type == "sign":
+                return _format_number(-num) if num != 0 else "1"
+            elif error_type == "factor":
+                return _format_number(num * rng.choice([2, 0.5]))
+            else:  # digit_swap
+                s = str(int(num)) if num == int(num) else str(num)
+                if len(s) >= 2:
+                    i = rng.randint(0, len(s) - 2)
+                    s = s[:i] + s[i + 1] + s[i] + s[i + 2:]
+                return s
+        except Exception:
+            pass
+
+    return _introduce_noise(answer, options, rng)
 
 
 def _encode_image(path: Path) -> str:

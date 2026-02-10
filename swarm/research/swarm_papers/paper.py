@@ -17,10 +17,11 @@ class PaperContext:
     run_id: str
     task_count: int
     conditions: list[dict]
-    related_work: list[str]
+    related_work: list["RelatedWorkItem"]
     memory_items: list[MemoryArtifact]
     critique_summary: "CritiqueSummary"
-    family_metrics: dict[str, dict[str, float]]
+    family_metrics: dict[str, dict[str, dict[str, float]]]
+    bib: str = ""
     figures: list["PaperFigure"] = field(default_factory=list)
     images: dict[str, str] = field(default_factory=dict)
 
@@ -30,6 +31,13 @@ class CritiqueSummary:
     total_flags: int
     flag_rate: float
     top_reasons: list[str]
+
+
+@dataclass
+class RelatedWorkItem:
+    title: str
+    cite_key: str
+    paper_id: str = ""
 
 
 @dataclass
@@ -47,6 +55,7 @@ class PaperBuilder:
             title=context.title,
             abstract=context.abstract,
             source=latex,
+            bib=context.bib,
             images=context.images,
             authors=["SWARM Research Agents"],
             categories=["swarm", "track-a", "agentrxiv"],
@@ -58,7 +67,7 @@ class PaperBuilder:
         related_work = self._render_related(context.related_work)
         memory_section = self._render_memory(context.memory_items)
         critique_section = self._render_critique(context.critique_summary)
-        family_table = self._render_family_table(context.family_metrics, context.conditions)
+        family_table = self._render_family_tables(context.family_metrics, context.conditions)
         figures_section = self._render_figures(context.figures)
 
         return """\\documentclass{article}
@@ -109,6 +118,8 @@ multiple solvers are active, and reconciliation frequency when enabled.
 We treat confidence as a reported scalar and rely on simple divergence heuristics.
 Future runs should incorporate stronger validators and richer task suites.
 
+%s
+
 \\end{document}
 """ % (
             _escape_latex(context.title),
@@ -122,6 +133,7 @@ Future runs should incorporate stronger validators and richer task suites.
             + ("\n\n" + figures_section if figures_section else ""),
             related_work,
             memory_section,
+            self._render_bibliography(context.bib),
         )
 
     def _render_table_rows(self, conditions: Iterable[dict]) -> str:
@@ -144,11 +156,21 @@ Future runs should incorporate stronger validators and richer task suites.
         lines.append("\\end{itemize}")
         return "\n".join(lines)
 
-    def _render_related(self, items: Iterable[str]) -> str:
+    def _render_related(self, items: Iterable[RelatedWorkItem]) -> str:
         items = list(items)
         if not items:
             return "\\item None."
-        return "\n".join(f"\\item {_escape_latex(item)}" for item in items)
+        lines = []
+        for item in items:
+            title = _escape_latex(item.title)
+            cite = f"\\cite{{{item.cite_key}}}" if item.cite_key else ""
+            paper_id = (
+                f" (AgentRxiv ID: {_escape_latex(item.paper_id)})"
+                if item.paper_id
+                else ""
+            )
+            lines.append(f"\\item {title} {cite}{paper_id}")
+        return "\n".join(lines)
 
     def _render_figures(self, figures: list[PaperFigure]) -> str:
         if not figures:
@@ -177,16 +199,50 @@ Future runs should incorporate stronger validators and richer task suites.
             lines.append("\\end{itemize}")
         return "\n".join(lines)
 
-    def _render_family_table(
-        self, family_metrics: dict[str, dict[str, float]], conditions: list[dict]
+    def _render_bibliography(self, bib: str) -> str:
+        if not bib.strip():
+            return ""
+        return "\\bibliographystyle{plain}\n\\bibliography{references}"
+
+    def _render_family_tables(
+        self, family_metrics: dict[str, dict[str, dict[str, float]]], conditions: list[dict]
     ) -> str:
         if not family_metrics:
             return ""
 
         condition_names = [cond.get("name", "") for cond in conditions]
         families = _order_families(family_metrics)
+        sections = []
+        sections.append(self._render_family_table_section(
+            title="Per-Family Accuracy",
+            metric_key="accuracy",
+            family_metrics=family_metrics,
+            families=families,
+            condition_names=condition_names,
+            format_str="{:.2f}",
+        ))
+        sections.append(self._render_family_table_section(
+            title="Per-Family Token Efficiency (Correct per 1k tokens)",
+            metric_key="token_eff",
+            family_metrics=family_metrics,
+            families=families,
+            condition_names=condition_names,
+            format_str="{:.2f}",
+        ))
+        return "\n\n".join(sections)
+
+    def _render_family_table_section(
+        self,
+        *,
+        title: str,
+        metric_key: str,
+        family_metrics: dict[str, dict[str, dict[str, float]]],
+        families: list[str],
+        condition_names: list[str],
+        format_str: str,
+    ) -> str:
         cols = "l" + "r" * len(condition_names)
-        lines = ["\\subsection{Per-Family Accuracy}", "\\begin{tabular}{" + cols + "}"]
+        lines = [f"\\subsection{{{_escape_latex(title)}}}", "\\begin{tabular}{" + cols + "}"]
         header = "Family & " + " & ".join(_escape_latex(name) for name in condition_names) + " \\\\"
         lines.append("\\toprule")
         lines.append(header)
@@ -194,8 +250,8 @@ Future runs should incorporate stronger validators and richer task suites.
         for family in families:
             row = [_escape_latex(_family_label(family))]
             for name in condition_names:
-                value = family_metrics.get(name, {}).get(family, 0.0)
-                row.append(f"{value:.2f}")
+                value = family_metrics.get(name, {}).get(family, {}).get(metric_key, 0.0)
+                row.append(format_str.format(value))
             lines.append(" & ".join(row) + " \\\\")
         lines.append("\\bottomrule")
         lines.append("\\end{tabular}")
@@ -218,9 +274,9 @@ def _escape_latex(text: str) -> str:
     return "".join(replacements.get(c, c) for c in text)
 
 
-def _order_families(family_metrics: dict[str, dict[str, float]]) -> list[str]:
+def _order_families(family_metrics: dict[str, dict[str, dict[str, float]]]) -> list[str]:
     preferred = ["arithmetic", "algebra", "logic_grid", "symbolic", "word"]
-    families = set()
+    families: set[str] = set()
     for metrics in family_metrics.values():
         families.update(metrics.keys())
     ordered = [fam for fam in preferred if fam in families]

@@ -9,6 +9,8 @@ import sys
 from swarm.research.swarm_papers.track_a import (
     TrackAConfig,
     TrackARunner,
+    adversarial_conditions,
+    all_conditions,
     default_conditions,
 )
 
@@ -33,6 +35,16 @@ def parse_args() -> argparse.Namespace:
         "--conditions",
         default="",
         help="Comma-separated condition names (default: all)",
+    )
+    parser.add_argument(
+        "--adversarial",
+        action="store_true",
+        help="Include adversarial conditions",
+    )
+    parser.add_argument(
+        "--adversarial-only",
+        action="store_true",
+        help="Run only adversarial conditions",
     )
     parser.add_argument("--no-agentrxiv", action="store_true", help="Disable AgentRxiv")
     parser.add_argument("--agentrxiv-url", default=None, help="AgentRxiv base URL")
@@ -60,13 +72,25 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
-    conditions = default_conditions()
+
+    # Determine which conditions to run
+    if args.adversarial_only:
+        conditions = adversarial_conditions()
+    elif args.adversarial:
+        conditions = all_conditions()
+    else:
+        conditions = default_conditions()
+
     if args.conditions:
+        # Filter to specific conditions by name
+        all_available = all_conditions()
+        available_by_name = {c.name: c for c in all_available}
         selected = {name.strip() for name in args.conditions.split(",") if name.strip()}
-        conditions = [cond for cond in conditions if cond.name in selected]
+        conditions = [available_by_name[name] for name in selected if name in available_by_name]
         missing = selected - {cond.name for cond in conditions}
         if missing:
             print(f"Unknown conditions: {sorted(missing)}", file=sys.stderr)
+            print(f"Available: {sorted(available_by_name.keys())}", file=sys.stderr)
             return 1
 
     llm_config = None
