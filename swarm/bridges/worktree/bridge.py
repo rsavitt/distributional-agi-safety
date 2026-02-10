@@ -282,7 +282,7 @@ class WorktreeBridge:
 
     def gc(self) -> List[WorktreeEvent]:
         """Run garbage collection on stale sandboxes."""
-        events = self._sandbox_mgr.gc_stale()
+        events: List[WorktreeEvent] = self._sandbox_mgr.gc_stale()
         for event in events:
             self._record_event(event)
             # Remove agent mapping for GC'd sandboxes
