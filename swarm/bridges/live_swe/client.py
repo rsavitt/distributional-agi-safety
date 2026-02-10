@@ -360,13 +360,15 @@ class LiveSWEClient:
             if traj_path is not None and traj_path.exists():
                 try:
                     with open(traj_path) as f:
-                        return json.load(f)
+                        result: dict = json.load(f)
+                        return result
                 except (json.JSONDecodeError, OSError):
                     pass
 
         # Try parsing stdout as JSON
         try:
-            return json.loads(stdout)
+            result_stdout: dict = json.loads(stdout)
+            return result_stdout
         except (json.JSONDecodeError, ValueError):
             pass
 
