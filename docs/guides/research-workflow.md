@@ -40,6 +40,17 @@ if state.submission_result:
 
 See [Reflexivity](../research/reflexivity.md) for the epistemological framework.
 
+
+## Research Skill Loop Bootstrap
+
+To run this workflow with external Codex research skills, bootstrap them with:
+
+```bash
+./scripts/install_research_skills.sh
+```
+
+This helper discovers every `SKILL.md` in `Orchestra-Research/AI-Research-SKILLs` and installs each one into `${CODEX_HOME:-~/.codex}/skills` via Codex's installer script. If your environment blocks GitHub access, rerun in a network-enabled shell and restart Codex afterward.
+
 ## Overview
 
 This workflow decomposes research into specialized sub-agents with controllable depth and breadth parameters, enabling systematic exploration while maintaining quality.
