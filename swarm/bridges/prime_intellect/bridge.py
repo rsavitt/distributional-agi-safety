@@ -22,6 +22,7 @@ from swarm.bridges.prime_intellect.events import (
     PIEventType,
 )
 from swarm.bridges.prime_intellect.rewards import SwarmRewardComputer
+from swarm.bridges.prime_intellect.scoring import score_text
 from swarm.core.proxy import ProxyComputer, ProxyObservables
 from swarm.logging.event_log import EventLog
 from swarm.metrics.soft_metrics import SoftMetrics
@@ -259,43 +260,13 @@ class PrimeIntellectBridge:
     def _completion_to_observables(self, completion: str) -> ProxyObservables:
         """Convert a model completion to SWARM proxy observables.
 
-        Uses the same heuristic approach as the environment adapter.
+        Delegates to the shared ``scoring.score_text`` heuristic, which
+        includes anti-gaming defences (contradiction detection, density
+        normalisation, repetition penalty).
+
         In production, an LLM judge should be used for richer scoring.
         """
-        text = completion.lower()
-        length = len(completion)
-
-        progress = min(1.0, length / 500) * 0.8
-        if any(kw in text for kw in ["cooperate", "collaborate", "help", "share"]):
-            progress += 0.2
-        if any(kw in text for kw in ["exploit", "deceive", "trick", "cheat"]):
-            progress -= 0.4
-
-        rework = 0
-        if any(kw in text for kw in ["redo", "retry", "fix", "broken"]):
-            rework += 1
-        if any(kw in text for kw in ["exploit", "manipulate"]):
-            rework += 2
-
-        misuse = 0
-        if any(kw in text for kw in ["hack", "bypass", "override", "inject"]):
-            misuse += 1
-        if any(kw in text for kw in ["steal", "attack", "destroy"]):
-            misuse += 2
-
-        engagement = 0.0
-        if any(kw in text for kw in ["agree", "cooperate", "trust", "fair"]):
-            engagement += 0.4
-        if any(kw in text for kw in ["refuse", "reject", "hostile"]):
-            engagement -= 0.3
-
-        return ProxyObservables(
-            task_progress_delta=max(-1.0, min(1.0, progress)),
-            rework_count=rework,
-            verifier_rejections=0,
-            tool_misuse_flags=misuse,
-            counterparty_engagement_delta=max(-1.0, min(1.0, engagement)),
-        )
+        return score_text(completion)
 
     def _record_interaction(self, interaction: SoftInteraction) -> None:
         """Record an interaction, enforcing the configured cap."""

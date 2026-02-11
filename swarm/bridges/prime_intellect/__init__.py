@@ -66,6 +66,7 @@ from swarm.bridges.prime_intellect.rewards import (
     toxicity_reward,
     welfare_reward,
 )
+from swarm.bridges.prime_intellect.scoring import score_text
 
 __all__ = [
     # Bridge
@@ -95,4 +96,6 @@ __all__ = [
     "welfare_reward",
     "adverse_selection_reward",
     "cooperation_reward",
+    # Scoring
+    "score_text",
 ]
