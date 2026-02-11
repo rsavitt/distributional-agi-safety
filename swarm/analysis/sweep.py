@@ -322,21 +322,43 @@ class SweepRunner:
         # Extract results
         return _extract_results(orchestrator, params, run_index, seed or 0)
 
+    # Canonical column names expected by downstream tools (/stats, /plot, papers).
+    # Maps internal SweepResult field names → canonical names.
+    COLUMN_ALIASES: Dict[str, str] = {
+        "avg_toxicity": "toxicity_rate",
+        "total_welfare": "welfare",
+        "avg_quality_gap": "quality_gap",
+        "honest_avg_payoff": "honest_payoff",
+        "opportunistic_avg_payoff": "opportunistic_payoff",
+        "deceptive_avg_payoff": "deceptive_payoff",
+        "adversarial_avg_payoff": "adversarial_payoff",
+    }
+
     def to_csv(self, path: Union[str, Path]) -> None:
-        """Export results to CSV."""
+        """Export results to CSV with canonical column names."""
         if not self.results:
             raise ValueError("No results to export. Run sweep first.")
 
         path = Path(path)
         path.parent.mkdir(parents=True, exist_ok=True)
 
-        fieldnames = list(self.results[0].to_dict().keys())
+        rows = [self._normalize_columns(r.to_dict()) for r in self.results]
+        fieldnames = list(rows[0].keys())
 
         with open(path, "w", newline="") as f:
             writer = csv.DictWriter(f, fieldnames=fieldnames)
             writer.writeheader()
-            for result in self.results:
-                writer.writerow(result.to_dict())
+            for row in rows:
+                writer.writerow(row)
+
+    @classmethod
+    def _normalize_columns(cls, row: Dict[str, Any]) -> Dict[str, Any]:
+        """Rename internal field names to canonical names for CSV export."""
+        out: Dict[str, Any] = {}
+        for key, value in row.items():
+            canonical = cls.COLUMN_ALIASES.get(key, key)
+            out[canonical] = value
+        return out
 
     def summary(self) -> Dict[str, Any]:
         """Generate summary statistics across all runs."""
