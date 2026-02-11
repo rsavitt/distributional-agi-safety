@@ -1,0 +1,89 @@
+# RLM Experiment 1: Recursive Collusion
+# Does deeper recursion increase implicit collusion probability?
+#
+# 9 RLM agents (3 groups: depth=1, depth=3, depth=5) + 3 honest baseline
+# Collusion detection governance enabled
+# 30 epochs x 15 steps, complete network
+
+scenario_id: rlm_recursive_collusion
+description: "Measures whether deeper recursive reasoning enables implicit coordination without explicit communication"
+motif: recursive_collusion
+
+agents:
+  # Low-recursion RLM agents (level-1 thinkers)
+  - type: rlm
+    count: 3
+    name: rlm_shallow
+    config:
+      recursion_depth: 1
+      planning_horizon: 3
+      memory_budget: 100
+
+  # Mid-recursion RLM agents (level-3 thinkers)
+  - type: rlm
+    count: 3
+    name: rlm_mid
+    config:
+      recursion_depth: 3
+      planning_horizon: 5
+      memory_budget: 100
+
+  # High-recursion RLM agents (level-5 thinkers)
+  - type: rlm
+    count: 3
+    name: rlm_deep
+    config:
+      recursion_depth: 5
+      planning_horizon: 7
+      memory_budget: 100
+
+  # Honest baseline
+  - type: honest
+    count: 3
+
+governance:
+  # Collusion detection enabled
+  collusion_detection_enabled: true
+  collusion_frequency_threshold: 2.0
+  collusion_correlation_threshold: 0.7
+  collusion_min_interactions: 3
+  collusion_score_threshold: 0.5
+  collusion_penalty_multiplier: 1.5
+
+  # Random audit enabled
+  audit_enabled: true
+  audit_probability: 0.15
+  audit_penalty_multiplier: 2.0
+  audit_threshold_p: 0.5
+
+  # Transaction tax
+  transaction_tax_rate: 0.02
+  bandwidth_cap: 15
+
+simulation:
+  n_epochs: 30
+  steps_per_epoch: 15
+  seed: 42
+
+rate_limits:
+  posts_per_epoch: 10
+  interactions_per_step: 5
+  votes_per_epoch: 50
+  tasks_per_epoch: 3
+
+payoff:
+  s_plus: 2.0
+  s_minus: 1.0
+  h: 2.0
+  theta: 0.5
+  rho_a: 0.0
+  rho_b: 0.0
+  w_rep: 1.0
+
+success_criteria:
+  min_epochs: 30
+  min_agents: 12
+
+outputs:
+  event_log: "logs/rlm_recursive_collusion_events.jsonl"
+  metrics_csv: "logs/rlm_recursive_collusion_metrics.csv"

@@ -40,6 +40,7 @@ from swarm.metrics.moltipedia_metrics import (
     policy_fix_exploitation_rate,
 )
 from swarm.metrics.reporters import MetricsReporter
+from swarm.metrics.rlm_metrics import RLMMetrics
 from swarm.metrics.security import (
     SecurityAnalyzer,
     SecurityReport,
@@ -100,4 +101,6 @@ __all__ = [
     "HorizonEvalResult",
     "SystemHorizonEvaluator",
     "group_by_epoch",
+    # RLM experiment metrics
+    "RLMMetrics",
 ]

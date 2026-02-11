@@ -24,6 +24,7 @@ from swarm.agents.moltbook_agent import (
     SpamBotAgent,
 )
 from swarm.agents.opportunistic import OpportunisticAgent
+from swarm.agents.rlm_agent import RLMAgent
 from swarm.agents.scholar_agent import (
     AdversarialRetrieverAgent,
     AdversarialSynthesizerAgent,
@@ -74,6 +75,8 @@ AGENT_TYPES: Dict[str, Type[BaseAgent]] = {
     "verifier": VerifierAgent,
     "adversarial_retriever": AdversarialRetrieverAgent,
     "adversarial_synthesizer": AdversarialSynthesizerAgent,
+    # RLM (Recursive Language Model) agents
+    "rlm": RLMAgent,
 }
 
 # LLM agent support (lazy import to avoid requiring LLM dependencies)

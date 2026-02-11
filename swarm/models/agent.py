@@ -12,6 +12,7 @@ class AgentType(Enum):
     OPPORTUNISTIC = "opportunistic"
     DECEPTIVE = "deceptive"
     ADVERSARIAL = "adversarial"
+    RLM = "rlm"
 
 
 class AgentStatus(Enum):

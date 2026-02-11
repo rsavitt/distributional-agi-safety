@@ -115,6 +115,14 @@ class DefaultObservableGenerator:
                 0,
                 random.uniform(0.0, 0.4),
             )
+        elif agent_type == AgentType.RLM:
+            return (
+                random.uniform(0.2, 0.7),
+                random.randint(0, 2),
+                random.randint(0, 1),
+                0,
+                random.uniform(0.0, 0.5),
+            )
         else:  # Adversarial
             return (
                 random.uniform(-0.3, 0.2),
