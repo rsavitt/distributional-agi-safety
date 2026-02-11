@@ -64,6 +64,11 @@ class ActionType(Enum):
     SYNTHESIZE_ANSWER = "synthesize_answer"
     VERIFY_CITATION = "verify_citation"
 
+    # Kernel market actions
+    SUBMIT_KERNEL = "submit_kernel"
+    VERIFY_KERNEL = "verify_kernel"
+    AUDIT_KERNEL = "audit_kernel"
+
     # Special actions
     NOOP = "noop"  # Do nothing this turn
 
@@ -189,6 +194,12 @@ class Observation:
     scholar_draft_citations: List[Dict] = field(default_factory=list)  # Citations to verify
     scholar_citation_to_verify: Optional[Dict] = None  # Next citation for verifier
     scholar_synthesis_result: Optional[Dict] = None  # Final synthesis output
+
+    # Kernel market observations
+    kernel_available_challenges: List[Dict] = field(default_factory=list)
+    kernel_pending_submissions: List[Dict] = field(default_factory=list)
+    kernel_submissions_to_verify: List[Dict] = field(default_factory=list)
+    kernel_submission_history: List[Dict] = field(default_factory=list)
 
 
 @dataclass

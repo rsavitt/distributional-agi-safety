@@ -1,0 +1,69 @@
+# Kernel Market: Audit Rate Sweep
+# Parametric sweep of audit probability to find optimal deep-testing rate
+# for GPU kernel marketplace.
+
+sweep_id: kernel_market_audit_rate
+description: |
+  Sweep audit probability from 0% to 100% with staking held constant.
+  Finds the point where marginal audit cost exceeds marginal quality gain.
+
+  In the kernel context, "audit" = running the candidate kernel against
+  hidden test cases or stricter tolerances beyond what the verifier sees.
+  Higher audit rates catch more precision hacks and test-overfit kernels
+  but impose governance costs on all participants.
+
+base_scenario: kernel_market/baseline
+
+sweep:
+  name: audit_rate
+  parameter: governance.audit_probability
+  values: [0.0, 0.05, 0.1, 0.15, 0.2, 0.3, 0.4, 0.5, 0.75, 1.0]
+
+# Hold staking constant across all conditions
+governance_overrides:
+  audit_enabled: true
+  audit_penalty_multiplier: 3.0
+  staking_enabled: true
+  min_stake_to_participate: 0.5
+  stake_slash_rate: 0.2
+  circuit_breaker_enabled: true
+  freeze_threshold_toxicity: 0.6
+
+seeds: [42, 123, 456]
+
+metrics_focus:
+  primary:
+    - toxicity_rate
+    - quality_gap
+    - total_welfare
+  secondary:
+    - avg_payoff_initiator
+    - governance_cost_total
+
+analysis:
+  plots:
+    - type: line
+      x: governance.audit_probability
+      y: [toxicity_rate, quality_gap]
+      title: "Quality Metrics vs. Audit Rate"
+
+    - type: line
+      x: governance.audit_probability
+      y: total_welfare
+      title: "Total Welfare vs. Audit Rate"
+
+    - type: scatter
+      x: governance_cost_total
+      y: toxicity_rate
+      color: governance.audit_probability
+      title: "Governance Cost vs. Safety"
+
+  optimization:
+    objective: minimize
+    constraint: "total_welfare > 50"
+    find: governance.audit_probability
+
+output:
+  results_dir: runs/kernel_market/sweeps/audit_rate/
+  aggregate_csv: runs/kernel_market/sweeps/audit_rate/aggregate.csv
+  plots_dir: runs/kernel_market/sweeps/audit_rate/plots/

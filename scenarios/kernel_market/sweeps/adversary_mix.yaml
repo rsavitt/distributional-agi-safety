@@ -1,0 +1,157 @@
+# Kernel Market: Adversary Mix Sweep
+# Cross-product of adversarial agent fraction × governance level.
+# Finds the breaking point where governance can no longer maintain kernel quality.
+
+sweep_id: kernel_market_adversary_mix
+description: |
+  Vary the fraction of adversarial kernel authors from 0% to majority.
+  Cross with governance levels to find the breaking point.
+
+  Adversarial agents include:
+    - "fast_author" (opportunistic): cuts correctness for speed
+    - "benchmark_gamer" (adversarial): exploits proxy gaps directly
+
+  The key question: at what adversary fraction does each governance
+  regime fail to maintain kernel quality (toxicity > 0.5)?
+
+base_scenario: kernel_market/baseline
+
+sweep:
+  name: adversary_fraction
+  agents_override:
+    # 0/8 adversarial (all honest + verifiers)
+    - condition: adversary_0pct
+      agents:
+        - type: honest
+          count: 6
+          params: {quality_mean: 0.8, speed_priority: 0.3}
+        - type: verifier
+          count: 2
+          params: {accuracy: 0.8}
+
+    # 1/8 adversarial
+    - condition: adversary_12pct
+      agents:
+        - type: honest
+          count: 5
+          params: {quality_mean: 0.8, speed_priority: 0.3}
+        - type: adversarial
+          count: 1
+          params: {exploit_proxy: true, target_signal: performance}
+        - type: verifier
+          count: 2
+          params: {accuracy: 0.8}
+
+    # 3/8 adversarial (baseline-like)
+    - condition: adversary_37pct
+      agents:
+        - type: honest
+          count: 3
+          params: {quality_mean: 0.8, speed_priority: 0.3}
+        - type: opportunistic
+          count: 2
+          params: {quality_mean: 0.45, speed_priority: 0.9}
+        - type: adversarial
+          count: 1
+          params: {exploit_proxy: true, target_signal: performance}
+        - type: verifier
+          count: 2
+          params: {accuracy: 0.8}
+
+    # 5/8 adversarial (adversary majority among authors)
+    - condition: adversary_62pct
+      agents:
+        - type: honest
+          count: 1
+          params: {quality_mean: 0.8, speed_priority: 0.3}
+        - type: opportunistic
+          count: 3
+          params: {quality_mean: 0.45, speed_priority: 0.9}
+        - type: adversarial
+          count: 2
+          params: {exploit_proxy: true, target_signal: performance}
+        - type: verifier
+          count: 2
+          params: {accuracy: 0.8}
+
+    # 7/8 adversarial (hostile environment)
+    - condition: adversary_87pct
+      agents:
+        - type: honest
+          count: 1
+          params: {quality_mean: 0.8, speed_priority: 0.3}
+        - type: opportunistic
+          count: 4
+          params: {quality_mean: 0.45, speed_priority: 0.9}
+        - type: adversarial
+          count: 3
+          params: {exploit_proxy: true, target_signal: performance}
+        - type: verifier
+          count: 1
+          params: {accuracy: 0.8}
+
+# Cross with governance levels
+governance_conditions:
+  - name: no_gov
+    governance:
+      audit_enabled: false
+      staking_enabled: false
+      circuit_breaker_enabled: false
+
+  - name: light_gov
+    governance:
+      audit_enabled: true
+      audit_probability: 0.1
+      staking_enabled: false
+      circuit_breaker_enabled: false
+
+  - name: heavy_gov
+    governance:
+      audit_enabled: true
+      audit_probability: 0.25
+      audit_penalty_multiplier: 3.0
+      staking_enabled: true
+      min_stake_to_participate: 1.0
+      stake_slash_rate: 0.3
+      circuit_breaker_enabled: true
+      freeze_threshold_toxicity: 0.5
+      freeze_threshold_violations: 2
+
+seeds: [42, 123, 456, 789, 1001]
+
+metrics_focus:
+  primary:
+    - toxicity_rate
+    - quality_gap
+  secondary:
+    - total_welfare
+    - avg_payoff_initiator
+
+analysis:
+  plots:
+    - type: heatmap
+      x: adversary_fraction
+      y: governance_condition
+      z: toxicity_rate
+      title: "Toxicity: Adversary Fraction x Governance Level"
+
+    - type: heatmap
+      x: adversary_fraction
+      y: governance_condition
+      z: quality_gap
+      title: "Quality Gap: Adversary Fraction x Governance Level"
+
+    - type: line
+      x: adversary_fraction
+      y: toxicity_rate
+      facet: governance_condition
+      title: "Breaking Point by Governance Level"
+
+  threshold_analysis:
+    find: adversary_fraction where toxicity_rate > 0.5
+    group_by: governance_condition
+
+output:
+  results_dir: runs/kernel_market/sweeps/adversary_mix/
+  aggregate_csv: runs/kernel_market/sweeps/adversary_mix/aggregate.csv
+  plots_dir: runs/kernel_market/sweeps/adversary_mix/plots/

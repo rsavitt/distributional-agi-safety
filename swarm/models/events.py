@@ -79,6 +79,11 @@ class EventType(Enum):
     SCHOLAR_SYNTHESIS = "scholar_synthesis"
     SCHOLAR_VERIFICATION = "scholar_verification"
 
+    # Kernel market events
+    KERNEL_SUBMITTED = "kernel_submitted"
+    KERNEL_VERIFIED = "kernel_verified"
+    KERNEL_AUDITED = "kernel_audited"
+
     # Peer review events
     PEER_REVIEW_SUBMITTED = "peer_review_submitted"
     REVIEW_GATE_EVALUATED = "review_gate_evaluated"

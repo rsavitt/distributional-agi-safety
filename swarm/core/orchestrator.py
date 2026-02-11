@@ -14,6 +14,7 @@ from swarm.boundaries.information_flow import FlowTracker
 from swarm.boundaries.leakage import LeakageDetector, LeakageReport
 from swarm.boundaries.policies import PolicyEngine
 from swarm.core.boundary_handler import BoundaryHandler
+from swarm.core.kernel_handler import KernelOracleConfig, KernelOracleHandler
 from swarm.core.marketplace_handler import MarketplaceHandler
 from swarm.core.memory_handler import MemoryHandler, MemoryTierConfig
 from swarm.core.moltbook_handler import MoltbookConfig, MoltbookHandler
@@ -97,6 +98,9 @@ class OrchestratorConfig(BaseModel):
 
     # Scholar/literature synthesis configuration
     scholar_config: Optional[ScholarConfig] = None
+
+    # Kernel oracle configuration
+    kernel_oracle_config: Optional[KernelOracleConfig] = None
 
     # Composite task configuration
     enable_composite_tasks: bool = False
@@ -328,6 +332,17 @@ class Orchestrator:
         else:
             self._scholar_handler = None
 
+        # Kernel oracle handler
+        if self.config.kernel_oracle_config is not None:
+            self._kernel_handler: Optional[KernelOracleHandler] = (
+                KernelOracleHandler(
+                    config=self.config.kernel_oracle_config,
+                    emit_event=self._emit_event,
+                )
+            )
+        else:
+            self._kernel_handler = None
+
         # Boundary handler
         if self.config.enable_boundaries:
             external_world = ExternalWorld().create_default_world()
@@ -484,6 +499,9 @@ class Orchestrator:
         if self._scholar_handler is not None:
             self._scholar_handler.on_epoch_start(self.state)
 
+        if self._kernel_handler is not None:
+            self._kernel_handler.on_epoch_start(self.state)
+
         # Apply epoch-start governance (reputation decay, unfreezes)
         if self.governance_engine:
             gov_effect = self.governance_engine.apply_epoch_start(
@@ -505,6 +523,10 @@ class Orchestrator:
         # Scholar epoch maintenance
         if self._scholar_handler is not None:
             self._scholar_handler.on_epoch_end(self.state)
+
+        # Kernel oracle epoch maintenance
+        if self._kernel_handler is not None:
+            self._kernel_handler.on_epoch_end(self.state)
 
         # Apply network edge decay
         if self.network is not None:
@@ -853,6 +875,22 @@ class Orchestrator:
             scholar_citation_to_verify = scholar_obs["scholar_citation_to_verify"]
             scholar_synthesis_result = scholar_obs["scholar_synthesis_result"]
 
+        # Build kernel market observation via handler
+        kernel_available_challenges: List[Dict] = []
+        kernel_pending_submissions: List[Dict] = []
+        kernel_submissions_to_verify: List[Dict] = []
+        kernel_submission_history: List[Dict] = []
+
+        if self._kernel_handler is not None:
+            kernel_obs = self._kernel_handler.build_observation_fields(
+                agent_id,
+                self.state,
+            )
+            kernel_available_challenges = kernel_obs["kernel_available_challenges"]
+            kernel_pending_submissions = kernel_obs["kernel_pending_submissions"]
+            kernel_submissions_to_verify = kernel_obs["kernel_submissions_to_verify"]
+            kernel_submission_history = kernel_obs["kernel_submission_history"]
+
         return Observation(
             agent_state=agent_state or AgentState(),
             current_epoch=self.state.current_epoch,
@@ -902,6 +940,10 @@ class Orchestrator:
             scholar_draft_citations=scholar_draft_citations,
             scholar_citation_to_verify=scholar_citation_to_verify,
             scholar_synthesis_result=scholar_synthesis_result,
+            kernel_available_challenges=kernel_available_challenges,
+            kernel_pending_submissions=kernel_pending_submissions,
+            kernel_submissions_to_verify=kernel_submissions_to_verify,
+            kernel_submission_history=kernel_submission_history,
         )
 
     def _apply_observation_noise(self, record: Dict[str, Any]) -> Dict[str, Any]:
@@ -1273,6 +1315,46 @@ class Orchestrator:
                 p=p,
                 tau=0.0,
                 metadata=scholar_result.metadata or {},
+            )
+
+            self._finalize_interaction(interaction)
+            return True
+
+        # Kernel market actions
+        elif action.action_type in (
+            ActionType.SUBMIT_KERNEL,
+            ActionType.VERIFY_KERNEL,
+            ActionType.AUDIT_KERNEL,
+        ):
+            if self._kernel_handler is None:
+                return False
+
+            kernel_result = self._kernel_handler.handle_action(action, self.state)
+            if not kernel_result.success:
+                return False
+
+            if kernel_result.observables is None:
+                return True
+
+            v_hat, p = self.proxy_computer.compute_labels(kernel_result.observables)
+
+            interaction = SoftInteraction(
+                initiator=kernel_result.initiator_id,
+                counterparty=kernel_result.counterparty_id,
+                interaction_type=InteractionType.TRADE,
+                accepted=kernel_result.accepted,
+                task_progress_delta=kernel_result.observables.task_progress_delta,
+                rework_count=kernel_result.observables.rework_count,
+                verifier_rejections=kernel_result.observables.verifier_rejections,
+                tool_misuse_flags=kernel_result.observables.tool_misuse_flags,
+                counterparty_engagement_delta=kernel_result.observables.counterparty_engagement_delta,
+                v_hat=v_hat,
+                p=p,
+                tau=0.0,
+                ground_truth=-1
+                if (kernel_result.submission and kernel_result.submission.is_cheat)
+                else 1,
+                metadata=kernel_result.metadata or {},
             )
 
             self._finalize_interaction(interaction)

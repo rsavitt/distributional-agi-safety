@@ -1,0 +1,157 @@
+# Kernel Market: Governance Regime Comparison Sweep
+# Tests which governance combinations prevent adverse selection of "fast but wrong"
+# GPU kernels without killing marketplace throughput.
+
+sweep_id: kernel_market_governance_comparison
+description: |
+  Compare 7 governance regimes for GPU kernel marketplace.
+  Core question: which levers stop the system from selecting bad kernels?
+
+  Adversarial agents produce kernels that pass functional tests but exploit
+  proxy gaps (precision hacks, test-distribution overfitting, tolerance exploits).
+  Each regime applies different countermeasures.
+
+base_scenario: kernel_market/baseline
+
+sweep:
+  name: governance_regime
+  conditions:
+    # Control: pure market, no governance
+    - name: no_governance
+      governance:
+        audit_enabled: false
+        staking_enabled: false
+        circuit_breaker_enabled: false
+        transaction_tax_rate: 0.0
+        reputation_decay_rate: 1.0
+
+    # Audits only: random deep testing
+    - name: audits_only
+      governance:
+        audit_enabled: true
+        audit_probability: 0.2
+        audit_penalty_multiplier: 3.0
+        staking_enabled: false
+        circuit_breaker_enabled: false
+        transaction_tax_rate: 0.0
+
+    # Staking only: authors put skin in the game
+    - name: staking_only
+      governance:
+        audit_enabled: false
+        staking_enabled: true
+        min_stake_to_participate: 1.0
+        stake_slash_rate: 0.3
+        circuit_breaker_enabled: false
+        transaction_tax_rate: 0.0
+
+    # Reputation only: past quality predicts future
+    - name: reputation_only
+      governance:
+        audit_enabled: false
+        staking_enabled: false
+        circuit_breaker_enabled: false
+        reputation_decay_rate: 0.85
+        transaction_tax_rate: 0.0
+
+    # Circuit breaker only: freeze repeat offenders
+    - name: circuit_breaker_only
+      governance:
+        audit_enabled: false
+        staking_enabled: false
+        circuit_breaker_enabled: true
+        freeze_threshold_toxicity: 0.5
+        freeze_threshold_violations: 2
+        freeze_duration_epochs: 3
+        transaction_tax_rate: 0.0
+
+    # Audits + staking (complementary information channels)
+    - name: audits_staking
+      governance:
+        audit_enabled: true
+        audit_probability: 0.2
+        audit_penalty_multiplier: 3.0
+        staking_enabled: true
+        min_stake_to_participate: 1.0
+        stake_slash_rate: 0.3
+        circuit_breaker_enabled: false
+
+    # Full governance suite
+    - name: full_governance
+      governance:
+        audit_enabled: true
+        audit_probability: 0.2
+        audit_penalty_multiplier: 3.0
+        staking_enabled: true
+        min_stake_to_participate: 1.0
+        stake_slash_rate: 0.3
+        circuit_breaker_enabled: true
+        freeze_threshold_toxicity: 0.5
+        freeze_threshold_violations: 2
+        freeze_duration_epochs: 3
+        reputation_decay_rate: 0.9
+        transaction_tax_rate: 0.05
+
+seeds: [42, 123, 456, 789, 1001]
+
+metrics_focus:
+  primary:
+    - toxicity_rate           # Fraction of accepted kernels that are bad
+    - quality_gap             # E[p|accepted] - E[p|rejected] (negative = adverse selection)
+    - total_welfare           # System-wide surplus
+  secondary:
+    - avg_payoff_initiator    # Author payoffs (does governance kill incentives?)
+    - avg_payoff_counterparty # Consumer payoffs
+    - circuit_breaker_triggers
+    - reputation_divergence
+
+analysis:
+  plots:
+    - type: bar
+      x: condition
+      y: toxicity_rate
+      title: "Toxicity Rate by Governance Regime"
+
+    - type: bar
+      x: condition
+      y: quality_gap
+      title: "Quality Gap (Adverse Selection) by Regime"
+
+    - type: scatter
+      x: toxicity_rate
+      y: total_welfare
+      color: condition
+      title: "Safety-Welfare Tradeoff"
+
+    - type: pareto
+      x: toxicity_rate
+      y: total_welfare
+      color: condition
+      title: "Pareto Frontier: Safety vs. Welfare"
+
+    - type: line
+      x: epoch
+      y: toxicity_rate
+      facet: condition
+      title: "Toxicity Over Time by Regime"
+
+  comparisons:
+    - baseline: no_governance
+      compare_to: [audits_only, staking_only, circuit_breaker_only, full_governance]
+      metric: toxicity_rate
+      test: mann_whitney
+
+    - baseline: no_governance
+      compare_to: [audits_only, staking_only, circuit_breaker_only, full_governance]
+      metric: quality_gap
+      test: mann_whitney
+
+    - baseline: no_governance
+      compare_to: [audits_staking, full_governance]
+      metric: total_welfare
+      test: mann_whitney
+
+output:
+  results_dir: runs/kernel_market/sweeps/governance_comparison/
+  aggregate_csv: runs/kernel_market/sweeps/governance_comparison/aggregate.csv
+  plots_dir: runs/kernel_market/sweeps/governance_comparison/plots/

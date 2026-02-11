@@ -37,6 +37,7 @@ from swarm.agents.wiki_editor import (
     PointFarmerAgent,
     VandalAgent,
 )
+from swarm.core.kernel_handler import KernelOracleConfig
 from swarm.core.memory_handler import MemoryTierConfig
 from swarm.core.moltbook_handler import MoltbookConfig
 from swarm.core.moltipedia_handler import MoltipediaConfig
@@ -519,6 +520,27 @@ def parse_scholar_config(data: Dict[str, Any]) -> Optional[ScholarConfig]:
     return config
 
 
+def parse_kernel_oracle_config(
+    data: Dict[str, Any],
+) -> Optional[KernelOracleConfig]:
+    """
+    Parse kernel_oracle section from YAML into KernelOracleConfig.
+
+    Args:
+        data: The kernel_oracle section from YAML
+
+    Returns:
+        KernelOracleConfig if enabled, None otherwise
+    """
+    if not data:
+        return None
+
+    if data.get("enabled") is False:
+        return None
+
+    return KernelOracleConfig(**data)
+
+
 def load_scenario(path: Path) -> ScenarioConfig:
     """
     Load a scenario from a YAML file.
@@ -547,6 +569,7 @@ def load_scenario(path: Path) -> ScenarioConfig:
     moltbook_config = parse_moltbook_config(data.get("moltbook", {}))
     memory_tier_config = parse_memory_tier_config(data.get("memory_tiers", {}))
     scholar_config = parse_scholar_config(data.get("scholar", {}))
+    kernel_oracle_config = parse_kernel_oracle_config(data.get("kernel_oracle", {}))
 
     # Parse simulation settings
     sim_data = data.get("simulation", {})
@@ -570,6 +593,7 @@ def load_scenario(path: Path) -> ScenarioConfig:
         moltbook_config=moltbook_config,
         memory_tier_config=memory_tier_config,
         scholar_config=scholar_config,
+        kernel_oracle_config=kernel_oracle_config,
         log_path=Path(outputs_data["event_log"])
         if outputs_data.get("event_log")
         else None,
