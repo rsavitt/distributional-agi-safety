@@ -9,7 +9,6 @@ from swarm.agents.ldt_agent import LDTAgent, _cosine_similarity
 from swarm.models.agent import AgentState, AgentType
 from swarm.models.interaction import InteractionType, SoftInteraction
 
-
 # ------------------------------------------------------------------
 # Helpers
 # ------------------------------------------------------------------

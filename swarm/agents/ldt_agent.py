@@ -59,7 +59,7 @@ def _cosine_similarity(a: List[float], b: List[float]) -> float:
     """Compute cosine similarity between two equal-length vectors."""
     if len(a) != len(b) or len(a) == 0:
         return 0.0
-    dot = sum(x * y for x, y in zip(a, b))
+    dot = sum(x * y for x, y in zip(a, b, strict=True))
     mag_a = math.sqrt(sum(x * x for x in a))
     mag_b = math.sqrt(sum(x * x for x in b))
     if mag_a == 0.0 or mag_b == 0.0:
@@ -450,7 +450,7 @@ class LDTAgent(BaseAgent):
                 "expert": 5,
             }
             difficulty = diff_map.get(t.get("difficulty", "medium"), 3)
-            return bounty / difficulty
+            return float(bounty / difficulty)
 
         eligible.sort(key=score, reverse=True)
         return eligible[0]
