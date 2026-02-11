@@ -40,6 +40,46 @@ if state.submission_result:
 
 See [Reflexivity](../research/reflexivity.md) for the epistemological framework.
 
+## Integrating the `20-ml-paper-writing` Skill into SWARM Research Loops
+
+If you are running Codex with local skills enabled, you can add the
+[`AI-Research-SKILLs/20-ml-paper-writing`](https://github.com/Orchestra-Research/AI-Research-SKILLs/tree/main/20-ml-paper-writing)
+workflow to standardize drafting passes after each simulation cycle.
+
+### 1) Install the skill
+
+```bash
+python3 /opt/codex/skills/.system/skill-installer/scripts/install-skill-from-github.py \
+  --url https://github.com/Orchestra-Research/AI-Research-SKILLs/tree/main/20-ml-paper-writing
+```
+
+After installation, restart Codex so the new skill is available.
+
+### 2) Use it as the writing phase in each loop
+
+Recommended loop:
+
+1. Run literature + experiment + analysis stages from `ResearchWorkflow`.
+2. Export run artifacts (`history.json`, CSV summaries, and scenario config).
+3. Invoke the ML paper writing skill to draft:
+   - problem framing and hypothesis,
+   - methods (scenario/mechanism details),
+   - results (key metrics and uncertainty),
+   - limitations and governance implications.
+4. Feed reviewer comments back into the next SWARM run (new depth/breadth or governance sweep).
+
+### 3) Keep runs reproducible across writing iterations
+
+For every loop iteration, pin and log:
+
+- scenario path,
+- seed(s),
+- model/provider configuration,
+- commit SHA,
+- output artifact directory under `runs/`.
+
+This keeps the writing process tightly coupled to exact simulation evidence instead of narrative drift.
+
 ## Overview
 
 This workflow decomposes research into specialized sub-agents with controllable depth and breadth parameters, enabling systematic exploration while maintaining quality.
