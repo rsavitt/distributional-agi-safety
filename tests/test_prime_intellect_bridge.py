@@ -515,6 +515,29 @@ class TestSwarmSafetyEnv:
         assert steps[0].step_number == 1
         assert steps[1].step_number == 2
 
+    def test_events_persist_across_resets(self):
+        """Events are an audit trail and must survive reset()."""
+        env = SwarmSafetyEnv()
+        env.reset(seed=42)
+        env.step("cooperate")
+        events_before = len(env.get_events())
+        assert events_before > 0
+
+        env.reset(seed=43)
+        events_after = len(env.get_events())
+        # New EPISODE_STARTED event added, old events still present
+        assert events_after > events_before
+
+    def test_clear_events(self):
+        """clear_events() drains the event buffer."""
+        env = SwarmSafetyEnv()
+        env.reset(seed=42)
+        env.step("cooperate")
+        assert len(env.get_events()) > 0
+
+        env.clear_events()
+        assert len(env.get_events()) == 0
+
 
 class TestAgentSnapshot:
     def test_defaults(self):

@@ -136,6 +136,12 @@ class SwarmSafetyEnv:
     def reset(self, seed: Optional[int] = None) -> str:
         """Reset environment and return initial observation (prompt).
 
+        Note: ``_events`` are intentionally **not** cleared here.  They
+        serve as a cross-episode audit trail so that callers (e.g. the
+        training loop or a post-hoc analysis script) can inspect the
+        full event history across resets.  Use :meth:`clear_events` to
+        explicitly drain the event buffer when needed.
+
         Returns:
             The situation prompt string for the first step.
         """
@@ -308,8 +314,16 @@ class SwarmSafetyEnv:
         )
 
     def get_events(self) -> List[PIEvent]:
-        """Return all recorded events."""
+        """Return all recorded events (spans all episodes)."""
         return list(self._events)
+
+    def clear_events(self) -> None:
+        """Drain the cross-episode event buffer.
+
+        Call this when the accumulated audit trail is no longer needed
+        (e.g. after exporting events to storage).
+        """
+        self._events = []
 
     def get_rollout_steps(self) -> List[RolloutStep]:
         """Return all rollout steps from the current episode."""
