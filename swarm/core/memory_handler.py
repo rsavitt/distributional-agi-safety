@@ -12,8 +12,10 @@ from swarm.core.memory_observables import MemoryActionOutcome, MemoryObservableG
 from swarm.core.proxy import ProxyObservables
 from swarm.env.memory_tiers import MemoryStore
 from swarm.env.state import EnvState
+from swarm.governance.engine import GovernanceEffect
 from swarm.models.agent import AgentType
 from swarm.models.events import Event, EventType
+from swarm.models.interaction import SoftInteraction
 
 
 class MemoryTierConfig(BaseModel):
@@ -50,6 +52,16 @@ class MemoryActionResult:
 
 class MemoryHandler(Handler):
     """Handles memory tier actions and lifecycle events."""
+
+    @staticmethod
+    def handled_action_types() -> frozenset:
+        return frozenset({
+            ActionType.WRITE_MEMORY,
+            ActionType.PROMOTE_MEMORY,
+            ActionType.VERIFY_MEMORY,
+            ActionType.SEARCH_MEMORY,
+            ActionType.CHALLENGE_MEMORY,
+        })
 
     def __init__(
         self,
@@ -404,4 +416,44 @@ class MemoryHandler(Handler):
         return MemoryActionOutcome(
             quality_delta=max(0.1, quality - 0.3),
             engagement_delta=max(0.0, quality - 0.4),
+        )
+
+    # ------------------------------------------------------------------
+    # Plugin hooks
+    # ------------------------------------------------------------------
+
+    _MEMORY_LEVERS = frozenset({
+        "memory_promotion_gate",
+        "memory_write_rate_limit",
+        "memory_cross_verification",
+        "memory_provenance",
+    })
+
+    def on_pre_observation(self, agent_id: str, state: Any) -> None:
+        """Trigger per-agent compaction before observation building."""
+        self.maybe_compaction(agent_id, state)
+
+    def post_finalize(
+        self,
+        result: Any,
+        interaction: SoftInteraction,
+        gov_effect: GovernanceEffect,
+        state: Any,
+    ) -> None:
+        """Revert promotion if governance blocked it."""
+        metadata = result.metadata if hasattr(result, "metadata") else {}
+        if not metadata.get("memory_promotion"):
+            return
+        memory_gov_cost = self._memory_governance_cost(gov_effect)
+        if memory_gov_cost > 0:
+            entry_id = metadata.get("entry_id", "")
+            if entry_id:
+                self.store.revert(entry_id)
+
+    def _memory_governance_cost(self, effect: GovernanceEffect) -> float:
+        """Compute memory-specific governance cost from effects."""
+        return sum(
+            lever.cost_a
+            for lever in effect.lever_effects
+            if lever.lever_name in self._MEMORY_LEVERS
         )

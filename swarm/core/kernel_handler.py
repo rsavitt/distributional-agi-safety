@@ -139,6 +139,14 @@ class KernelOracleHandler(Handler):
       room for optimization (and gaming).
     """
 
+    @staticmethod
+    def handled_action_types() -> frozenset:
+        return frozenset({
+            ActionType.SUBMIT_KERNEL,
+            ActionType.VERIFY_KERNEL,
+            ActionType.AUDIT_KERNEL,
+        })
+
     def __init__(
         self,
         config: KernelOracleConfig,
