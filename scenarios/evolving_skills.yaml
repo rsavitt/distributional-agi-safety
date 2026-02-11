@@ -1,5 +1,5 @@
 # Evolving Skills Scenario
-# Tests SkillRL-style skill evolution within a mixed swarm.
+# Adapts SkillRL (Xia et al., 2026; arXiv:2602.08234) to a multi-agent swarm.
 #
 # 4 modes can be tested by adjusting the agent mix:
 # 1. PRIVATE: All skill_honest agents evolve independently

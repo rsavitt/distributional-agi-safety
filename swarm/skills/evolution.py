@@ -1,6 +1,10 @@
 """Skill evolution engine: extracts, scores, composes, and prunes skills.
 
-Implements SkillRL-style recursive skill extraction:
+Implements SkillRL-style recursive skill extraction from:
+    Xia, P. et al. (2026). SkillRL: Evolving Agents via Recursive
+    Skill-Augmented Reinforcement Learning. arXiv:2602.08234 [cs.LG].
+
+Core loop:
 - Success (payoff > 0) -> new strategy skill
 - Failure (payoff < 0) -> new lesson skill
 - Co-occurring successes -> composite skill candidates

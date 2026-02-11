@@ -1,5 +1,9 @@
 """Mixin that adds evolving skills to any agent type.
 
+Adapts the recursive skill-augmented RL approach from:
+    Xia, P. et al. (2026). SkillRL: Evolving Agents via Recursive
+    Skill-Augmented Reinforcement Learning. arXiv:2602.08234 [cs.LG].
+
 SkillEvolvingMixin can be composed with any BaseAgent subclass to give
 it a personal skill library that grows through interaction outcomes.
 
