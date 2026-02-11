@@ -67,6 +67,12 @@ secrets.json
 *.fdb_latexmk
 *.synctex.gz
 
+# Binary/regeneratable artifacts (prevent index race conditions across sessions)
+*.pdf
+*.png
+*.parquet
+**/fontlist*.json
+
 # Runtime artifacts
 .DS_Store
 sandboxes/
