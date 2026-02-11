@@ -18,6 +18,7 @@ import argparse
 import json
 import os
 import re
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -159,18 +160,32 @@ def _detect_operation(text: str) -> str:
 
 
 def _solve_captcha_llm(challenge_text: str) -> Optional[float]:
-    """Solve CAPTCHA using an LLM (Anthropic or OpenAI)."""
+    """Solve CAPTCHA using an LLM.
+
+    Tries in order: claude CLI, Anthropic API, OpenAI API.
+    """
+    prompt = (
+        "Solve this obfuscated math CAPTCHA. The text has been mangled: "
+        "letters may be doubled/tripled (e.g. 'ttwweennttyy' = 'twenty'), "
+        "random punctuation injected (^/~|]}<*+), and filler words added "
+        "(um, uh, like). Steps:\n"
+        "1. Remove repeated letters to get the real words\n"
+        "2. Identify the two numbers\n"
+        "3. Identify the operation (add/subtract/multiply/divide)\n"
+        "4. Compute the answer\n"
+        "Return ONLY the final numerical answer (a single number).\n\n"
+        f"Challenge: {challenge_text}"
+    )
+
+    # Try claude CLI first (works when running inside Claude Code)
+    result = _solve_via_claude_cli(prompt)
+    if result is not None:
+        return result
+
+    # Fall back to API calls
     api_key = os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("OPENAI_API_KEY")
     if not api_key:
         return None
-
-    prompt = (
-        "The following is an obfuscated math problem from a CAPTCHA. "
-        "Characters may be repeated, punctuation injected, and filler words added. "
-        "Figure out the math problem and return ONLY the numerical answer "
-        "(a single number, nothing else).\n\n"
-        f"Challenge: {challenge_text}"
-    )
 
     if os.environ.get("ANTHROPIC_API_KEY"):
         url = "https://api.anthropic.com/v1/messages"
@@ -201,12 +216,28 @@ def _solve_captcha_llm(challenge_text: str) -> Optional[float]:
                 text = data["content"][0]["text"].strip()
             else:
                 text = data["choices"][0]["message"]["content"].strip()
-            # Extract number from response
             m = re.search(r'-?\d+(?:\.\d+)?', text)
             if m:
                 return round(float(m.group()), 2)
     except Exception as e:
-        print(f"LLM solver failed: {e}", file=sys.stderr)
+        print(f"LLM API solver failed: {e}", file=sys.stderr)
+    return None
+
+
+def _solve_via_claude_cli(prompt: str) -> Optional[float]:
+    """Solve using claude CLI (available inside Claude Code sessions)."""
+    try:
+        result = subprocess.run(
+            ["claude", "-p", prompt, "--model", "haiku"],
+            capture_output=True, text=True, timeout=30,
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            text = result.stdout.strip()
+            m = re.search(r'-?\d+(?:\.\d+)?', text)
+            if m:
+                return round(float(m.group()), 2)
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        pass
     return None
 
 
@@ -236,13 +267,21 @@ def _solve_captcha_regex(challenge_text: str) -> Optional[float]:
 def solve_captcha(challenge_text: str) -> Optional[float]:
     """Solve a Moltbook obfuscated math CAPTCHA challenge.
 
-    Tries LLM solver first (requires ANTHROPIC_API_KEY or OPENAI_API_KEY),
-    falls back to regex-based solver.
+    Uses LLM solver (claude CLI, Anthropic API, or OpenAI API) with
+    regex-based cross-validation when both produce answers.
     """
-    result = _solve_captcha_llm(challenge_text)
-    if result is not None:
-        return result
-    return _solve_captcha_regex(challenge_text)
+    llm_result = _solve_captcha_llm(challenge_text)
+    regex_result = _solve_captcha_regex(challenge_text)
+
+    if llm_result is not None and regex_result is not None:
+        if llm_result == regex_result:
+            return llm_result
+        # Disagreement: prefer regex for arithmetic, LLM for parsing
+        print(f"  CAPTCHA solvers disagree: LLM={llm_result}, regex={regex_result}",
+              file=sys.stderr)
+        return regex_result
+
+    return llm_result if llm_result is not None else regex_result
 
 
 # ── API helpers ──────────────────────────────────────────────────────
