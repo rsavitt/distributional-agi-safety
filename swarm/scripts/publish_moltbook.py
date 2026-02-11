@@ -42,142 +42,141 @@ _TENS = [
     "sixty", "seventy", "eighty", "ninety",
 ]
 
-
-def _word_to_number(word: str) -> Optional[float]:
-    """Convert a spelled-out number back to a float."""
-    word = word.lower().strip()
-    if not word:
-        return None
-
-    # Handle "point" for decimals
-    if " point " in word:
-        parts = word.split(" point ", 1)
-        integer = _word_to_number(parts[0])
-        if integer is None:
-            return None
-        # Fractional digits spelled individually
-        frac_digits = parts[1].strip().split()
-        frac_str = ""
-        for d in frac_digits:
-            v = _word_to_number(d)
-            if v is not None and 0 <= v <= 9:
-                frac_str += str(int(v))
-        if frac_str:
-            return float(f"{int(integer)}.{frac_str}")
-        return integer
-
-    # Handle "hundred"
-    if "hundred" in word:
-        parts = word.split("hundred", 1)
-        hundreds = _word_to_number(parts[0].strip())
-        if hundreds is None:
-            return None
-        remainder = parts[1].strip()
-        if remainder:
-            rem_val = _word_to_number(remainder)
-            return hundreds * 100 + (rem_val or 0)
-        return hundreds * 100
-
-    # Direct lookup
-    if word in _ONES:
-        return float(_ONES.index(word))
-    if word in _TEENS:
-        return float(_TEENS.index(word) + 10)
-
-    # Compound tens: "twenty three" etc.
-    for i, t in enumerate(_TENS):
-        if t and word.startswith(t):
-            rest = word[len(t):].strip()
-            if not rest:
-                return float(i * 10)
-            ones_val = _word_to_number(rest)
-            if ones_val is not None:
-                return float(i * 10 + int(ones_val))
-
-    return None
+# Regex patterns for number words with character-doubling tolerance.
+# Built lazily on first use.
+_NUMBER_PATTERNS: list[tuple[re.Pattern[str], float]] = []
 
 
-def _strip_obfuscation(text: str) -> str:
-    """Remove Moltbook CAPTCHA obfuscation: alternating case, punctuation, filler."""
-    # Remove injected punctuation characters
-    cleaned = re.sub(r'[\\^/~|\\]}<*+]', '', text)
+def _word_to_fuzzy_regex(word: str) -> str:
+    """Build a regex matching a word with arbitrary character repetition."""
+    return "".join(f"{re.escape(c)}+" for c in word)
+
+
+def _number_to_words(n: int) -> str:
+    if n < 10:
+        return _ONES[n]
+    if n < 20:
+        return _TEENS[n - 10]
+    if n < 100:
+        t = _TENS[n // 10]
+        o = _ONES[n % 10] if n % 10 else ""
+        return f"{t} {o}".strip()
+    if n < 1000:
+        h = _ONES[n // 100]
+        rem = n % 100
+        if rem == 0:
+            return f"{h} hundred"
+        return f"{h} hundred {_number_to_words(rem)}"
+    return str(n)
+
+
+def _build_number_patterns() -> None:
+    """Build regex patterns for numbers 2-999 (the CAPTCHA range)."""
+    if _NUMBER_PATTERNS:
+        return
+
+    for n in range(2, 1000):
+        words = _number_to_words(n)
+        word_parts = words.split()
+        regex_parts = [_word_to_fuzzy_regex(w) for w in word_parts]
+        pattern_str = r"\s+" .join(regex_parts)
+        _NUMBER_PATTERNS.append(
+            (re.compile(pattern_str, re.IGNORECASE), float(n))
+        )
+
+    # Sort descending so multi-word numbers match before their parts
+    _NUMBER_PATTERNS.sort(key=lambda x: -x[1])
+
+
+def _deobfuscate(text: str) -> str:
+    """Remove injected punctuation and filler words."""
+    # Remove known injected punctuation chars (from Moltbook ChallengeGenerator)
+    cleaned = re.sub(r'[\^/~|\]}<*+]', '', text)
+    # Also remove stray periods that appear in obfuscated text
+    cleaned = re.sub(r'(?<=[a-zA-Z])\.(?=[a-zA-Z])', '', cleaned)
     # Remove filler words
     fillers = {"um", "uh", "erm", "like", "eh"}
     words = cleaned.split()
     words = [w for w in words if w.lower().strip(".,!?;:'\"") not in fillers]
-    cleaned = " ".join(words)
-    # Normalize case
-    cleaned = cleaned.lower()
-    return cleaned
+    return " ".join(words)
 
 
-def _extract_numbers_from_text(text: str) -> list[float]:
-    """Extract all numbers (digit or spelled) from cleaned challenge text."""
-    numbers = []
-    # First try digit numbers
-    for m in re.finditer(r'\b\d+(?:\.\d+)?\b', text):
-        numbers.append(float(m.group()))
+def _find_numbers(text: str) -> list[float]:
+    """Find all numbers in (possibly obfuscated) text."""
+    _build_number_patterns()
 
-    if numbers:
-        return numbers
+    # Try digit numbers first
+    digit_nums = [float(m.group()) for m in re.finditer(r'\b\d+(?:\.\d+)?\b', text)]
+    if digit_nums:
+        return digit_nums
 
-    # Try spelled-out numbers
-    # Build a combined pattern
-    # Multi-word numbers: "twenty three", "five hundred twelve"
-    tokens = text.split()
-    i = 0
-    while i < len(tokens):
-        # Try multi-word sequences
-        for length in range(min(4, len(tokens) - i), 0, -1):
-            chunk = " ".join(tokens[i:i + length])
-            val = _word_to_number(chunk)
-            if val is not None:
-                numbers.append(val)
-                i += length
-                break
-        else:
-            i += 1
+    # Fuzzy-match spelled-out numbers
+    numbers: list[float] = []
+    remaining = text
+    while remaining:
+        best_match = None
+        best_val = 0.0
+        best_start = len(remaining)
+        best_end = 0
+
+        for pattern, val in _NUMBER_PATTERNS:
+            m = pattern.search(remaining)
+            if m and m.start() < best_start:
+                best_match = m
+                best_val = val
+                best_start = m.start()
+                best_end = m.end()
+
+        if best_match is None:
+            break
+
+        numbers.append(best_val)
+        remaining = remaining[best_end:]
 
     return numbers
 
 
-def solve_captcha(challenge_text: str) -> Optional[float]:
-    """Solve a Moltbook obfuscated math challenge."""
-    cleaned = _strip_obfuscation(challenge_text)
+def _detect_operation(text: str) -> str:
+    """Detect math operation from challenge keywords."""
+    # Collapse adjacent duplicate chars for robust keyword matching
+    collapsed = re.sub(r'(.)\1+', r'\1', text.lower())
 
-    numbers = _extract_numbers_from_text(cleaned)
+    if "per claw" in collapsed or "split" in collapsed:
+        return "divide"
+    if "remain" in collapsed or "lose" in collapsed:
+        return "subtract"
+    if ("shel" in collapsed and "find" in collapsed) or (
+        "how many" in collapsed and "more" in collapsed
+    ):
+        return "add"
+    # force, distance, and default -> multiply
+    return "multiply"
+
+
+def solve_captcha(challenge_text: str) -> Optional[float]:
+    """Solve a Moltbook obfuscated math CAPTCHA challenge."""
+    cleaned = _deobfuscate(challenge_text)
+    numbers = _find_numbers(cleaned)
+
     if len(numbers) < 2:
         return None
 
     a, b = numbers[0], numbers[1]
+    op = _detect_operation(cleaned)
 
-    # Detect operation from keywords
-    text_lower = cleaned.lower()
-    if any(kw in text_lower for kw in ["total force", "how much total", "how many", "total", "finds"]):
-        if any(kw in text_lower for kw in ["claw", "per second", "seconds", "force"]):
-            # Could be multiply or add - check context
-            if "claws" in text_lower or "per second" in text_lower or "per claw" not in text_lower:
-                if "finds" in text_lower or "shells" in text_lower:
-                    result = a + b
-                else:
-                    result = a * b
-            else:
-                result = a * b
-        else:
-            result = a + b
-    elif "how far" in text_lower or "how much total" in text_lower:
-        result = a * b
-    elif "remains" in text_lower or "loses" in text_lower:
-        result = a - b
-    elif "per claw" in text_lower or "splits" in text_lower:
-        result = a / b if b != 0 else 0
-    elif "how many" in text_lower and "more" in text_lower:
+    if op == "add":
         result = a + b
+    elif op == "subtract":
+        result = a - b
+    elif op == "divide":
+        result = a / b if b != 0 else 0.0
     else:
-        # Default: try multiply (most common challenge type)
         result = a * b
 
     return round(result, 2)
+
+
+# ── API helpers ──────────────────────────────────────────────────────
 
 
 def load_credentials() -> dict:
@@ -217,21 +216,20 @@ def parse_post(filepath: Path) -> dict:
         stripped = line.strip()
         if stripped.startswith("**submolt:**"):
             raw = stripped.replace("**submolt:**", "").strip()
-            # Handle both m/name and r/name formats
             submolt = raw.split("/")[-1] if "/" in raw else raw
         elif stripped.startswith("## ") and not title:
             title = stripped[3:].strip()
-            # Content starts after this heading
             content_start = i
 
-    # Extract body: everything from the ## heading onward
     body_lines = lines[content_start:]
     content = "\n".join(body_lines).strip()
 
     return {"title": title, "content": content, "submolt": submolt}
 
 
-def api_call(method: str, endpoint: str, api_key: str, data: Optional[dict] = None) -> dict:
+def api_call(
+    method: str, endpoint: str, api_key: str, data: Optional[dict] = None,
+) -> dict:
     """Make an API call to Moltbook."""
     url = f"{BASE_URL}/{endpoint.lstrip('/')}"
     body = json.dumps(data).encode() if data else None
@@ -259,8 +257,10 @@ def api_call(method: str, endpoint: str, api_key: str, data: Optional[dict] = No
         sys.exit(1)
 
 
-def create_submolt(api_key: str, name: str, display_name: str, description: str) -> dict:
-    """Create a new submolt."""
+def create_submolt(
+    api_key: str, name: str, display_name: str, description: str,
+) -> dict:
+    """Create a new submolt on Moltbook."""
     return api_call("POST", "/submolts", api_key, {
         "name": name,
         "display_name": display_name,
@@ -268,7 +268,14 @@ def create_submolt(api_key: str, name: str, display_name: str, description: str)
     })
 
 
-def publish_post(filepath: Path, submolt_override: Optional[str] = None, dry_run: bool = False) -> Optional[str]:
+# ── Main publish flow ────────────────────────────────────────────────
+
+
+def publish_post(
+    filepath: Path,
+    submolt_override: Optional[str] = None,
+    dry_run: bool = False,
+) -> Optional[str]:
     """Publish a post to Moltbook. Returns the post ID on success."""
     published = load_published()
     file_key = str(filepath)
@@ -360,8 +367,12 @@ def main() -> None:
         description="Publish research posts to Moltbook",
     )
     parser.add_argument("file", type=Path, help="Markdown post file to publish")
-    parser.add_argument("--submolt", help="Override the submolt from the post frontmatter")
-    parser.add_argument("--dry-run", action="store_true", help="Print what would be posted")
+    parser.add_argument(
+        "--submolt", help="Override the submolt from the post frontmatter",
+    )
+    parser.add_argument(
+        "--dry-run", action="store_true", help="Print what would be posted",
+    )
     parser.add_argument(
         "--create-submolt",
         metavar="NAME",
