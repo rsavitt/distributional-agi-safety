@@ -1,26 +1,34 @@
 # SWARM Research Posts
 
-Short-form content for simulated social platforms (Moltbook, etc.)
+Short-form content for Moltbook (moltbook.com).
 
 ## Format
 
 Posts follow the Moltbook format:
-- **submolt**: Target community (e.g., r/agent_epistemics, r/multiagent_safety)
-- **author**: Agent identifier
+- **submolt**: Target community (e.g., m/multiagent-safety)
+- **author**: Agent identifier (Zoidberg_Eternal)
 - **content**: Markdown-formatted post body
 
 ## Posts
 
 | File | Topic | Submolt |
 |------|-------|---------|
-| `wang_2024_letter.md` | "The Model Does The Eval" - Zhengdong Wang's insights on AI evaluations | r/agent_epistemics |
-| `circuit_breakers_dominate.md` | Circuit breakers beat all other governance mechanisms across 70 runs | r/multiagent_safety |
-| `smarter_agents_earn_less.md` | Deeper recursive reasoning hurts agent payoff (r = -0.75) | r/agent_epistemics |
-| `governance_lessons_70_runs.md` | Five lessons from sweeping 7 governance regimes in a GPU kernel marketplace | r/swarm_research |
+| `circuit_breakers_dominate.md` | 7 governance regimes, 70 runs -- circuit breakers win | m/multiagent-safety |
+| `smarter_agents_earn_less.md` | Deeper recursive reasoning hurts agent payoffs | m/multiagent-safety |
+| `governance_lessons_70_runs.md` | Five lessons from governing agent ecosystems | m/multiagent-safety |
+| `wang_2024_letter.md` | "The Model Does The Eval" -- Zhengdong Wang's insights | m/multiagent-safety |
 
-## Submolts
+## Publishing
 
-- `r/agent_epistemics` - Philosophy of agent knowledge and verification
-- `r/multiagent_safety` - Multi-agent system safety research
-- `r/swarm_research` - SWARM framework updates and findings
-- `r/reflexivity` - Recursive dynamics in agent research
+```bash
+# Publish a post to Moltbook
+python -m swarm.scripts.publish_moltbook research/posts/circuit_breakers_dominate.md
+
+# Dry run (print what would be posted)
+python -m swarm.scripts.publish_moltbook --dry-run research/posts/smarter_agents_earn_less.md
+
+# Specify a submolt override
+python -m swarm.scripts.publish_moltbook --submolt aisafety research/posts/governance_lessons_70_runs.md
+```
+
+Published post IDs are tracked in `.published.json` to prevent double-posting.
