@@ -125,6 +125,19 @@ class SubmissionResult:
     version: int = 1
 
 
+def _error_detail(exc: requests.RequestException) -> str:
+    """Extract error detail including response body when available."""
+    msg = str(exc)
+    if hasattr(exc, "response") and exc.response is not None:
+        try:
+            body = exc.response.text[:500]
+            if body:
+                msg = f"{msg} | {body}"
+        except Exception:
+            pass
+    return msg
+
+
 def _is_retryable(exc: BaseException) -> bool:
     """Check if an HTTP error is retryable (429 or 5xx)."""
     if isinstance(exc, requests.HTTPError) and exc.response is not None:
@@ -230,7 +243,7 @@ class PlatformClient:
             )
         except requests.RequestException as e:
             logger.warning("Submit failed on %s: %s", self.base_url, e)
-            return SubmissionResult(success=False, message=str(e))
+            return SubmissionResult(success=False, message=_error_detail(e))
 
     def update(self, paper_id: str, paper: Paper) -> SubmissionResult:
         """Update an existing paper."""
@@ -256,7 +269,7 @@ class PlatformClient:
             )
         except requests.RequestException as e:
             logger.warning("Update %s failed on %s: %s", paper_id, self.base_url, e)
-            return SubmissionResult(success=False, message=str(e))
+            return SubmissionResult(success=False, message=_error_detail(e))
 
     def upvote(self, paper_id: str) -> bool:
         """Upvote a paper."""
@@ -376,7 +389,7 @@ class AgentxivClient(PlatformClient):
             )
         except requests.RequestException as e:
             logger.warning("Submit failed on %s: %s", self.base_url, e)
-            return SubmissionResult(success=False, message=str(e))
+            return SubmissionResult(success=False, message=_error_detail(e))
 
     def update(self, paper_id: str, paper: Paper) -> SubmissionResult:
         """Revise an existing paper."""
@@ -402,7 +415,7 @@ class AgentxivClient(PlatformClient):
             )
         except requests.RequestException as e:
             logger.warning("Revise %s failed on %s: %s", paper_id, self.base_url, e)
-            return SubmissionResult(success=False, message=str(e))
+            return SubmissionResult(success=False, message=_error_detail(e))
 
     def get_categories(self) -> list[str]:
         """Get available paper categories."""
@@ -514,7 +527,7 @@ class ClawxivClient(PlatformClient):
             )
         except requests.RequestException as e:
             logger.warning("Submit failed on %s: %s", self.base_url, e)
-            return SubmissionResult(success=False, message=str(e))
+            return SubmissionResult(success=False, message=_error_detail(e))
 
     def update(self, paper_id: str, paper: Paper) -> SubmissionResult:
         """Update an existing paper (single-author)."""
@@ -544,7 +557,7 @@ class ClawxivClient(PlatformClient):
             )
         except requests.RequestException as e:
             logger.warning("Update %s failed on %s: %s", paper_id, self.base_url, e)
-            return SubmissionResult(success=False, message=str(e))
+            return SubmissionResult(success=False, message=_error_detail(e))
 
     def search(
         self,
@@ -764,7 +777,7 @@ class AgentRxivClient(PlatformClient):
                 )
         except Exception as e:
             logger.error("AgentRxiv submit failed: %s", e)
-            return SubmissionResult(success=False, message=str(e))
+            return SubmissionResult(success=False, message=_error_detail(e))
 
     def trigger_update(self) -> bool:
         """Trigger server to process new uploads."""
