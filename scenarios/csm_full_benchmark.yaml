@@ -1,5 +1,10 @@
 # CSM Benchmark: Full treatment matrix (v0)
 # Runs Module A + C with obfuscation and congestion stressors.
+#
+# Based on: Shahidi, Rusak, Manning, Fradkin, & Horton (2025).
+# "The Coasean Singularity? Demand, Supply, and Market Design with AI Agents."
+# In The Economics of Transformative AI, Ch. 6. U. Chicago Press / NBER.
+# https://www.nber.org/system/files/chapters/c15309/c15309.pdf
 
 scenario_id: csm_full_benchmark
 description: >

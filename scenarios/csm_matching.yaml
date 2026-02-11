@@ -1,5 +1,6 @@
 # CSM Benchmark: Module C — Matching Market
 # Two-sided matching with preference elicitation and congestion stress.
+# Ref: Shahidi et al. (2025), "The Coasean Singularity?", NBER Ch. c15309.
 
 scenario_id: csm_matching
 description: >

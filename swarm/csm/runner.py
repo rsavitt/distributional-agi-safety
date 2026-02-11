@@ -445,8 +445,15 @@ def run_csm_benchmark(
 
     # Save results
     if output_dir is not None:
-        output_dir.mkdir(parents=True, exist_ok=True)
-        results_file = output_dir / "csm_results.json"
+        resolved = output_dir.resolve()
+        # Guard against path traversal: output must stay under cwd or runs/
+        cwd = Path.cwd().resolve()
+        if not (str(resolved).startswith(str(cwd)) or "runs" in resolved.parts):
+            raise ValueError(
+                f"output_dir must be within the project directory, got {output_dir}"
+            )
+        resolved.mkdir(parents=True, exist_ok=True)
+        results_file = resolved / "csm_results.json"
         results_data = [r.to_dict() for r in all_results]
         with open(results_file, "w") as f:
             json.dump(results_data, f, indent=2, default=str)

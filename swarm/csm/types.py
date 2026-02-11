@@ -348,3 +348,9 @@ class CSMTreatment:
     n_sellers: int = 10
     n_epochs: int = 10
     seed: Optional[int] = None
+
+    def __post_init__(self) -> None:
+        if not 0.0 <= self.adoption_rate <= 1.0:
+            raise ValueError(
+                f"adoption_rate must be in [0, 1], got {self.adoption_rate}"
+            )

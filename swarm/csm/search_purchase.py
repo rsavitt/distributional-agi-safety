@@ -46,7 +46,15 @@ def generate_catalog(
 
     Returns:
         List of ProductListing objects.
+
+    Raises:
+        ValueError: If rate parameters are outside [0, 1].
     """
+    if not 0.0 <= obfuscation_rate <= 1.0:
+        raise ValueError(f"obfuscation_rate must be in [0, 1], got {obfuscation_rate}")
+    if not 0.0 <= bait_and_switch_rate <= 1.0:
+        raise ValueError(f"bait_and_switch_rate must be in [0, 1], got {bait_and_switch_rate}")
+
     if rng is None:
         rng = np.random.default_rng()
 

@@ -1,5 +1,6 @@
 # CSM Benchmark: Module A — Search + Purchase
 # Tests e-commerce search under obfuscation with multiple ownership types.
+# Ref: Shahidi et al. (2025), "The Coasean Singularity?", NBER Ch. c15309.
 
 scenario_id: csm_search_purchase
 description: >

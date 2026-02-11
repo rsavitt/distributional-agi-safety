@@ -59,7 +59,10 @@ def simulate_platform_access(
     for _ in range(n_transactions):
         agent = agents[int(rng.integers(len(agents)))]
         agent_id = agent["agent_id"]
-        ownership = AgentOwnership(agent.get("ownership", "byo"))
+        try:
+            ownership = AgentOwnership(agent.get("ownership", "byo"))
+        except ValueError:
+            ownership = AgentOwnership.BYO
 
         # Agent chooses platform (may be locked in)
         preferred = agent.get("preferred_platform", "")
