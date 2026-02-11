@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import sys
 import time
@@ -141,10 +142,14 @@ def _detect_operation(text: str) -> str:
     # Collapse adjacent duplicate chars for robust keyword matching
     collapsed = re.sub(r'(.)\1+', r'\1', text.lower())
 
-    if "per claw" in collapsed or "split" in collapsed:
+    if "per claw" in collapsed or "split" in collapsed or "divided" in collapsed:
         return "divide"
-    if "remain" in collapsed or "lose" in collapsed:
+    if "remain" in collapsed or "lose" in collapsed or "left" in collapsed:
         return "subtract"
+    if any(kw in collapsed for kw in (
+        "ads", "sum", "combined", "together", "plus",
+    )):
+        return "add"
     if ("shel" in collapsed and "find" in collapsed) or (
         "how many" in collapsed and "more" in collapsed
     ):
@@ -153,8 +158,60 @@ def _detect_operation(text: str) -> str:
     return "multiply"
 
 
-def solve_captcha(challenge_text: str) -> Optional[float]:
-    """Solve a Moltbook obfuscated math CAPTCHA challenge."""
+def _solve_captcha_llm(challenge_text: str) -> Optional[float]:
+    """Solve CAPTCHA using an LLM (Anthropic or OpenAI)."""
+    api_key = os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("OPENAI_API_KEY")
+    if not api_key:
+        return None
+
+    prompt = (
+        "The following is an obfuscated math problem from a CAPTCHA. "
+        "Characters may be repeated, punctuation injected, and filler words added. "
+        "Figure out the math problem and return ONLY the numerical answer "
+        "(a single number, nothing else).\n\n"
+        f"Challenge: {challenge_text}"
+    )
+
+    if os.environ.get("ANTHROPIC_API_KEY"):
+        url = "https://api.anthropic.com/v1/messages"
+        body = json.dumps({
+            "model": "claude-haiku-4-5-20251001",
+            "max_tokens": 64,
+            "messages": [{"role": "user", "content": prompt}],
+        }).encode()
+        req = Request(url, data=body, method="POST")
+        req.add_header("x-api-key", api_key)
+        req.add_header("anthropic-version", "2023-06-01")
+        req.add_header("Content-Type", "application/json")
+    else:
+        url = "https://api.openai.com/v1/chat/completions"
+        body = json.dumps({
+            "model": "gpt-4o-mini",
+            "max_tokens": 64,
+            "messages": [{"role": "user", "content": prompt}],
+        }).encode()
+        req = Request(url, data=body, method="POST")
+        req.add_header("Authorization", f"Bearer {api_key}")
+        req.add_header("Content-Type", "application/json")
+
+    try:
+        with urlopen(req, timeout=15) as resp:
+            data = json.loads(resp.read())
+            if os.environ.get("ANTHROPIC_API_KEY"):
+                text = data["content"][0]["text"].strip()
+            else:
+                text = data["choices"][0]["message"]["content"].strip()
+            # Extract number from response
+            m = re.search(r'-?\d+(?:\.\d+)?', text)
+            if m:
+                return round(float(m.group()), 2)
+    except Exception as e:
+        print(f"LLM solver failed: {e}", file=sys.stderr)
+    return None
+
+
+def _solve_captcha_regex(challenge_text: str) -> Optional[float]:
+    """Solve CAPTCHA using regex-based number extraction."""
     cleaned = _deobfuscate(challenge_text)
     numbers = _find_numbers(cleaned)
 
@@ -176,16 +233,32 @@ def solve_captcha(challenge_text: str) -> Optional[float]:
     return round(result, 2)
 
 
+def solve_captcha(challenge_text: str) -> Optional[float]:
+    """Solve a Moltbook obfuscated math CAPTCHA challenge.
+
+    Tries LLM solver first (requires ANTHROPIC_API_KEY or OPENAI_API_KEY),
+    falls back to regex-based solver.
+    """
+    result = _solve_captcha_llm(challenge_text)
+    if result is not None:
+        return result
+    return _solve_captcha_regex(challenge_text)
+
+
 # ── API helpers ──────────────────────────────────────────────────────
 
 
-def load_credentials() -> dict:
+def load_credentials(account: str = "current") -> dict:
     """Load Moltbook API credentials."""
     if not CREDENTIALS_PATH.exists():
         print(f"Error: No credentials at {CREDENTIALS_PATH}", file=sys.stderr)
         sys.exit(1)
     data: dict = json.loads(CREDENTIALS_PATH.read_text())
-    creds: dict = data["current"]
+    if account not in data:
+        print(f"Error: No '{account}' account in credentials", file=sys.stderr)
+        print(f"Available: {', '.join(data.keys())}", file=sys.stderr)
+        sys.exit(1)
+    creds: dict = data[account]
     return creds
 
 
@@ -275,6 +348,7 @@ def publish_post(
     filepath: Path,
     submolt_override: Optional[str] = None,
     dry_run: bool = False,
+    account: str = "current",
 ) -> Optional[str]:
     """Publish a post to Moltbook. Returns the post ID on success."""
     published = load_published()
@@ -303,7 +377,7 @@ def publish_post(
             print(f"... ({len(post['content']) - 500} more chars)")
         return None
 
-    creds = load_credentials()
+    creds = load_credentials(account)
 
     # Step 1: Create the post
     print("Creating post...")
@@ -378,6 +452,11 @@ def main() -> None:
         metavar="NAME",
         help="Create a submolt before posting (e.g. multiagent-safety)",
     )
+    parser.add_argument(
+        "--account",
+        default="current",
+        help="Credential profile to use (default: current)",
+    )
     args = parser.parse_args()
 
     if not args.file.exists():
@@ -385,7 +464,7 @@ def main() -> None:
         sys.exit(1)
 
     if args.create_submolt:
-        creds = load_credentials()
+        creds = load_credentials(args.account)
         print(f"Creating submolt: {args.create_submolt}")
         result = create_submolt(
             creds["api_key"],
@@ -396,7 +475,12 @@ def main() -> None:
         print(f"Result: {result}")
         print()
 
-    publish_post(args.file, submolt_override=args.submolt, dry_run=args.dry_run)
+    publish_post(
+        args.file,
+        submolt_override=args.submolt,
+        dry_run=args.dry_run,
+        account=args.account,
+    )
 
 
 if __name__ == "__main__":
