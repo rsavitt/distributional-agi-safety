@@ -131,7 +131,7 @@ class SkillEvolvingMixin:
         adjusted = base_threshold + delta
 
         # Clamp to valid range
-        return max(0.0, min(1.0, adjusted))
+        return float(max(0.0, min(1.0, adjusted)))
 
     def apply_skill_to_trust_weight(
         self,
@@ -145,7 +145,7 @@ class SkillEvolvingMixin:
         effect = skill.effect
         delta = effect.get("trust_weight_delta", 0.0)
         adjusted = base_weight + delta
-        return max(0.0, min(1.0, adjusted))
+        return float(max(0.0, min(1.0, adjusted)))
 
     def skill_augmented_update(
         self,
@@ -189,6 +189,11 @@ class SkillEvolvingMixin:
 
         return new_skill
 
+    def _skill_effectiveness(self, skill_id: str) -> float:
+        """Return effectiveness for a skill, or 0.0 if no performance data."""
+        perf = self.skill_library.get_performance(skill_id)
+        return perf.effectiveness if perf else 0.0
+
     def skill_library_summary(self) -> Dict:
         """Get a summary of the agent's skill library."""
         if not self.has_skills:
@@ -207,19 +212,11 @@ class SkillEvolvingMixin:
                 {
                     "name": s.name,
                     "type": s.skill_type.value,
-                    "effectiveness": (
-                        self.skill_library.get_performance(s.skill_id).effectiveness
-                        if self.skill_library.get_performance(s.skill_id)
-                        else 0.0
-                    ),
+                    "effectiveness": self._skill_effectiveness(s.skill_id),
                 }
                 for s in sorted(
                     skills,
-                    key=lambda x: (
-                        self.skill_library.get_performance(x.skill_id).effectiveness
-                        if self.skill_library.get_performance(x.skill_id)
-                        else 0.0
-                    ),
+                    key=lambda x: self._skill_effectiveness(x.skill_id),
                     reverse=True,
                 )[:5]
             ],

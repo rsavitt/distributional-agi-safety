@@ -347,12 +347,12 @@ class SkillEvolutionEngine:
 
         # Numeric bounds: take tightest
         for key in ("min_p", "min_reputation", "min_trust"):
-            vals = [c.get(key) for c in (cond_a, cond_b) if key in c]
+            vals = [c[key] for c in (cond_a, cond_b) if key in c]
             if vals:
                 merged[key] = max(vals)
 
         for key in ("max_p", "max_reputation", "max_trust"):
-            vals = [c.get(key) for c in (cond_a, cond_b) if key in c]
+            vals = [c[key] for c in (cond_a, cond_b) if key in c]
             if vals:
                 merged[key] = min(vals)
 
@@ -396,7 +396,7 @@ class SkillEvolutionEngine:
         """Record co-occurrence of skills in a successful interaction."""
         for i, sid_a in enumerate(skill_ids):
             for sid_b in skill_ids[i + 1:]:
-                key = tuple(sorted([sid_a, sid_b]))
+                key: tuple[str, str] = (min(sid_a, sid_b), max(sid_a, sid_b))
                 self._co_occurrences[key] = self._co_occurrences.get(key, 0) + 1
 
         # Cap co-occurrence dict to prevent unbounded growth
