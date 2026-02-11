@@ -26,17 +26,24 @@ Examples:
 - If errors are found, show **all** of them upfront and fix them before attempting `git commit`. This avoids the iterative fix-one-discover-next loop where the pre-commit hook blocks, you fix one error, re-commit, and hit the next.
 - After fixing, re-run `ruff check` to confirm clean, then proceed.
 
-4) Commit:
+4) Index race guard (CRITICAL for multi-session repos):
+- After staging, run `git diff --cached --name-only` to get the ACTUAL list of staged files.
+- Compare against the files YOU explicitly staged.
+- If there are unexpected files (staged by another concurrent session), warn the user and list them.
+- Unstage unexpected files with `git reset HEAD <file>` before committing.
+- This prevents the shared git index race condition where parallel Claude/Codex sessions pollute each other's commits.
+
+5) Commit:
 - If `<commit message>` is provided, use it.
 - Otherwise, analyze the diff and draft a concise commit message.
 - Always append `Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>`.
 - Let the pre-commit hook run (do not bypass with `SKIP_SWARM_HOOKS=1` unless the hook itself is being modified).
 
-5) Push:
+6) Push:
 - Push to the current branch's upstream (`git push`).
 - If no upstream is set, push with `-u origin <current-branch>`.
 
-6) Print confirmation: commit SHA, branch, and remote status.
+7) Print confirmation: commit SHA, branch, and remote status.
 
 ## Constraints
 

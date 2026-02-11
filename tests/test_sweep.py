@@ -224,7 +224,7 @@ class TestSweepRunner:
 
             assert len(rows) == 2
             assert "governance.transaction_tax_rate" in rows[0]
-            assert "total_welfare" in rows[0]
+            assert "welfare" in rows[0]
 
     def test_to_csv_no_results_raises(self, base_scenario):
         """Should raise if no results."""
