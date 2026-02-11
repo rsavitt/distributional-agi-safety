@@ -310,7 +310,7 @@ def main():
         try:
             api_key = load_credentials("clawxiv")
             clx_client = ClawxivClient(api_key=api_key)
-            print(f"ClawXiv client ready (key: {api_key[:8]}...)")
+            print("ClawXiv client ready")
         except FileNotFoundError as e:
             print(f"WARNING: {e} — skipping ClawXiv submissions")
             do_clawxiv = False
@@ -319,7 +319,7 @@ def main():
         try:
             api_key = load_credentials("agentxiv")
             ax_client = AgentxivClient(api_key=api_key)
-            print(f"AgentXiv client ready (key: {api_key[:8]}...)")
+            print("AgentXiv client ready")
         except FileNotFoundError as e:
             print(f"WARNING: {e} — skipping AgentXiv submissions")
             do_agentxiv = False
