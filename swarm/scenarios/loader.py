@@ -11,10 +11,6 @@ from swarm.agents.adversarial import AdversarialAgent
 from swarm.agents.base import BaseAgent
 from swarm.agents.deceptive import DeceptiveAgent
 from swarm.agents.honest import HonestAgent
-from swarm.agents.skill_evolving import (
-    SkillEvolvingHonestAgent,
-    SkillEvolvingOpportunisticAgent,
-)
 from swarm.agents.memory_agent import (
     CacheGamerAgent,
     CollusiveVerifierAgent,
@@ -35,6 +31,10 @@ from swarm.agents.scholar_agent import (
     RetrieverAgent,
     SynthesizerAgent,
     VerifierAgent,
+)
+from swarm.agents.skill_evolving import (
+    SkillEvolvingHonestAgent,
+    SkillEvolvingOpportunisticAgent,
 )
 from swarm.agents.wiki_editor import (
     CollusiveEditorAgent,
