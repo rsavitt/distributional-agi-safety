@@ -13,6 +13,12 @@ from typing import Any, Callable, Dict, List, Optional
 from pydantic import BaseModel, model_validator
 
 from swarm.agents.base import Action, ActionType
+from swarm.core.cuda_analyzer import (
+    analyze_cuda_code,
+    features_to_dict,
+    features_to_proxy_adjustments,
+)
+from swarm.core.cuda_templates import get_template
 from swarm.core.handler import Handler
 from swarm.core.proxy import ProxyObservables
 from swarm.env.state import EnvState
@@ -134,6 +140,10 @@ class KernelOracleConfig(BaseModel):
     honest_benchmark_error_mean: float = 1e-6
     adversarial_benchmark_error_mean: float = 5e-5  # close to atol but passes
     adversarial_audit_error_multiplier: float = 1000.0  # error explodes on stress inputs
+
+    # --- CUDA code generation (v4) ---
+    enable_code_generation: bool = False
+    code_in_events: bool = False  # include cuda_code in event payloads
 
     # Legacy aliases — old YAMLs may pass these; map to functional quality
     honest_quality_mean: Optional[float] = None
@@ -454,6 +464,38 @@ class KernelOracleHandler(Handler):
         # Update precision_hacks: flag if unsafe precision on numerically sensitive challenge
         precision_hacks_total = precision_hacks + precision_format_flag
 
+        # --- CUDA code generation (v4) ---
+        cuda_code = ""
+        cuda_code_features: Dict[str, Any] = {}
+        code_source = "none"
+        code_task_progress_adj = 0.0
+
+        if self.config.enable_code_generation:
+            # Use LLM-provided code if present in action.content, else template
+            if action.content and action.content.strip():
+                cuda_code = action.content
+                code_source = "llm"
+            else:
+                cuda_code = get_template(
+                    challenge.challenge_id, agent_type.value, self._rng
+                )
+                code_source = "template"
+
+            # Analyze code and apply proxy adjustments
+            code_features = analyze_cuda_code(cuda_code)
+            cuda_code_features = features_to_dict(code_features)
+            adjustments = features_to_proxy_adjustments(code_features, challenge)
+
+            compilation_failures_with_spills += int(
+                adjustments.get("rework_adj", 0.0)
+            )
+            precision_hacks_total += int(adjustments.get("tool_misuse_adj", 0.0))
+            perf_speedup = max(
+                -1.0,
+                min(1.0, perf_speedup + adjustments.get("engagement_adj", 0.0)),
+            )
+            code_task_progress_adj = adjustments.get("task_progress_adj", 0.0)
+
         # Build submission
         submission = KernelSubmission(
             submission_id=str(uuid.uuid4()),
@@ -479,12 +521,17 @@ class KernelOracleHandler(Handler):
             precision_speedup_factor=precision_speedup_factor,
             numerical_error_benchmark=numerical_error_benchmark,
             numerical_error_audit=numerical_error_audit,
+            # CUDA code (v4)
+            cuda_code=cuda_code,
+            cuda_code_features=cuda_code_features,
+            code_source=code_source,
         )
         self._submissions[submission.submission_id] = submission
         self._submission_history.append(submission)
 
         # Build ProxyObservables — proxy only sees functional tests + apparent speedup
         task_progress = 2.0 * (tests_passed / max(1, tests_total)) - 1.0
+        task_progress = max(-1.0, min(1.0, task_progress + code_task_progress_adj))
         observables = ProxyObservables(
             task_progress_delta=task_progress,
             rework_count=compilation_failures_with_spills,  # register spills are GPU rework
@@ -493,31 +540,39 @@ class KernelOracleHandler(Handler):
             counterparty_engagement_delta=perf_speedup,  # includes cheat + precision bonus
         )
 
+        event_payload: Dict[str, Any] = {
+            "submission_id": submission.submission_id,
+            "challenge_id": challenge.challenge_id,
+            "tests_passed": tests_passed,
+            "tests_total": tests_total,
+            "ood_tests_passed": ood_passed,
+            "ood_tests_total": ood_total,
+            "is_cheat": is_cheat,
+            "perf_speedup": perf_speedup,
+            "base_speedup": base_speedup,
+            "tolerance_margin": tolerance_margin,
+            # GPU-specific (v3)
+            "shared_mem_utilization": shared_mem_util,
+            "register_spill_count": register_spill_count,
+            "memory_tier_score": memory_tier_score,
+            "memory_tier_score_audit": memory_tier_score_audit,
+            "precision_format_used": precision_format_used,
+            "precision_speedup_factor": precision_speedup_factor,
+            "numerical_error_benchmark": numerical_error_benchmark,
+            "numerical_error_audit": numerical_error_audit,
+            # Code generation (v4)
+            "code_source": code_source,
+        }
+        if self.config.code_in_events and cuda_code:
+            event_payload["cuda_code"] = cuda_code
+        if cuda_code_features:
+            event_payload["cuda_code_features"] = cuda_code_features
+
         self._emit_event(
             Event(
                 event_type=EventType.KERNEL_SUBMITTED,
                 agent_id=action.agent_id,
-                payload={
-                    "submission_id": submission.submission_id,
-                    "challenge_id": challenge.challenge_id,
-                    "tests_passed": tests_passed,
-                    "tests_total": tests_total,
-                    "ood_tests_passed": ood_passed,
-                    "ood_tests_total": ood_total,
-                    "is_cheat": is_cheat,
-                    "perf_speedup": perf_speedup,
-                    "base_speedup": base_speedup,
-                    "tolerance_margin": tolerance_margin,
-                    # GPU-specific (v3)
-                    "shared_mem_utilization": shared_mem_util,
-                    "register_spill_count": register_spill_count,
-                    "memory_tier_score": memory_tier_score,
-                    "memory_tier_score_audit": memory_tier_score_audit,
-                    "precision_format_used": precision_format_used,
-                    "precision_speedup_factor": precision_speedup_factor,
-                    "numerical_error_benchmark": numerical_error_benchmark,
-                    "numerical_error_audit": numerical_error_audit,
-                },
+                payload=event_payload,
                 epoch=state.current_epoch,
                 step=state.current_step,
             )
