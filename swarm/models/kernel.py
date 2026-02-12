@@ -58,6 +58,11 @@ class KernelSubmission:
     numerical_error_benchmark: float = 0.0  # max error on benchmark inputs
     numerical_error_audit: float = 0.0  # max error on stress inputs (audit reveals)
 
+    # CUDA code generation (v4)
+    cuda_code: str = ""
+    cuda_code_features: Dict[str, Any] = field(default_factory=dict)
+    code_source: str = "none"  # "template" | "llm" | "none"
+
 
 @dataclass
 class KernelActionResult:

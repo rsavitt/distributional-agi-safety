@@ -97,6 +97,44 @@ Observables → ProxyComputer → v_hat → sigmoid → p → SoftPayoffEngine �
 - **Adverse selection**: When low-quality interactions are preferentially accepted (quality_gap < 0)
 - **Externality internalization**: ρ parameters control how much agents bear cost of ecosystem harm
 
+## Multi-Session Worktree Workflow
+
+When running 15+ concurrent Claude Code sessions, each session runs in its own git worktree to avoid index races and branch conflicts.
+
+### Launch
+
+```bash
+./scripts/claude-tmux.sh 4    # Launch 4 isolated sessions
+./scripts/claude-tmux.sh kill  # Kill tmux session (worktrees kept)
+./scripts/claude-tmux.sh cleanup  # Remove all session worktrees + branches
+```
+
+### Environment Variables
+
+Each session pane has these env vars set via `scripts/detect-session.sh`:
+
+| Variable | Example | Description |
+|---|---|---|
+| `IS_SESSION_WORKTREE` | `true` | Whether this shell is inside a session worktree |
+| `SESSION_ID` | `session-2` | Worktree directory name |
+| `WORKTREE_ID` | `pane-2` | Pane identifier |
+| `SESSION_BRANCH` | `session/pane-2` | Git branch for this session |
+| `MAIN_REPO_ROOT` | `/path/to/repo` | Absolute path to the main repo |
+
+### Session-Aware Commands
+
+| Command | Worktree behavior |
+|---|---|
+| `/status` | Shows session identity and main repo path at top |
+| `/pr` | Branches from `origin/main` instead of checking out `main` |
+| `/commit_push` | Uses `bd --sandbox sync` to avoid beads daemon contention |
+| `/merge_session` | Merges session branch into main (run from main repo) |
+| `/merge_all_sessions` | Merges all session branches at once |
+
+### Beads in Sessions
+
+Use `bd --sandbox` in worktrees to avoid contention with the main repo's beads daemon. The `/commit_push` command does this automatically.
+
 ## Safety / invariants (do not break)
 
 - `p` must remain in `[0, 1]` everywhere it is surfaced or logged.

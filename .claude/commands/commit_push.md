@@ -15,7 +15,9 @@ If no message is provided, auto-generate one from the staged changes.
 3. If the user provided a commit message via `$ARGUMENTS`, use it. Otherwise, draft a concise commit message from the diff summary.
 4. Commit with the message (include `Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>`).
 5. Push to the current branch's remote.
-6. Run `bd sync` if beads are configured.
+6. Run beads sync if beads are configured:
+   - Detect worktree context: run `git rev-parse --git-dir` vs `git rev-parse --git-common-dir`. If they differ and the current branch starts with `session/`, use `bd --sandbox sync` to avoid daemon contention with other sessions.
+   - Otherwise: `bd sync`.
 7. Print the final `git log --oneline -1` to confirm.
 
 ## Constraints

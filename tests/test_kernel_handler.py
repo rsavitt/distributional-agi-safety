@@ -1064,3 +1064,171 @@ class TestV3CatalogGPUFields:
         """At least one challenge should have high numerical sensitivity."""
         sensitivities = [c.numerical_sensitivity for c in CHALLENGE_CATALOG]
         assert "high" in sensitivities
+
+
+class TestCudaCodeGeneration:
+    """Test CUDA code generation integration (v4)."""
+
+    def test_submission_has_code_when_enabled(self):
+        """Submissions should include CUDA code when code gen is enabled."""
+        handler, _ = _make_handler(seed=42, enable_code_generation=True)
+        state = _make_state(("h1", AgentType.HONEST))
+        handler.on_epoch_start(state)
+
+        action = Action(action_type=ActionType.SUBMIT_KERNEL, agent_id="h1")
+        result = handler.handle_action(action, state)
+
+        assert result.submission.cuda_code != ""
+        assert result.submission.code_source == "template"
+        assert len(result.submission.cuda_code_features) > 0
+
+    def test_no_code_when_disabled(self):
+        """Submissions should have no code when code gen is disabled (default)."""
+        handler, _ = _make_handler(seed=42)
+        state = _make_state(("h1", AgentType.HONEST))
+        handler.on_epoch_start(state)
+
+        action = Action(action_type=ActionType.SUBMIT_KERNEL, agent_id="h1")
+        result = handler.handle_action(action, state)
+
+        assert result.submission.cuda_code == ""
+        assert result.submission.code_source == "none"
+
+    def test_honest_template_has_bounds_check(self):
+        """Honest agent templates should include bounds checks."""
+        handler, _ = _make_handler(seed=42, enable_code_generation=True)
+        state = _make_state(("h1", AgentType.HONEST))
+        handler.on_epoch_start(state)
+
+        action = Action(action_type=ActionType.SUBMIT_KERNEL, agent_id="h1")
+        result = handler.handle_action(action, state)
+
+        features = result.submission.cuda_code_features
+        assert features.get("has_bounds_check") is True
+
+    def test_adversarial_template_has_hardcoded_shapes(self):
+        """Adversarial agent templates should have hardcoded shapes."""
+        handler, _ = _make_handler(
+            seed=42, enable_code_generation=True, adversarial_cheat_rate=1.0
+        )
+        state = _make_state(("adv_1", AgentType.ADVERSARIAL))
+
+        found_hardcoded = False
+        for _ in range(20):
+            handler.on_epoch_start(state)
+            action = Action(action_type=ActionType.SUBMIT_KERNEL, agent_id="adv_1")
+            result = handler.handle_action(action, state)
+            features = result.submission.cuda_code_features
+            if features.get("has_hardcoded_shapes"):
+                found_hardcoded = True
+                break
+
+        assert found_hardcoded, "Expected at least one adversarial template with hardcoded shapes"
+
+    def test_code_features_populated(self):
+        """Code features dict should have expected keys."""
+        handler, _ = _make_handler(seed=42, enable_code_generation=True)
+        state = _make_state(("h1", AgentType.HONEST))
+        handler.on_epoch_start(state)
+
+        action = Action(action_type=ActionType.SUBMIT_KERNEL, agent_id="h1")
+        result = handler.handle_action(action, state)
+
+        features = result.submission.cuda_code_features
+        assert "has_bounds_check" in features
+        assert "uses_shared_memory" in features
+        assert "has_hardcoded_shapes" in features
+        assert "code_length_lines" in features
+
+    def test_features_feed_proxy(self):
+        """Code features should affect proxy observables."""
+        # Compare with and without code gen for same seed
+        handler_off, _ = _make_handler(seed=42, enable_code_generation=False)
+        handler_on, _ = _make_handler(seed=42, enable_code_generation=True)
+        state = _make_state(("h1", AgentType.HONEST))
+
+        handler_off.on_epoch_start(state)
+        handler_on.on_epoch_start(state)
+
+        action = Action(action_type=ActionType.SUBMIT_KERNEL, agent_id="h1")
+        result_off = handler_off.handle_action(action, state)
+        result_on = handler_on.handle_action(action, state)
+
+        # With code gen, observables may differ due to code feature adjustments
+        # (honest templates with shared memory get +0.05 engagement boost)
+        sub = result_on.submission
+        if sub.cuda_code_features.get("uses_shared_memory"):
+            # Engagement should be >= without code gen (shared mem boost)
+            assert (
+                result_on.observables.counterparty_engagement_delta
+                >= result_off.observables.counterparty_engagement_delta - 0.01
+            )
+
+    def test_backward_compat_default_fields(self):
+        """KernelSubmission should work without code fields (backward compat)."""
+        from swarm.models.kernel import KernelSubmission
+
+        sub = KernelSubmission(challenge_id="1_vector_add", author_id="test")
+        assert sub.cuda_code == ""
+        assert sub.code_source == "none"
+        assert sub.cuda_code_features == {}
+
+    def test_llm_code_via_action_content(self):
+        """Code provided in action.content should be used as LLM code."""
+        handler, _ = _make_handler(seed=42, enable_code_generation=True)
+        state = _make_state(("h1", AgentType.HONEST))
+        handler.on_epoch_start(state)
+
+        llm_code = """
+        __global__ void vector_add(const float* A, const float* B, float* C, int N) {
+            int idx = blockIdx.x * blockDim.x + threadIdx.x;
+            if (idx < N) {
+                C[idx] = A[idx] + B[idx];
+            }
+        }
+        """
+        action = Action(
+            action_type=ActionType.SUBMIT_KERNEL,
+            agent_id="h1",
+            content=llm_code,
+        )
+        result = handler.handle_action(action, state)
+
+        assert result.submission.code_source == "llm"
+        assert "vector_add" in result.submission.cuda_code
+        assert result.submission.cuda_code_features.get("has_bounds_check") is True
+
+    def test_event_includes_code_source(self):
+        """Events should include code_source field."""
+        handler, collector = _make_handler(
+            seed=42, enable_code_generation=True, code_in_events=True,
+        )
+        state = _make_state(("h1", AgentType.HONEST))
+        handler.on_epoch_start(state)
+
+        action = Action(action_type=ActionType.SUBMIT_KERNEL, agent_id="h1")
+        handler.handle_action(action, state)
+
+        kernel_events = [
+            e for e in collector.events if e.event_type.value == "kernel_submitted"
+        ]
+        assert len(kernel_events) == 1
+        payload = kernel_events[0].payload
+        assert payload["code_source"] == "template"
+        assert "cuda_code" in payload
+        assert len(payload["cuda_code"]) > 0
+
+    def test_existing_tests_still_pass_with_code_gen_disabled(self):
+        """Enabling code gen should not break existing submission logic."""
+        handler, _ = _make_handler(seed=42, enable_code_generation=False)
+        state = _make_state(("h1", AgentType.HONEST))
+        handler.on_epoch_start(state)
+
+        action = Action(action_type=ActionType.SUBMIT_KERNEL, agent_id="h1")
+        result = handler.handle_action(action, state)
+
+        assert result.success
+        assert result.submission is not None
+        assert result.observables is not None
+        pass_rate = result.submission.tests_passed / max(1, result.submission.tests_total)
+        assert pass_rate > 0.3
