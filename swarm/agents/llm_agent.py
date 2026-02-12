@@ -17,7 +17,11 @@ from swarm.agents.base import (
     Role,
 )
 from swarm.agents.llm_config import LLMConfig, LLMProvider, LLMUsageStats
-from swarm.agents.llm_prompts import build_accept_prompt, build_action_prompt
+from swarm.agents.llm_prompts import (
+    build_accept_prompt,
+    build_action_prompt,
+    build_kernel_action_prompt,
+)
 from swarm.logging.prompt_audit import PromptAuditConfig, PromptAuditLog
 from swarm.models.agent import AgentType
 from swarm.models.interaction import InteractionType
@@ -508,6 +512,28 @@ class LLMAgent(BaseAgent):
                 content=params.get("content", ""),
             )
 
+        elif action_type == ActionType.SUBMIT_KERNEL:
+            return Action(
+                action_type=ActionType.SUBMIT_KERNEL,
+                agent_id=self.agent_id,
+                target_id=params.get("challenge_id", ""),
+                content=params.get("cuda_code", ""),
+            )
+
+        elif action_type == ActionType.VERIFY_KERNEL:
+            return Action(
+                action_type=ActionType.VERIFY_KERNEL,
+                agent_id=self.agent_id,
+                target_id=params.get("submission_id", ""),
+            )
+
+        elif action_type == ActionType.AUDIT_KERNEL:
+            return Action(
+                action_type=ActionType.AUDIT_KERNEL,
+                agent_id=self.agent_id,
+                target_id=params.get("submission_id", ""),
+            )
+
         else:
             logger.warning(f"Unhandled action type: {action_type}, defaulting to NOOP")
             return self.create_noop_action()
@@ -528,12 +554,21 @@ class LLMAgent(BaseAgent):
         system_prompt = ""
         user_prompt = ""
         try:
-            system_prompt, user_prompt = build_action_prompt(
-                persona=self.llm_config.persona,
-                observation=observation,
-                custom_system_prompt=self.llm_config.system_prompt,
-                memory=self.get_memory(limit=10),
-            )
+            # Use kernel-specific prompts when kernel challenges are available
+            if observation.kernel_available_challenges:
+                system_prompt, user_prompt = build_kernel_action_prompt(
+                    persona=self.llm_config.persona,
+                    observation=observation,
+                    custom_system_prompt=self.llm_config.system_prompt,
+                    memory=self.get_memory(limit=10),
+                )
+            else:
+                system_prompt, user_prompt = build_action_prompt(
+                    persona=self.llm_config.persona,
+                    observation=observation,
+                    custom_system_prompt=self.llm_config.system_prompt,
+                    memory=self.get_memory(limit=10),
+                )
 
             response, input_tokens, output_tokens = self._call_llm_sync(
                 system_prompt, user_prompt
@@ -589,12 +624,21 @@ class LLMAgent(BaseAgent):
         system_prompt = ""
         user_prompt = ""
         try:
-            system_prompt, user_prompt = build_action_prompt(
-                persona=self.llm_config.persona,
-                observation=observation,
-                custom_system_prompt=self.llm_config.system_prompt,
-                memory=self.get_memory(limit=10),
-            )
+            # Use kernel-specific prompts when kernel challenges are available
+            if observation.kernel_available_challenges:
+                system_prompt, user_prompt = build_kernel_action_prompt(
+                    persona=self.llm_config.persona,
+                    observation=observation,
+                    custom_system_prompt=self.llm_config.system_prompt,
+                    memory=self.get_memory(limit=10),
+                )
+            else:
+                system_prompt, user_prompt = build_action_prompt(
+                    persona=self.llm_config.persona,
+                    observation=observation,
+                    custom_system_prompt=self.llm_config.system_prompt,
+                    memory=self.get_memory(limit=10),
+                )
 
             response, input_tokens, output_tokens = await self._call_llm_async(
                 system_prompt, user_prompt
@@ -832,7 +876,8 @@ class LLMAgent(BaseAgent):
 
     def get_usage_stats(self) -> Dict[str, Any]:
         """Get LLM usage statistics."""
-        return self.usage_stats.to_dict()
+        result: Dict[str, Any] = self.usage_stats.to_dict()
+        return result
 
     def __repr__(self) -> str:
         return (
