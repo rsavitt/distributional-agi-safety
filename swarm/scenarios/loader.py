@@ -37,6 +37,7 @@ from swarm.agents.skill_evolving import (
     SkillEvolvingHonestAgent,
     SkillEvolvingOpportunisticAgent,
 )
+from swarm.agents.skillrl_agent import SkillRLAgent
 from swarm.agents.wiki_editor import (
     CollusiveEditorAgent,
     DiligentEditorAgent,
@@ -86,6 +87,8 @@ AGENT_TYPES: Dict[str, Type[BaseAgent]] = {
     # Skill-evolving agents
     "skill_honest": SkillEvolvingHonestAgent,
     "skill_opportunistic": SkillEvolvingOpportunisticAgent,
+    # SkillRL agent (Xia et al., 2026)
+    "skillrl": SkillRLAgent,
 }
 
 # LLM agent support (lazy import to avoid requiring LLM dependencies)
