@@ -31,7 +31,8 @@ Where `<paper_name>` is one of the paper stems (e.g. `distributional_agi_safety`
    - For papers with `\includegraphics`, verify all referenced figures exist
 
 5. **Source location**
-   - If `research/papers/<name>.tex` does not exist but `docs/papers/<name>.tex` does, copy it to `research/papers/` and apply the section rename above. The compile pipeline writes to `docs/papers/` but submission reads from `research/papers/`.
+   - `/compile_paper` automatically writes a submission-ready copy to `research/papers/` with section renames applied. If `research/papers/<name>.tex` exists, use it directly.
+   - **Fallback only**: If `research/papers/<name>.tex` does not exist (paper was compiled before this fix), copy from `docs/papers/<name>.tex` and apply the section rename from step 4.
 
 ## Submission Flow
 
