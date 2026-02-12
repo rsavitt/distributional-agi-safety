@@ -107,6 +107,15 @@ class MoltbookScorer:
 class MoltbookHandler(Handler):
     """Handles Moltbook posts, comments, verification, and votes."""
 
+    @staticmethod
+    def handled_action_types() -> frozenset:
+        return frozenset({
+            ActionType.MOLTBOOK_POST,
+            ActionType.MOLTBOOK_COMMENT,
+            ActionType.MOLTBOOK_VERIFY,
+            ActionType.MOLTBOOK_VOTE,
+        })
+
     def __init__(
         self,
         config: MoltbookConfig,
@@ -135,6 +144,29 @@ class MoltbookHandler(Handler):
             from swarm.env.moltbook_catalog import seed_from_catalog
 
             seed_from_catalog(self.feed, self.config.initial_posts, self._rng)
+
+    # ------------------------------------------------------------------
+    # Plugin protocol
+    # ------------------------------------------------------------------
+
+    _OBSERVATION_FIELD_MAPPING = {
+        "published_posts": "moltbook_published_posts",
+        "pending_posts": "moltbook_pending_posts",
+        "rate_limits": "moltbook_rate_limits",
+        "karma": "moltbook_karma",
+    }
+
+    def observation_field_mapping(self) -> Dict[str, str]:
+        return self._OBSERVATION_FIELD_MAPPING
+
+    def build_observation_fields(self, agent_id: str, state: Any) -> Dict[str, Any]:
+        """Delegates to ``get_agent_observation``."""
+        step = state.current_step if hasattr(state, "current_step") else 0
+        return self.get_agent_observation(agent_id, step)
+
+    def on_step(self, state: Any, step: int) -> None:
+        """Per-step tick: rate-limit decay and challenge expiry."""
+        self.tick(step)
 
     # ------------------------------------------------------------------
     # Observation helpers

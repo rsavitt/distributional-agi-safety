@@ -49,6 +49,14 @@ class ScholarHandler(Handler):
     - Citation verification
     """
 
+    @staticmethod
+    def handled_action_types() -> frozenset:
+        return frozenset({
+            ActionType.RETRIEVE_PASSAGES,
+            ActionType.SYNTHESIZE_ANSWER,
+            ActionType.VERIFY_CITATION,
+        })
+
     def __init__(
         self,
         config: ScholarConfig,

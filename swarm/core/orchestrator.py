@@ -14,6 +14,7 @@ from swarm.boundaries.information_flow import FlowTracker
 from swarm.boundaries.leakage import LeakageDetector, LeakageReport
 from swarm.boundaries.policies import PolicyEngine
 from swarm.core.boundary_handler import BoundaryHandler
+from swarm.core.handler_registry import HandlerRegistry
 from swarm.core.kernel_handler import KernelOracleConfig, KernelOracleHandler
 from swarm.core.marketplace_handler import MarketplaceHandler
 from swarm.core.memory_handler import MemoryHandler, MemoryTierConfig
@@ -271,6 +272,9 @@ class Orchestrator:
         else:
             self.governance_engine = None
 
+        # Handler registry (plugin architecture)
+        self._handler_registry = HandlerRegistry()
+
         # Marketplace handler
         if self.config.marketplace_config is not None:
             marketplace = Marketplace(self.config.marketplace_config)
@@ -280,8 +284,10 @@ class Orchestrator:
                     marketplace=marketplace,
                     task_pool=self.task_pool,
                     emit_event=self._emit_event,
+                    enable_rate_limits=self.config.enable_rate_limits,
                 )
             )
+            self._handler_registry.register(self._marketplace_handler)
         else:
             self.marketplace = None
             self._marketplace_handler = None
@@ -292,6 +298,7 @@ class Orchestrator:
                 config=self.config.moltipedia_config,
                 emit_event=self._emit_event,
             )
+            self._handler_registry.register(self._moltipedia_handler)
         else:
             self._moltipedia_handler = None
 
@@ -311,6 +318,7 @@ class Orchestrator:
                 rate_limit_lever=rate_limit_lever,
                 challenge_lever=challenge_lever,
             )
+            self._handler_registry.register(self._moltbook_handler)
         else:
             self._moltbook_handler = None
 
@@ -320,6 +328,7 @@ class Orchestrator:
                 config=self.config.memory_tier_config,
                 emit_event=self._emit_event,
             )
+            self._handler_registry.register(self._memory_handler)
         else:
             self._memory_handler = None
 
@@ -329,6 +338,7 @@ class Orchestrator:
                 config=self.config.scholar_config,
                 emit_event=self._emit_event,
             )
+            self._handler_registry.register(self._scholar_handler)
         else:
             self._scholar_handler = None
 
@@ -340,6 +350,7 @@ class Orchestrator:
                     emit_event=self._emit_event,
                 )
             )
+            self._handler_registry.register(self._kernel_handler)
         else:
             self._kernel_handler = None
 
@@ -490,17 +501,12 @@ class Orchestrator:
 
         self._update_adaptive_governance()
 
-        if self._moltbook_handler is not None:
-            self._moltbook_handler.on_epoch_start()
-
-        if self._memory_handler is not None:
-            self._memory_handler.on_epoch_start(self.state)
-
-        if self._scholar_handler is not None:
-            self._scholar_handler.on_epoch_start(self.state)
-
-        if self._kernel_handler is not None:
-            self._kernel_handler.on_epoch_start(self.state)
+        # Handler epoch-start hooks (via registry)
+        for handler in self._handler_registry.all_handlers():
+            try:
+                handler.on_epoch_start(self.state)
+            except Exception:
+                pass  # handler hook failures must not break simulation
 
         # Apply epoch-start governance (reputation decay, unfreezes)
         if self.governance_engine:
@@ -516,17 +522,12 @@ class Orchestrator:
             self._run_step()
             self.state.advance_step()
 
-        # Marketplace epoch maintenance
-        if self._marketplace_handler is not None:
-            self._marketplace_handler.on_epoch_end(self.state)
-
-        # Scholar epoch maintenance
-        if self._scholar_handler is not None:
-            self._scholar_handler.on_epoch_end(self.state)
-
-        # Kernel oracle epoch maintenance
-        if self._kernel_handler is not None:
-            self._kernel_handler.on_epoch_end(self.state)
+        # Handler epoch-end hooks (via registry)
+        for handler in self._handler_registry.all_handlers():
+            try:
+                handler.on_epoch_end(self.state)
+            except Exception:
+                pass  # handler hook failures must not break simulation
 
         # Apply network edge decay
         if self.network is not None:
@@ -588,8 +589,12 @@ class Orchestrator:
             )
             self._apply_governance_effect(step_effect)
 
-        if self._moltbook_handler is not None:
-            self._moltbook_handler.tick(self.state.current_step)
+        # Handler per-step hooks (via registry)
+        for handler in self._handler_registry.all_handlers():
+            try:
+                handler.on_step(self.state, self.state.current_step)
+            except Exception:
+                pass  # handler hook failures must not break simulation
 
         # Get agent schedule for this step
         agent_order = self._get_agent_schedule()
@@ -783,113 +788,24 @@ class Orchestrator:
             self._apply_observation_noise(record) for record in visible_agents
         ]
 
-        # Build marketplace observation via handler
-        available_bounties: List[Dict] = []
-        active_bids: List[Dict] = []
-        active_escrows: List[Dict] = []
-        pending_bid_decisions: List[Dict] = []
-
-        if self._marketplace_handler is not None:
-            mkt_obs = self._marketplace_handler.build_observation_fields(
-                agent_id,
-                self.state,
-            )
-            available_bounties = mkt_obs["available_bounties"]
-            active_bids = mkt_obs["active_bids"]
-            active_escrows = mkt_obs["active_escrows"]
-            pending_bid_decisions = mkt_obs["pending_bid_decisions"]
-
-        # Build Moltipedia observation via handler
-        contested_pages: List[Dict] = []
-        search_results: List[Dict] = []
-        random_pages: List[Dict] = []
-        leaderboard: List[Dict] = []
-        agent_points: float = 0.0
-        heartbeat_status: Dict = {}
-
-        if self._moltipedia_handler is not None:
-            wiki_obs = self._moltipedia_handler.build_observation_fields(
-                agent_id,
-                self.state,
-            )
-            contested_pages = wiki_obs["contested_pages"]
-            search_results = wiki_obs["search_results"]
-            random_pages = wiki_obs["random_pages"]
-            leaderboard = wiki_obs["leaderboard"]
-            agent_points = wiki_obs["agent_points"]
-            heartbeat_status = wiki_obs["heartbeat_status"]
-
-        # Build Moltbook observation via handler
-        moltbook_published_posts: List[Dict] = []
-        moltbook_pending_posts: List[Dict] = []
-        moltbook_rate_limits: Dict = {}
-        moltbook_karma: float = 0.0
-
-        if self._moltbook_handler is not None:
-            molt_obs = self._moltbook_handler.get_agent_observation(
-                agent_id,
-                self.state.current_step,
-            )
-            moltbook_published_posts = molt_obs["published_posts"]
-            moltbook_pending_posts = molt_obs["pending_posts"]
-            moltbook_rate_limits = molt_obs["rate_limits"]
-            moltbook_karma = molt_obs["karma"]
-
-        # Build memory tier observation via handler
-        memory_hot_cache: List[Dict] = []
-        memory_pending_promotions: List[Dict] = []
-        memory_search_results: List[Dict] = []
-        memory_challenged_entries: List[Dict] = []
-        memory_entry_counts: Dict = {}
-        memory_writes_remaining: int = 0
-
-        if self._memory_handler is not None:
-            # Simulate compaction events per-agent per-step
-            self._memory_handler.maybe_compaction(agent_id, self.state)
-
-            mem_obs = self._memory_handler.build_observation_fields(
-                agent_id,
-                self.state,
-            )
-            memory_hot_cache = mem_obs["memory_hot_cache"]
-            memory_pending_promotions = mem_obs["memory_pending_promotions"]
-            memory_challenged_entries = mem_obs["memory_challenged_entries"]
-            memory_entry_counts = mem_obs["memory_entry_counts"]
-            memory_writes_remaining = mem_obs["memory_writes_remaining"]
-
-        # Build scholar observation via handler
-        scholar_query = None
-        scholar_passage_pool: List[Dict] = []
-        scholar_draft_citations: List[Dict] = []
-        scholar_citation_to_verify = None
-        scholar_synthesis_result = None
-
-        if self._scholar_handler is not None:
-            scholar_obs = self._scholar_handler.build_observation_fields(
-                agent_id,
-                self.state,
-            )
-            scholar_query = scholar_obs["scholar_query"]
-            scholar_passage_pool = scholar_obs["scholar_passage_pool"]
-            scholar_draft_citations = scholar_obs["scholar_draft_citations"]
-            scholar_citation_to_verify = scholar_obs["scholar_citation_to_verify"]
-            scholar_synthesis_result = scholar_obs["scholar_synthesis_result"]
-
-        # Build kernel market observation via handler
-        kernel_available_challenges: List[Dict] = []
-        kernel_pending_submissions: List[Dict] = []
-        kernel_submissions_to_verify: List[Dict] = []
-        kernel_submission_history: List[Dict] = []
-
-        if self._kernel_handler is not None:
-            kernel_obs = self._kernel_handler.build_observation_fields(
-                agent_id,
-                self.state,
-            )
-            kernel_available_challenges = kernel_obs["kernel_available_challenges"]
-            kernel_pending_submissions = kernel_obs["kernel_pending_submissions"]
-            kernel_submissions_to_verify = kernel_obs["kernel_submissions_to_verify"]
-            kernel_submission_history = kernel_obs["kernel_submission_history"]
+        # Collect handler observation fields via registry
+        handler_fields: Dict[str, Any] = {}
+        for handler in self._handler_registry.all_handlers():
+            try:
+                handler.on_pre_observation(agent_id, self.state)
+                fields = handler.build_observation_fields(agent_id, self.state)
+            except Exception:
+                continue
+            mapping = handler.observation_field_mapping()
+            for key, value in fields.items():
+                obs_key = mapping.get(key, key)
+                if obs_key in handler_fields:
+                    raise ValueError(
+                        f"Observation field '{obs_key}' returned by "
+                        f"{type(handler).__name__} conflicts with a field "
+                        f"already set by another handler"
+                    )
+                handler_fields[obs_key] = value
 
         return Observation(
             agent_state=agent_state or AgentState(),
@@ -912,38 +828,44 @@ class Orchestrator:
             available_tasks=available_tasks,
             active_tasks=active_tasks,
             visible_agents=visible_agents,
-            available_bounties=available_bounties,
-            active_bids=active_bids,
-            active_escrows=active_escrows,
-            pending_bid_decisions=pending_bid_decisions,
-            contested_pages=contested_pages,
-            search_results=search_results,
-            random_pages=random_pages,
-            leaderboard=leaderboard,
-            agent_points=agent_points,
-            heartbeat_status=heartbeat_status,
+            # Marketplace fields
+            available_bounties=handler_fields.get("available_bounties", []),
+            active_bids=handler_fields.get("active_bids", []),
+            active_escrows=handler_fields.get("active_escrows", []),
+            pending_bid_decisions=handler_fields.get("pending_bid_decisions", []),
+            # Moltipedia fields
+            contested_pages=handler_fields.get("contested_pages", []),
+            search_results=handler_fields.get("search_results", []),
+            random_pages=handler_fields.get("random_pages", []),
+            leaderboard=handler_fields.get("leaderboard", []),
+            agent_points=handler_fields.get("agent_points", 0.0),
+            heartbeat_status=handler_fields.get("heartbeat_status", {}),
             ecosystem_metrics=self._apply_observation_noise(
                 self.state.get_epoch_metrics_snapshot()
             ),
-            moltbook_published_posts=moltbook_published_posts,
-            moltbook_pending_posts=moltbook_pending_posts,
-            moltbook_rate_limits=moltbook_rate_limits,
-            moltbook_karma=moltbook_karma,
-            memory_hot_cache=memory_hot_cache,
-            memory_pending_promotions=memory_pending_promotions,
-            memory_search_results=memory_search_results,
-            memory_challenged_entries=memory_challenged_entries,
-            memory_entry_counts=memory_entry_counts,
-            memory_writes_remaining=memory_writes_remaining,
-            scholar_query=scholar_query,
-            scholar_passage_pool=scholar_passage_pool,
-            scholar_draft_citations=scholar_draft_citations,
-            scholar_citation_to_verify=scholar_citation_to_verify,
-            scholar_synthesis_result=scholar_synthesis_result,
-            kernel_available_challenges=kernel_available_challenges,
-            kernel_pending_submissions=kernel_pending_submissions,
-            kernel_submissions_to_verify=kernel_submissions_to_verify,
-            kernel_submission_history=kernel_submission_history,
+            # Moltbook fields
+            moltbook_published_posts=handler_fields.get("moltbook_published_posts", []),
+            moltbook_pending_posts=handler_fields.get("moltbook_pending_posts", []),
+            moltbook_rate_limits=handler_fields.get("moltbook_rate_limits", {}),
+            moltbook_karma=handler_fields.get("moltbook_karma", 0.0),
+            # Memory fields
+            memory_hot_cache=handler_fields.get("memory_hot_cache", []),
+            memory_pending_promotions=handler_fields.get("memory_pending_promotions", []),
+            memory_search_results=handler_fields.get("memory_search_results", []),
+            memory_challenged_entries=handler_fields.get("memory_challenged_entries", []),
+            memory_entry_counts=handler_fields.get("memory_entry_counts", {}),
+            memory_writes_remaining=handler_fields.get("memory_writes_remaining", 0),
+            # Scholar fields
+            scholar_query=handler_fields.get("scholar_query"),
+            scholar_passage_pool=handler_fields.get("scholar_passage_pool", []),
+            scholar_draft_citations=handler_fields.get("scholar_draft_citations", []),
+            scholar_citation_to_verify=handler_fields.get("scholar_citation_to_verify"),
+            scholar_synthesis_result=handler_fields.get("scholar_synthesis_result"),
+            # Kernel fields
+            kernel_available_challenges=handler_fields.get("kernel_available_challenges", []),
+            kernel_pending_submissions=handler_fields.get("kernel_pending_submissions", []),
+            kernel_submissions_to_verify=handler_fields.get("kernel_submissions_to_verify", []),
+            kernel_submission_history=handler_fields.get("kernel_submission_history", []),
         )
 
     def _apply_observation_noise(self, record: Dict[str, Any]) -> Dict[str, Any]:
@@ -978,11 +900,99 @@ class Orchestrator:
         """
         Execute an agent action.
 
+        Core actions (POST, VOTE, etc.) are handled inline.
+        Domain actions are dispatched via the handler registry.
+
         Returns:
             True if action was successful
         """
         agent_id = action.agent_id
         rate_limit = self.state.get_rate_limit_state(agent_id)
+
+        # --- Core actions (orchestrator-owned) ---
+        core_result = self._handle_core_action(action, rate_limit)
+        if core_result is not None:
+            return core_result
+
+        # --- Handler-dispatched actions (via registry) ---
+        if not isinstance(action.action_type, ActionType):
+            return False
+
+        handler = self._handler_registry.get_handler(action.action_type)
+        if handler is None:
+            return False
+
+        try:
+            result = handler.handle_action(action, self.state)
+        except Exception:
+            return False
+
+        if not result.success:
+            return False
+
+        # If no observables, this was a simple success/failure action
+        if result.observables is None:
+            return True
+
+        # Standard proxy computation + interaction finalization pipeline
+        v_hat, p = self.proxy_computer.compute_labels(result.observables)
+
+        # Build interaction_type from result
+        interaction_type = InteractionType.COLLABORATION
+        if hasattr(result, "interaction_type") and isinstance(
+            getattr(result, "interaction_type", None), InteractionType
+        ):
+            interaction_type = result.interaction_type
+
+        # Build tau: prefer explicit tau, fall back to negated points
+        tau = 0.0
+        if hasattr(result, "tau") and result.tau != 0.0:
+            tau = result.tau
+        elif hasattr(result, "points") and result.points != 0.0:
+            tau = -result.points
+
+        # Build ground_truth: prefer explicit field, fall back to submission
+        ground_truth_val = getattr(result, "ground_truth", None)
+        if ground_truth_val is None and hasattr(result, "submission"):
+            submission = result.submission
+            if submission is not None:
+                ground_truth_val = -1 if submission.is_cheat else 1
+
+        interaction = SoftInteraction(
+            initiator=result.initiator_id,
+            counterparty=result.counterparty_id,
+            interaction_type=interaction_type,
+            accepted=result.accepted,
+            task_progress_delta=result.observables.task_progress_delta,
+            rework_count=result.observables.rework_count,
+            verifier_rejections=result.observables.verifier_rejections,
+            tool_misuse_flags=result.observables.tool_misuse_flags,
+            counterparty_engagement_delta=result.observables.counterparty_engagement_delta,
+            v_hat=v_hat,
+            p=p,
+            tau=tau,
+            metadata=result.metadata or {},
+            **({"ground_truth": ground_truth_val} if ground_truth_val is not None else {}),
+        )
+
+        gov_effect, _, _ = self._finalize_interaction(interaction)
+
+        # Handler-specific post-processing
+        try:
+            handler.post_finalize(result, interaction, gov_effect, self.state)
+        except Exception:
+            pass  # post_finalize failures must not break the action
+
+        return True
+
+    def _handle_core_action(
+        self, action: Action, rate_limit: Any
+    ) -> Optional[bool]:
+        """Handle orchestrator-owned core actions.
+
+        Returns ``None`` if the action is not a core action.
+        """
+        agent_id = action.agent_id
 
         if action.action_type == ActionType.NOOP:
             return True
@@ -1104,263 +1114,7 @@ class Orchestrator:
                 return True
             return False
 
-        # Marketplace actions — delegate to handler
-        elif action.action_type == ActionType.POST_BOUNTY:
-            if self._marketplace_handler is None:
-                return False
-            return self._marketplace_handler.handle_post_bounty(
-                action,
-                self.state,
-                enable_rate_limits=self.config.enable_rate_limits,
-            )
-
-        elif action.action_type == ActionType.PLACE_BID:
-            if self._marketplace_handler is None:
-                return False
-            return self._marketplace_handler.handle_place_bid(
-                action,
-                self.state,
-                enable_rate_limits=self.config.enable_rate_limits,
-            )
-
-        elif action.action_type == ActionType.ACCEPT_BID:
-            if self._marketplace_handler is None:
-                return False
-            return self._marketplace_handler.handle_accept_bid(action, self.state)
-
-        elif action.action_type == ActionType.REJECT_BID:
-            if self._marketplace_handler is None:
-                return False
-            return self._marketplace_handler.handle_reject_bid(action, self.state)
-
-        elif action.action_type == ActionType.WITHDRAW_BID:
-            if self._marketplace_handler is None:
-                return False
-            return self._marketplace_handler.handle_withdraw_bid(action)
-
-        elif action.action_type == ActionType.FILE_DISPUTE:
-            if self._marketplace_handler is None:
-                return False
-            return self._marketplace_handler.handle_file_dispute(action, self.state)
-
-        # Moltipedia wiki actions
-        elif action.action_type in (
-            ActionType.CREATE_PAGE,
-            ActionType.EDIT_PAGE,
-            ActionType.FILE_OBJECTION,
-            ActionType.POLICY_FLAG,
-        ):
-            if self._moltipedia_handler is None:
-                return False
-
-            result = self._moltipedia_handler.handle_action(action, self.state)
-            if not result.success:
-                return False
-
-            if result.observables is None:
-                return True
-
-            v_hat, p = self.proxy_computer.compute_labels(result.observables)
-
-            interaction = SoftInteraction(
-                initiator=result.initiator_id,
-                counterparty=result.counterparty_id,
-                interaction_type=InteractionType.COLLABORATION,
-                accepted=result.accepted,
-                task_progress_delta=result.observables.task_progress_delta,
-                rework_count=result.observables.rework_count,
-                verifier_rejections=result.observables.verifier_rejections,
-                tool_misuse_flags=result.observables.tool_misuse_flags,
-                counterparty_engagement_delta=result.observables.counterparty_engagement_delta,
-                v_hat=v_hat,
-                p=p,
-                tau=-result.points,
-                metadata=result.metadata or {},
-            )
-
-            gov_effect, _, _ = self._finalize_interaction(interaction)
-
-            if interaction.metadata.get("moltipedia"):
-                moltipedia_cost = self._moltipedia_cost_from_effect(gov_effect)
-                points_awarded = max(0.0, result.points - moltipedia_cost)
-                self._moltipedia_handler.record_points(
-                    agent_id=result.initiator_id,
-                    points_awarded=points_awarded,
-                    state=self.state,
-                    page_id=interaction.metadata.get("page_id"),
-                    edit_type=interaction.metadata.get("edit_type"),
-                )
-                self._emit_moltipedia_governance_events(gov_effect, interaction)
-
-            return True
-
-        # Memory tier actions
-        elif action.action_type in (
-            ActionType.WRITE_MEMORY,
-            ActionType.PROMOTE_MEMORY,
-            ActionType.VERIFY_MEMORY,
-            ActionType.SEARCH_MEMORY,
-            ActionType.CHALLENGE_MEMORY,
-        ):
-            if self._memory_handler is None:
-                return False
-
-            memory_result = self._memory_handler.handle_action(action, self.state)
-            if not memory_result.success:
-                return False
-
-            if memory_result.observables is None:
-                return True
-
-            v_hat, p = self.proxy_computer.compute_labels(memory_result.observables)
-
-            interaction = SoftInteraction(
-                initiator=memory_result.initiator_id,
-                counterparty=memory_result.counterparty_id,
-                interaction_type=InteractionType.COLLABORATION,
-                accepted=memory_result.accepted,
-                task_progress_delta=memory_result.observables.task_progress_delta,
-                rework_count=memory_result.observables.rework_count,
-                verifier_rejections=memory_result.observables.verifier_rejections,
-                tool_misuse_flags=memory_result.observables.tool_misuse_flags,
-                counterparty_engagement_delta=memory_result.observables.counterparty_engagement_delta,
-                v_hat=v_hat,
-                p=p,
-                tau=0.0,
-                metadata=memory_result.metadata or {},
-            )
-
-            gov_effect, _, _ = self._finalize_interaction(interaction)
-
-            # Check if governance blocked a promotion
-            if memory_result.metadata.get("memory_promotion"):
-                memory_gov_cost = self._memory_governance_cost(gov_effect)
-                if memory_gov_cost > 0:
-                    # Governance blocked the promotion — revert it
-                    entry_id = memory_result.metadata.get("entry_id", "")
-                    if entry_id:
-                        self._memory_handler.store.revert(entry_id)
-
-            return True
-
-        # Moltbook actions
-        elif action.action_type in (
-            ActionType.MOLTBOOK_POST,
-            ActionType.MOLTBOOK_COMMENT,
-            ActionType.MOLTBOOK_VERIFY,
-            ActionType.MOLTBOOK_VOTE,
-        ):
-            if self._moltbook_handler is None:
-                return False
-
-            moltbook_result = self._moltbook_handler.handle_action(action, self.state)
-            if not moltbook_result.success:
-                return False
-
-            if moltbook_result.observables is None:
-                return True
-
-            v_hat, p = self.proxy_computer.compute_labels(moltbook_result.observables)
-
-            interaction = SoftInteraction(
-                initiator=moltbook_result.initiator_id,
-                counterparty=moltbook_result.counterparty_id,
-                interaction_type=moltbook_result.interaction_type,
-                accepted=moltbook_result.accepted,
-                task_progress_delta=moltbook_result.observables.task_progress_delta,
-                rework_count=moltbook_result.observables.rework_count,
-                verifier_rejections=moltbook_result.observables.verifier_rejections,
-                tool_misuse_flags=moltbook_result.observables.tool_misuse_flags,
-                counterparty_engagement_delta=(
-                    moltbook_result.observables.counterparty_engagement_delta
-                ),
-                v_hat=v_hat,
-                p=p,
-                tau=0.0,
-                metadata=moltbook_result.metadata or {},
-            )
-
-            self._finalize_interaction(interaction)
-            return True
-
-        # Scholar/literature synthesis actions
-        elif action.action_type in (
-            ActionType.RETRIEVE_PASSAGES,
-            ActionType.SYNTHESIZE_ANSWER,
-            ActionType.VERIFY_CITATION,
-        ):
-            if self._scholar_handler is None:
-                return False
-
-            scholar_result = self._scholar_handler.handle_action(action, self.state)
-            if not scholar_result.success:
-                return False
-
-            if scholar_result.observables is None:
-                return True
-
-            v_hat, p = self.proxy_computer.compute_labels(scholar_result.observables)
-
-            interaction = SoftInteraction(
-                initiator=scholar_result.initiator_id,
-                counterparty=scholar_result.counterparty_id,
-                interaction_type=InteractionType.COLLABORATION,
-                accepted=scholar_result.accepted,
-                task_progress_delta=scholar_result.observables.task_progress_delta,
-                rework_count=scholar_result.observables.rework_count,
-                verifier_rejections=scholar_result.observables.verifier_rejections,
-                tool_misuse_flags=scholar_result.observables.tool_misuse_flags,
-                counterparty_engagement_delta=scholar_result.observables.counterparty_engagement_delta,
-                v_hat=v_hat,
-                p=p,
-                tau=0.0,
-                metadata=scholar_result.metadata or {},
-            )
-
-            self._finalize_interaction(interaction)
-            return True
-
-        # Kernel market actions
-        elif action.action_type in (
-            ActionType.SUBMIT_KERNEL,
-            ActionType.VERIFY_KERNEL,
-            ActionType.AUDIT_KERNEL,
-        ):
-            if self._kernel_handler is None:
-                return False
-
-            kernel_result = self._kernel_handler.handle_action(action, self.state)
-            if not kernel_result.success:
-                return False
-
-            if kernel_result.observables is None:
-                return True
-
-            v_hat, p = self.proxy_computer.compute_labels(kernel_result.observables)
-
-            interaction = SoftInteraction(
-                initiator=kernel_result.initiator_id,
-                counterparty=kernel_result.counterparty_id,
-                interaction_type=InteractionType.TRADE,
-                accepted=kernel_result.accepted,
-                task_progress_delta=kernel_result.observables.task_progress_delta,
-                rework_count=kernel_result.observables.rework_count,
-                verifier_rejections=kernel_result.observables.verifier_rejections,
-                tool_misuse_flags=kernel_result.observables.tool_misuse_flags,
-                counterparty_engagement_delta=kernel_result.observables.counterparty_engagement_delta,
-                v_hat=v_hat,
-                p=p,
-                tau=0.0,
-                ground_truth=-1
-                if (kernel_result.submission and kernel_result.submission.is_cheat)
-                else 1,
-                metadata=kernel_result.metadata or {},
-            )
-
-            self._finalize_interaction(interaction)
-            return True
-
-        return False
+        return None  # Not a core action
 
     def _resolve_pending_interactions(self) -> None:
         """Resolve any remaining pending interactions."""
@@ -1624,65 +1378,6 @@ class Orchestrator:
             if agent_state:
                 agent_state.update_resources(delta)
 
-    def _memory_governance_cost(self, effect: GovernanceEffect) -> float:
-        """Compute memory-specific governance cost from effects."""
-        memory_levers = {
-            "memory_promotion_gate",
-            "memory_write_rate_limit",
-            "memory_cross_verification",
-            "memory_provenance",
-        }
-        return sum(
-            lever.cost_a
-            for lever in effect.lever_effects
-            if lever.lever_name in memory_levers
-        )
-
-    def _moltipedia_cost_from_effect(self, effect: GovernanceEffect) -> float:
-        """Compute Moltipedia-specific cost from governance effects."""
-        moltipedia_levers = {
-            "moltipedia_pair_cap",
-            "moltipedia_page_cooldown",
-            "moltipedia_daily_cap",
-            "moltipedia_no_self_fix",
-        }
-        return sum(
-            lever.cost_a
-            for lever in effect.lever_effects
-            if lever.lever_name in moltipedia_levers
-        )
-
-    def _emit_moltipedia_governance_events(
-        self,
-        effect: GovernanceEffect,
-        interaction: SoftInteraction,
-    ) -> None:
-        """Emit Moltipedia governance trigger events."""
-        event_map = {
-            "moltipedia_pair_cap": EventType.PAIR_CAP_TRIGGERED,
-            "moltipedia_page_cooldown": EventType.COOLDOWN_TRIGGERED,
-            "moltipedia_daily_cap": EventType.DAILY_CAP_TRIGGERED,
-        }
-        page_id = interaction.metadata.get("page_id") if interaction.metadata else None
-        for lever in effect.lever_effects:
-            if lever.lever_name not in event_map:
-                continue
-            if lever.cost_a <= 0:
-                continue
-            self._emit_event(
-                Event(
-                    event_type=event_map[lever.lever_name],
-                    agent_id=interaction.initiator,
-                    payload={
-                        "page_id": page_id,
-                        "cost_a": lever.cost_a,
-                        "details": lever.details,
-                    },
-                    epoch=self.state.current_epoch,
-                    step=self.state.current_step,
-                )
-            )
-
     def _compute_epoch_metrics(self) -> EpochMetrics:
         """Compute metrics for the current epoch."""
         interactions = self.state.completed_interactions
@@ -1904,6 +1599,13 @@ class Orchestrator:
 
         self._update_adaptive_governance()
 
+        # Handler epoch-start hooks (via registry)
+        for handler in self._handler_registry.all_handlers():
+            try:
+                handler.on_epoch_start(self.state)
+            except Exception:
+                pass
+
         # Apply epoch-start governance (reputation decay, unfreezes)
         if self.governance_engine:
             gov_effect = self.governance_engine.apply_epoch_start(
@@ -1917,6 +1619,13 @@ class Orchestrator:
 
             await self._run_step_async()
             self.state.advance_step()
+
+        # Handler epoch-end hooks (via registry)
+        for handler in self._handler_registry.all_handlers():
+            try:
+                handler.on_epoch_end(self.state)
+            except Exception:
+                pass
 
         # Apply network edge decay
         if self.network is not None:
@@ -1961,6 +1670,13 @@ class Orchestrator:
                 self.state, self.state.current_step
             )
             self._apply_governance_effect(step_effect)
+
+        # Handler per-step hooks (via registry)
+        for handler in self._handler_registry.all_handlers():
+            try:
+                handler.on_step(self.state, self.state.current_step)
+            except Exception:
+                pass
 
         # Get agent schedule for this step
         agent_order = self._get_agent_schedule()
