@@ -45,6 +45,7 @@ from swarm.forecaster.features import (
 )
 from swarm.governance.config import GovernanceConfig
 from swarm.governance.engine import GovernanceEffect, GovernanceEngine
+from swarm.logging.event_bus import EventBus
 from swarm.logging.event_log import EventLog
 from swarm.metrics.capabilities import CapabilityAnalyzer, EmergentCapabilityMetrics
 from swarm.metrics.soft_metrics import SoftMetrics
@@ -272,6 +273,14 @@ class Orchestrator:
         else:
             self.governance_engine = None
 
+        # Event bus (central publish-subscribe for all events)
+        self._event_bus = EventBus()
+        self._event_bus.set_enrichment(
+            seed=self.config.seed,
+            scenario_id=self.config.scenario_id,
+            replay_k=self.config.replay_k,
+        )
+
         # Handler registry (plugin architecture)
         self._handler_registry = HandlerRegistry()
 
@@ -283,7 +292,7 @@ class Orchestrator:
                 MarketplaceHandler(
                     marketplace=marketplace,
                     task_pool=self.task_pool,
-                    emit_event=self._emit_event,
+                    event_bus=self._event_bus,
                     enable_rate_limits=self.config.enable_rate_limits,
                 )
             )
@@ -296,7 +305,7 @@ class Orchestrator:
         if self.config.moltipedia_config is not None:
             self._moltipedia_handler: Optional[MoltipediaHandler] = MoltipediaHandler(
                 config=self.config.moltipedia_config,
-                emit_event=self._emit_event,
+                event_bus=self._event_bus,
             )
             self._handler_registry.register(self._moltipedia_handler)
         else:
@@ -313,10 +322,10 @@ class Orchestrator:
                 challenge_lever = self.governance_engine.get_moltbook_challenge_lever()
             self._moltbook_handler: Optional[MoltbookHandler] = MoltbookHandler(
                 config=self.config.moltbook_config,
-                emit_event=self._emit_event,
                 governance_config=self.config.governance_config,
                 rate_limit_lever=rate_limit_lever,
                 challenge_lever=challenge_lever,
+                event_bus=self._event_bus,
             )
             self._handler_registry.register(self._moltbook_handler)
         else:
@@ -326,7 +335,7 @@ class Orchestrator:
         if self.config.memory_tier_config is not None:
             self._memory_handler: Optional[MemoryHandler] = MemoryHandler(
                 config=self.config.memory_tier_config,
-                emit_event=self._emit_event,
+                event_bus=self._event_bus,
             )
             self._handler_registry.register(self._memory_handler)
         else:
@@ -336,7 +345,7 @@ class Orchestrator:
         if self.config.scholar_config is not None:
             self._scholar_handler: Optional[ScholarHandler] = ScholarHandler(
                 config=self.config.scholar_config,
-                emit_event=self._emit_event,
+                event_bus=self._event_bus,
             )
             self._handler_registry.register(self._scholar_handler)
         else:
@@ -347,7 +356,7 @@ class Orchestrator:
             self._kernel_handler: Optional[KernelOracleHandler] = (
                 KernelOracleHandler(
                     config=self.config.kernel_oracle_config,
-                    emit_event=self._emit_event,
+                    event_bus=self._event_bus,
                 )
             )
             self._handler_registry.register(self._kernel_handler)
@@ -373,7 +382,7 @@ class Orchestrator:
                 flow_tracker=flow_tracker,
                 policy_engine=policy_engine,
                 leakage_detector=leakage_detector,
-                emit_event=self._emit_event,
+                event_bus=self._event_bus,
                 seed=self.config.seed,
             )
         else:
@@ -388,6 +397,10 @@ class Orchestrator:
             self.event_log: Optional[EventLog] = EventLog(self.config.log_path)
         else:
             self.event_log = None
+
+        # Subscribe EventLog to the bus
+        if self.event_log is not None and self.config.log_events:
+            self._event_bus.subscribe(self.event_log.append)
 
         # Epoch metrics history
         self._epoch_metrics: List[EpochMetrics] = []
@@ -408,7 +421,7 @@ class Orchestrator:
             network=self.network,
             agents=self._agents,
             on_interaction_complete=self._on_interaction_complete,
-            emit_event=self._emit_event,
+            event_bus=self._event_bus,
         )
 
         # Observation building (extracted component)
@@ -1107,16 +1120,12 @@ class Orchestrator:
         )
 
     def _emit_event(self, event: Event) -> None:
-        """Emit an event to the log."""
-        if event.seed is None:
-            event.seed = self.config.seed
-        if event.scenario_id is None:
-            event.scenario_id = self.config.scenario_id
-        if event.replay_k is None:
-            event.replay_k = self.config.replay_k
+        """Emit an event via the event bus."""
+        self._event_bus.emit(event)
 
-        if self.event_log is not None and self.config.log_events:
-            self.event_log.append(event)
+    def subscribe_events(self, callback: Callable[[Event], None]) -> None:
+        """Register an external subscriber for all simulation events."""
+        self._event_bus.subscribe(callback)
 
     def pause(self) -> None:
         """Pause the simulation."""

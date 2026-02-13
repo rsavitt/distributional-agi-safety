@@ -2,7 +2,7 @@
 
 import random
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, Optional
+from typing import TYPE_CHECKING, Any, Callable, Dict, Optional
 
 from pydantic import BaseModel, model_validator
 
@@ -16,6 +16,9 @@ from swarm.governance.engine import GovernanceEffect
 from swarm.models.agent import AgentType
 from swarm.models.events import Event, EventType
 from swarm.models.interaction import SoftInteraction
+
+if TYPE_CHECKING:
+    from swarm.logging.event_bus import EventBus
 
 
 class MemoryTierConfig(BaseModel):
@@ -66,9 +69,11 @@ class MemoryHandler(Handler):
     def __init__(
         self,
         config: MemoryTierConfig,
-        emit_event: Callable[[Event], None],
+        emit_event: Optional[Callable[[Event], None]] = None,
+        *,
+        event_bus: Optional["EventBus"] = None,
     ):
-        super().__init__(emit_event=emit_event)
+        super().__init__(emit_event=emit_event, event_bus=event_bus)
         self.config = config
         self._rng = random.Random(config.seed)
         self.store = MemoryStore(seed=config.seed)
@@ -127,7 +132,7 @@ class MemoryHandler(Handler):
         """Randomly trigger compaction for an agent. Returns entries lost."""
         if self._rng.random() >= self.config.compaction_probability:
             return 0
-        lost = self.store.simulate_compaction(agent_id)
+        lost: int = self.store.simulate_compaction(agent_id)
         if lost > 0:
             self._emit_event(
                 Event(
@@ -452,8 +457,8 @@ class MemoryHandler(Handler):
 
     def _memory_governance_cost(self, effect: GovernanceEffect) -> float:
         """Compute memory-specific governance cost from effects."""
-        return sum(
+        return float(sum(
             lever.cost_a
             for lever in effect.lever_effects
             if lever.lever_name in self._MEMORY_LEVERS
-        )
+        ))

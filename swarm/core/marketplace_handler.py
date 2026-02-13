@@ -5,7 +5,7 @@ management, escrow settlement, dispute handling, and epoch
 maintenance.
 """
 
-from typing import Any, Callable, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional
 
 from swarm.agents.base import Action, ActionType
 from swarm.core.handler import Handler, HandlerActionResult
@@ -15,6 +15,9 @@ from swarm.env.tasks import TaskPool
 from swarm.governance.engine import GovernanceEngine
 from swarm.models.events import Event, EventType
 from swarm.models.interaction import InteractionType, SoftInteraction
+
+if TYPE_CHECKING:
+    from swarm.logging.event_bus import EventBus
 
 
 class MarketplaceHandler(Handler):
@@ -40,11 +43,12 @@ class MarketplaceHandler(Handler):
         self,
         marketplace: Marketplace,
         task_pool: TaskPool,
-        emit_event: Callable[[Event], None],
+        emit_event: Optional[Callable[[Event], None]] = None,
         *,
+        event_bus: Optional["EventBus"] = None,
         enable_rate_limits: bool = True,
     ):
-        super().__init__(emit_event=emit_event)
+        super().__init__(emit_event=emit_event, event_bus=event_bus)
         self.marketplace = marketplace
         self.task_pool = task_pool
         self._enable_rate_limits = enable_rate_limits
@@ -228,7 +232,7 @@ class MarketplaceHandler(Handler):
 
     def handle_reject_bid(self, action: Action, state: EnvState) -> bool:
         """Handle REJECT_BID action."""
-        success = self.marketplace.reject_bid(
+        success: bool = self.marketplace.reject_bid(
             bid_id=action.target_id,
             poster_id=action.agent_id,
         )
@@ -248,10 +252,10 @@ class MarketplaceHandler(Handler):
 
     def handle_withdraw_bid(self, action: Action) -> bool:
         """Handle WITHDRAW_BID action."""
-        return self.marketplace.withdraw_bid(
+        return bool(self.marketplace.withdraw_bid(
             bid_id=action.target_id,
             bidder_id=action.agent_id,
-        )
+        ))
 
     def handle_file_dispute(self, action: Action, state: EnvState) -> bool:
         """Handle FILE_DISPUTE action."""
@@ -312,7 +316,7 @@ class MarketplaceHandler(Handler):
         if not bounty or not bounty.escrow_id:
             return None
 
-        settlement = self.marketplace.settle_escrow(
+        settlement: Optional[Dict] = self.marketplace.settle_escrow(
             escrow_id=bounty.escrow_id,
             success=success,
             quality_score=quality_score,

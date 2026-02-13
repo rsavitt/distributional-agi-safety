@@ -1,9 +1,11 @@
 """Event schema for append-only logging."""
 
+from __future__ import annotations
+
 import uuid
 from datetime import datetime
 from enum import Enum
-from typing import Optional
+from typing import Any, Dict, Optional
 
 from pydantic import BaseModel, Field
 
@@ -118,7 +120,7 @@ class Event(BaseModel):
     counterparty_id: Optional[str] = None
 
     # Event payload (flexible structure)
-    payload: dict = Field(default_factory=dict)
+    payload: Dict[str, Any] = Field(default_factory=dict)
 
     # Metadata
     epoch: Optional[int] = None

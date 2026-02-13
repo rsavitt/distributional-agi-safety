@@ -1,9 +1,11 @@
 """Soft interaction data model with probabilistic labels."""
 
+from __future__ import annotations
+
 import uuid
 from datetime import datetime
 from enum import Enum
-from typing import Optional
+from typing import Any, Dict, Optional
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -59,7 +61,7 @@ class SoftInteraction(BaseModel):
     ground_truth: Optional[int] = None  # +1 or -1 if known
 
     # Optional metadata for domain-specific interactions
-    metadata: dict = Field(default_factory=dict)
+    metadata: Dict[str, Any] = Field(default_factory=dict)
 
     @field_validator('p')
     @classmethod

@@ -13,12 +13,15 @@ the orchestrator uses for proxy computation and interaction finalization.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Any, Callable, Dict, FrozenSet, Optional
+from typing import TYPE_CHECKING, Any, Callable, Dict, FrozenSet, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from swarm.models.events import Event
 from swarm.models.interaction import InteractionType
+
+if TYPE_CHECKING:
+    from swarm.logging.event_bus import EventBus
 
 
 class HandlerActionResult(BaseModel):
@@ -71,8 +74,18 @@ class Handler(ABC):
     - ``post_finalize``: handler-specific post-processing after finalization.
     """
 
-    def __init__(self, *, emit_event: Callable[[Event], None]) -> None:
-        self._emit_event = emit_event
+    def __init__(
+        self,
+        *,
+        emit_event: Callable[[Event], None] | None = None,
+        event_bus: EventBus | None = None,
+    ) -> None:
+        if event_bus is not None:
+            self._emit_event: Callable[[Event], None] = event_bus.emit
+        elif emit_event is not None:
+            self._emit_event = emit_event
+        else:
+            raise ValueError("Handler requires either emit_event or event_bus")
 
     @staticmethod
     @abstractmethod

@@ -8,7 +8,7 @@ references (not copies) so all state mutations are visible immediately.
 
 from __future__ import annotations
 
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple
 
 from swarm.core.observable_generator import ObservableGenerator
 from swarm.core.payoff import SoftPayoffEngine
@@ -24,6 +24,9 @@ from swarm.models.events import (
     reputation_updated_event,
 )
 from swarm.models.interaction import InteractionType, SoftInteraction
+
+if TYPE_CHECKING:
+    from swarm.logging.event_bus import EventBus
 
 
 class InteractionFinalizer:
@@ -48,7 +51,9 @@ class InteractionFinalizer:
         network: Optional[AgentNetwork],
         agents: Dict[str, Any],
         on_interaction_complete: List[Callable],
-        emit_event: Callable[[Event], None],
+        emit_event: Callable[[Event], None] | None = None,
+        *,
+        event_bus: EventBus | None = None,
     ) -> None:
         self._state = state
         self._payoff_engine = payoff_engine
@@ -58,7 +63,14 @@ class InteractionFinalizer:
         self._network = network
         self._agents = agents
         self._on_interaction_complete = on_interaction_complete
-        self._emit_event = emit_event
+        if event_bus is not None:
+            self._emit_event: Callable[[Event], None] = event_bus.emit
+        elif emit_event is not None:
+            self._emit_event = emit_event
+        else:
+            raise ValueError(
+                "InteractionFinalizer requires either emit_event or event_bus"
+            )
 
     # ------------------------------------------------------------------
     # Public API

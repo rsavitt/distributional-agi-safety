@@ -2,7 +2,7 @@
 
 import random
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, Optional
+from typing import TYPE_CHECKING, Any, Callable, Dict, Optional
 
 from pydantic import BaseModel, model_validator
 
@@ -25,6 +25,9 @@ from swarm.governance.engine import GovernanceEffect
 from swarm.models.agent import AgentType
 from swarm.models.events import Event, EventType
 from swarm.models.interaction import SoftInteraction
+
+if TYPE_CHECKING:
+    from swarm.logging.event_bus import EventBus
 
 
 class MoltipediaConfig(BaseModel):
@@ -103,9 +106,11 @@ class MoltipediaHandler(Handler):
     def __init__(
         self,
         config: MoltipediaConfig,
-        emit_event: Callable[[Event], None],
+        emit_event: Optional[Callable[[Event], None]] = None,
+        *,
+        event_bus: Optional["EventBus"] = None,
     ):
-        super().__init__(emit_event=emit_event)
+        super().__init__(emit_event=emit_event, event_bus=event_bus)
         self.config = config
         self._rng = random.Random(config.seed)
         self.task_pool = WikiTaskPool(seed=config.seed)
@@ -567,11 +572,11 @@ class MoltipediaHandler(Handler):
 
     def _moltipedia_cost_from_effect(self, effect: GovernanceEffect) -> float:
         """Compute Moltipedia-specific cost from governance effects."""
-        return sum(
+        return float(sum(
             lever.cost_a
             for lever in effect.lever_effects
             if lever.lever_name in self._MOLTIPEDIA_LEVERS
-        )
+        ))
 
     def _emit_moltipedia_governance_events(
         self,
