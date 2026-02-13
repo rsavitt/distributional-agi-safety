@@ -8,7 +8,7 @@ Build and evaluate a **multi-agent sandbox economy** to study *system-level safe
 
 ## Current State
 
-**Package:** `swarm-safety` v1.4.0 (imported as `swarm`)
+**Package:** `swarm-safety` v1.5.0 (imported as `swarm`)
 **Python:** >= 3.10 | **Tests:** 2922 across 93 files | **Scenarios:** 55 YAML definitions
 
 ### Foundation Layer
