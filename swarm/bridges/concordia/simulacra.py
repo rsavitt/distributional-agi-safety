@@ -20,7 +20,6 @@ from typing import Callable, List, Optional, Tuple
 
 from swarm.bridges.concordia.events import JudgeScores
 
-
 # ---------------------------------------------------------------------------
 # Data models
 # ---------------------------------------------------------------------------

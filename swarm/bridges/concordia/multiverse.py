@@ -17,7 +17,6 @@ from typing import Dict, List, Optional
 
 from swarm.bridges.concordia.adapter import ConcordiaAdapter
 from swarm.bridges.concordia.config import ConcordiaConfig
-from swarm.bridges.concordia.events import JudgeScores
 from swarm.bridges.concordia.simulacra import (
     CommunityConfig,
     ExpandedPersona,
@@ -27,7 +26,6 @@ from swarm.bridges.concordia.simulacra import (
 )
 from swarm.metrics.soft_metrics import SoftMetrics
 from swarm.models.interaction import SoftInteraction
-
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -307,7 +305,7 @@ class MultiverseRunner:
         mean_x = sum(xs) / n
         mean_y = sum(ys) / n
 
-        cov = sum((x - mean_x) * (y - mean_y) for x, y in zip(xs, ys)) / n
+        cov = sum((x - mean_x) * (y - mean_y) for x, y in zip(xs, ys, strict=True)) / n
         var_x = sum((x - mean_x) ** 2 for x in xs) / n
         var_y = sum((y - mean_y) ** 2 for y in ys) / n
 
