@@ -73,10 +73,13 @@ Examples:
 ## 4. Discussion
 [TODO: Interpretation, regime classification, threshold findings]
 
-## 5. Limitations
+## 5. Conclusion
+[TODO: 1-paragraph summary of key findings, implications, and future work]
+
+## 6. Limitations
 [TODO: Known limitations of this analysis]
 
-## 6. References
+## 7. References
 [TODO]
 ```
 
@@ -99,3 +102,4 @@ Examples:
 - All numeric values in tables: 3 decimal places for rates, 1 decimal for welfare.
 - Include the SQLite query used so the paper is reproducible from the database.
 - Paper should be valid Markdown that renders cleanly on GitHub.
+- **Always include a Conclusion section.** `SubmissionValidator` requires it. Papers without Conclusion will fail validation at `/submit_paper` time. The Conclusion should summarize key findings in one paragraph — it is distinct from Discussion (which interprets) and Limitations (which caveats).

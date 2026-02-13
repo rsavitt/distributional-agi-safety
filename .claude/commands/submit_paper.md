@@ -18,8 +18,9 @@ Where `<paper_name>` is one of the paper stems (e.g. `distributional_agi_safety`
    - For AgentXiv, call `GET /api/v1/agents/status` and verify status is `claimed` or `active`. If `pending_claim`, STOP and tell the user to claim the account first.
 
 2. **Author attribution check**
-   - Grep all `.tex` and `.md` paper source files for personal names (anything in `\author{}` or `**Authors:**` that isn't "SWARM Research Collective")
-   - If found, STOP and ask the user before submitting
+   - Grep the submission `.tex` for `\author{}` content.
+   - If the author is NOT "SWARM Research Collective", **auto-replace** it to "SWARM Research Collective" in the submission copy (`research/papers/`) and inform the user (do not ask — the canonical `docs/papers/` source is not modified).
+   - This avoids a blocking question on every submission. The user can pass `--keep-author` to skip the replacement.
 
 3. **Category validation**
    - ClawXiv valid categories: `cs.MA`, `cs.AI`, `cs.CL`, `cs.LG`, `cs.CR`, `cs.SE` (check via API if unsure)
@@ -40,11 +41,16 @@ Where `<paper_name>` is one of the paper stems (e.g. `distributional_agi_safety`
 1. Read `.tex` source from `research/papers/<name>.tex`
 2. Extract abstract from `\begin{abstract}...\end{abstract}`
 3. Collect referenced images as base64 from `docs/papers/figures/`
-4. Submit using `files` payload format (not bare `source`) when images are present:
+4. **Flatten figure paths**: ClawXiv rejects nested paths like `figures/subdir/file.png`. Before submission:
+   - Strip all directory prefixes from `\includegraphics` paths in the tex source (e.g. `figures/kernel_v4_governance_sweep/welfare.png` → `welfare.png`)
+   - Use flat filenames as image dict keys (e.g. `{"welfare.png": "<base64>"}`, NOT `{"figures/subdir/welfare.png": "<base64>"}`)
+   - Apply the same regex: `tex = re.sub(r'figures/[^/]+/', '', tex)`
+5. Submit using `files` payload format (not bare `source`) when images are present:
    ```python
-   json={"title": ..., "abstract": ..., "categories": [...], "files": {"source": tex, "images": {name: b64, ...}}}
+   json={"title": ..., "abstract": ..., "categories": [...], "files": {"source": tex_flat, "images": {name: b64, ...}}}
    ```
-5. **Rate limit**: 1 paper per 30 minutes. If 429, retry with 5-minute polling (up to 8 attempts)
+6. **Auth header**: ClawXiv uses `X-API-Key` header (not `Authorization: Bearer`).
+7. **Rate limit**: 1 paper per 30 minutes. If 429, retry with 5-minute polling (up to 8 attempts)
 
 ### AgentXiv (Markdown)
 1. Read `.md` source from `docs/papers/<name>.md`
@@ -65,6 +71,8 @@ After successful submission, print the paper ID and update this table in the out
 | governance_mechanisms | clawxiv.2602.00051 | 2602.00044 |
 | collusion_dynamics | clawxiv.2602.00057 | 2602.00045 |
 | ldt_cooperation | clawxiv.2602.00069 | -- |
+| pi_bridge_claude_study | clawxiv.2602.00071 | 2602.00055 |
+| kernel_v4_governance_sweep | clawxiv.2602.00074 | 2602.00057 |
 
 ## Error Handling
 
@@ -73,6 +81,7 @@ After successful submission, print the paper ID and update this table in the out
   - **"Invalid categories"**: check category name against valid list above
   - **"Account not verified"**: AgentXiv account needs human claim
   - **"LaTeX compilation failed"**: missing figures (need `files.images`) or bad LaTeX
+  - **"Nested file paths are not supported"**: flatten `figures/subdir/` paths (see step 4 above)
   - **"Rate limit exceeded"**: wait and retry
 
 ## Key Files
