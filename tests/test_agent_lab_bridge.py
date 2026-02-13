@@ -3,7 +3,12 @@
 Uses dict fixtures — no pickle or AgentLab dependency required.
 """
 
+import pickle
+
+import pytest
+
 from swarm.bridges.agent_lab.bridge import AgentLabBridge
+from swarm.bridges.agent_lab.client import restricted_loads
 from swarm.bridges.agent_lab.config import AgentLabConfig
 from swarm.bridges.agent_lab.events import (
     AgentLabEvent,
@@ -534,3 +539,129 @@ class TestClient:
         assert len(review_events) == 2
         assert review_events[0].overall_score == 7.0
         assert review_events[1].decision == "reject"
+
+
+# ---------------------------------------------------------------------------
+# Restricted unpickler tests
+# ---------------------------------------------------------------------------
+
+
+class TestRestrictedUnpickler:
+    """Verify the restricted unpickler blocks dangerous payloads."""
+
+    def test_allows_safe_builtins(self) -> None:
+        """Dicts, lists, strings, ints, etc. should deserialize fine."""
+        data = {"key": "value", "num": 42, "nested": [1, 2.0, True, None]}
+        raw = pickle.dumps(data)
+        result = restricted_loads(raw)
+        assert result == data
+
+    def test_allows_tuples_and_sets(self) -> None:
+        data = (1, 2, 3)
+        raw = pickle.dumps(data)
+        assert restricted_loads(raw) == data
+
+        data_set = {1, 2, 3}
+        raw_set = pickle.dumps(data_set)
+        assert restricted_loads(raw_set) == data_set
+
+    def test_allows_bytes(self) -> None:
+        data = b"hello"
+        raw = pickle.dumps(data)
+        assert restricted_loads(raw) == data
+
+    def test_blocks_os_system(self) -> None:
+        """os.system is a classic RCE payload — must be blocked."""
+        import os
+
+        class Exploit:
+            def __reduce__(self):
+                return (os.system, ("echo pwned",))
+
+        raw = pickle.dumps(Exploit())
+        with pytest.raises(pickle.UnpicklingError, match="Blocked unsafe class"):
+            restricted_loads(raw)
+
+    def test_blocks_subprocess(self) -> None:
+        """subprocess.Popen must be blocked."""
+        import subprocess
+
+        class Exploit:
+            def __reduce__(self):
+                return (subprocess.Popen, (["echo", "pwned"],))
+
+        raw = pickle.dumps(Exploit())
+        with pytest.raises(pickle.UnpicklingError, match="Blocked unsafe class"):
+            restricted_loads(raw)
+
+    def test_blocks_eval(self) -> None:
+        """builtins.eval must be blocked."""
+
+        class Exploit:
+            def __reduce__(self):
+                return (eval, ("__import__('os').system('echo pwned')",))
+
+        raw = pickle.dumps(Exploit())
+        with pytest.raises(pickle.UnpicklingError, match="Blocked unsafe class"):
+            restricted_loads(raw)
+
+    def test_blocks_exec(self) -> None:
+        """builtins.exec must be blocked."""
+
+        class Exploit:
+            def __reduce__(self):
+                return (exec, ("import os; os.system('echo pwned')",))
+
+        raw = pickle.dumps(Exploit())
+        with pytest.raises(pickle.UnpicklingError, match="Blocked unsafe class"):
+            restricted_loads(raw)
+
+    def test_blocks_arbitrary_class(self) -> None:
+        """Classes not on the allowlist must be blocked."""
+        # Craft a pickle that tries to instantiate collections.Counter
+        # (a real class that can be pickled, but is not allowlisted)
+        import collections
+
+        raw = pickle.dumps(collections.Counter({"a": 1}))
+        with pytest.raises(pickle.UnpicklingError, match="Blocked unsafe class"):
+            restricted_loads(raw)
+
+    def test_extra_allowed_extends_allowlist(self) -> None:
+        """The extra_allowed parameter should permit additional classes."""
+        import collections
+
+        raw = pickle.dumps(collections.Counter({"a": 1}))
+
+        # Without extra_allowed, this should fail
+        with pytest.raises(pickle.UnpicklingError):
+            restricted_loads(raw)
+
+        # With extra_allowed, it should succeed
+        result = restricted_loads(
+            raw,
+            extra_allowed={("collections", "Counter")},
+        )
+        assert result == collections.Counter({"a": 1})
+
+    def test_blocks_pickle_reduce_to_getattr(self) -> None:
+        """Crafted __reduce__ using getattr chain must be blocked."""
+
+        class Exploit:
+            def __reduce__(self):
+                return (getattr, (__builtins__, "__import__"))
+
+        raw = pickle.dumps(Exploit())
+        with pytest.raises(pickle.UnpicklingError, match="Blocked unsafe class"):
+            restricted_loads(raw)
+
+    def test_error_message_includes_class_name(self) -> None:
+        """The error message should identify the blocked class."""
+        import os
+
+        class Exploit:
+            def __reduce__(self):
+                return (os.system, ("echo pwned",))
+
+        raw = pickle.dumps(Exploit())
+        with pytest.raises(pickle.UnpicklingError, match="posix.system|nt.system|os.system"):
+            restricted_loads(raw)

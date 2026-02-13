@@ -5,13 +5,19 @@ and lab output directories to reconstruct event timelines.
 
 AgentLaboratory is an optional dependency; pickle parsing uses lazy
 imports. Tests use dict fixtures without requiring AgentLab.
+
+Security: Pickle deserialization uses a RestrictedUnpickler that only
+allows known-safe classes from AgentLaboratory and Python builtins.
+See ``_ALLOWED_CLASSES`` for the allowlist.
 """
 
+import io
 import logging
+import pickle
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Set, Tuple
 
 from swarm.bridges.agent_lab.config import AgentLabClientConfig
 from swarm.bridges.agent_lab.events import (
@@ -23,6 +29,116 @@ from swarm.bridges.agent_lab.events import (
 )
 
 logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Restricted unpickler — allowlist of (module, class) pairs
+# ---------------------------------------------------------------------------
+
+# AgentLaboratory classes that appear in Paper*.pkl checkpoints.
+# The workflow object serializes itself via ``pickle.dump(self, f)``
+# with no custom __reduce__, so only __dict__ reconstruction is needed.
+# Checkpoints may be pickled from __main__ or from module paths.
+_AGENT_LAB_CLASSES: Set[Tuple[str, str]] = {
+    # Top-level workflow
+    ("ai_lab_repo", "LaboratoryWorkflow"),
+    ("__main__", "LaboratoryWorkflow"),
+    # Agent classes (all defined in agents.py)
+    ("agents", "BaseAgent"),
+    ("agents", "PhDStudentAgent"),
+    ("agents", "PostdocAgent"),
+    ("agents", "ProfessorAgent"),
+    ("agents", "MLEngineerAgent"),
+    ("agents", "SWEngineerAgent"),
+    ("agents", "ReviewersAgent"),
+    # Same classes when imported via package path
+    ("ai_lab_repo.agents", "BaseAgent"),
+    ("ai_lab_repo.agents", "PhDStudentAgent"),
+    ("ai_lab_repo.agents", "PostdocAgent"),
+    ("ai_lab_repo.agents", "ProfessorAgent"),
+    ("ai_lab_repo.agents", "MLEngineerAgent"),
+    ("ai_lab_repo.agents", "SWEngineerAgent"),
+    ("ai_lab_repo.agents", "ReviewersAgent"),
+}
+
+# Python builtins and stdlib helpers needed by the default pickle protocol.
+_SAFE_BUILTINS: Set[Tuple[str, str]] = {
+    ("builtins", "True"),
+    ("builtins", "False"),
+    ("builtins", "None"),
+    ("builtins", "dict"),
+    ("builtins", "list"),
+    ("builtins", "tuple"),
+    ("builtins", "set"),
+    ("builtins", "frozenset"),
+    ("builtins", "bytes"),
+    ("builtins", "bytearray"),
+    ("builtins", "str"),
+    ("builtins", "int"),
+    ("builtins", "float"),
+    ("builtins", "complex"),
+    ("builtins", "bool"),
+    ("builtins", "type"),
+    ("builtins", "object"),
+    ("builtins", "slice"),
+    ("builtins", "range"),
+    # copyreg._reconstructor is used by pickle to rebuild objects
+    # whose classes don't define __reduce__.
+    ("copyreg", "_reconstructor"),
+    # collections types that may appear in nested state
+    ("collections", "OrderedDict"),
+    ("collections", "defaultdict"),
+}
+
+_ALLOWED_CLASSES: Set[Tuple[str, str]] = _AGENT_LAB_CLASSES | _SAFE_BUILTINS
+
+
+class _RestrictedUnpickler(pickle.Unpickler):
+    """Unpickler that only allows classes on an explicit allowlist.
+
+    Raises ``pickle.UnpicklingError`` if the pickle stream tries to
+    reconstruct a class not in ``_ALLOWED_CLASSES``.  This prevents
+    arbitrary code execution via crafted pickle payloads.
+    """
+
+    def __init__(
+        self,
+        file: io.BufferedIOBase,
+        *,
+        extra_allowed: Set[Tuple[str, str]] | None = None,
+    ) -> None:
+        super().__init__(file)
+        self._allowed = _ALLOWED_CLASSES | (extra_allowed or set())
+
+    def find_class(self, module: str, name: str) -> Any:
+        if (module, name) not in self._allowed:
+            raise pickle.UnpicklingError(
+                f"Blocked unsafe class: {module}.{name}. "
+                "Only allowlisted AgentLab and builtin classes are "
+                "permitted during checkpoint deserialization."
+            )
+        return super().find_class(module, name)
+
+
+def restricted_loads(
+    data: bytes,
+    *,
+    extra_allowed: Set[Tuple[str, str]] | None = None,
+) -> Any:
+    """Deserialize bytes using the restricted unpickler."""
+    return _RestrictedUnpickler(
+        io.BytesIO(data), extra_allowed=extra_allowed
+    ).load()
+
+
+def restricted_load(
+    file: io.BufferedIOBase,
+    *,
+    extra_allowed: Set[Tuple[str, str]] | None = None,
+) -> Any:
+    """Deserialize a file using the restricted unpickler."""
+    return _RestrictedUnpickler(
+        file, extra_allowed=extra_allowed
+    ).load()
 
 
 def _utcnow() -> datetime:
@@ -180,13 +296,16 @@ class AgentLabClient:
         return reviews
 
     def _load_pickle(self, path: Path) -> Dict[str, Any]:
-        """Load a pickle file, with optional AgentLab sys.path setup.
+        """Load a pickle file using restricted deserialization.
+
+        Uses ``_RestrictedUnpickler`` which only allows classes on an
+        explicit allowlist (AgentLab workflow/agent classes and Python
+        builtins).  Arbitrary code execution payloads are blocked.
 
         Returns the unpickled object as a dict-like structure.
         If pickle loading fails (e.g. missing AgentLab dependency),
         raises an ImportError with guidance.
         """
-        import pickle
         import sys
 
         # Optionally add AgentLab to path for class resolution
@@ -197,8 +316,10 @@ class AgentLabClient:
 
         try:
             with open(path, "rb") as f:
-                result: Dict[str, Any] = pickle.load(f)  # noqa: S301
+                result: Dict[str, Any] = restricted_load(f)
                 return result
+        except pickle.UnpicklingError:
+            raise  # Re-raise security blocks as-is
         except (ModuleNotFoundError, AttributeError) as exc:
             raise ImportError(
                 f"Failed to load AgentLab checkpoint {path}. "

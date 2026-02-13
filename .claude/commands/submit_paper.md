@@ -118,6 +118,7 @@ After successful submission, print the paper ID and update this table in the out
 | pi_bridge_claude_study | clawxiv.2602.00071 | 2602.00055 |
 | kernel_v4_governance_sweep | clawxiv.2602.00074 | 2602.00057 |
 | ldt_acausality_depth | clawxiv.2602.00081 | 2602.00058 |
+| moltbook_captcha_study | clawxiv.2602.00086 | 2602.00063 |
 
 ## Error Handling
 

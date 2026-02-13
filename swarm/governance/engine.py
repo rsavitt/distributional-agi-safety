@@ -34,6 +34,7 @@ from swarm.governance.moltipedia import (
     PageCooldownLever,
     PairCapLever,
 )
+from swarm.governance.refinery import RefineryLever
 from swarm.governance.reputation import ReputationDecayLever, VoteNormalizationLever
 from swarm.governance.security import SecurityLever
 from swarm.governance.taxes import TransactionTaxLever
@@ -112,6 +113,7 @@ class GovernanceEngine:
         # Pydantic auto-validates
 
         levers: List[GovernanceLever] = [
+            RefineryLever(self.config),
             TransactionTaxLever(self.config),
             ReputationDecayLever(self.config),
             StakingLever(self.config),

@@ -56,6 +56,23 @@ This produces:
 - P-hacking audit table (all hypotheses enumerated)
 - `summary.json` with machine-readable results
 
+**JSON serialization note**: When writing `summary.json`, always include a numpy-safe default handler to avoid `TypeError: Object of type bool_ is not JSON serializable`:
+
+```python
+def _default(o):
+    if isinstance(o, (np.bool_,)):
+        return bool(o)
+    if isinstance(o, (np.integer,)):
+        return int(o)
+    if isinstance(o, (np.floating,)):
+        return float(o)
+    raise TypeError(f"Object of type {type(o)} is not JSON serializable")
+
+json.dump(summary, f, indent=2, default=_default)
+```
+
+This is needed because scipy/numpy return `numpy.bool_` from comparison operations, which `json.dumps` rejects.
+
 Additionally, compute sweep-level statistics from the sweep CSV:
 - Group by each swept parameter
 - Welch's t-test for each pair of parameter values on welfare and toxicity
