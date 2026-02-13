@@ -1,4 +1,6 @@
-# SWARM: System-Wide Assessment of Risk in Multi-agent systems
+# SWARM
+
+System-Wide Risk Evaluation for Multi-Agent AI Systems
 
 [![CI](https://github.com/swarm-ai-safety/swarm/actions/workflows/ci.yml/badge.svg)](https://github.com/swarm-ai-safety/swarm/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
@@ -8,9 +10,29 @@
 
 <img src="https://github.com/swarm-ai-safety/swarm/raw/main/docs/images/swarm-hero.gif" alt="SWARM dashboard showing emergent risk metrics" width="100%">
 
-**Study how intelligence swarms—and where it fails.**
+*Emergent risk appears at the interaction level, not the individual agent level.*
 
-SWARM is a research framework for studying emergent risks in multi-agent AI systems. Rather than focusing on single misaligned agents, SWARM reveals how catastrophic failures can emerge from the *interaction* of many sub-AGI agents—even when none are individually dangerous.
+SWARM is a research framework for **measuring emergent failures that only appear when many AI agents interact** — even when individual agents are safe.
+
+It enables:
+- interaction-level safety metrics (illusion delta, quality gaps)
+- governance experiments (audits, staking, sanctions)
+- reproducible multi-agent safety benchmarks
+
+## Why this repo is worth starring
+
+⭐ You work on multi-agent or LLM-agent systems  
+⭐ You care about systemic or emergent AI risks  
+⭐ You want benchmarks beyond single-agent evals  
+⭐ You’re designing governance, audits, or red-teaming
+
+## Run your first emergent failure in 60 seconds
+
+```bash
+python examples/illusion_delta_minimal.py
+```
+
+This minimal example runs a 3-agent simulation with one deceptive actor and computes an illusion-delta style signal from replay variability.
 
 ## The Core Insight
 
@@ -218,6 +240,13 @@ Instead of binary labels (good/bad), interactions carry a probability `p = P(v =
 | License | MIT | Apache 2.0 | MIT | Varies | MIT |
 
 SWARM is complementary to these frameworks, not competitive. The [Concordia bridge](docs/bridges/concordia.md) lets you run Concordia agents through SWARM's governance and metrics layer. See [full comparison](docs/comparison.md).
+
+## Related work
+
+SWARM is inspired by and complementary to:
+- Agent-based governance simulations
+- Recursive and multi-agent evaluation frameworks
+- Mechanism design for AI systems
 
 ## Architecture
 
