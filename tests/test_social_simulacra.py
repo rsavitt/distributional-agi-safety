@@ -5,7 +5,7 @@ import random
 import pytest
 
 from swarm.bridges.concordia.adapter import ConcordiaAdapter
-from swarm.bridges.concordia.events import ConcordiaEventType, JudgeScores
+from swarm.bridges.concordia.events import ConcordiaEventType
 from swarm.bridges.concordia.multiverse import (
     MultiverseConfig,
     MultiverseResult,
@@ -24,7 +24,6 @@ from swarm.bridges.concordia.simulacra import (
     thread_to_narrative_samples,
     threads_to_judge_ground_truth,
 )
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -311,7 +310,7 @@ class TestThreadGenerator:
         t1 = gen.generate_thread(rng=random.Random(42))
         t2 = gen.generate_thread(rng=random.Random(42))
         assert len(t1.posts) == len(t2.posts)
-        for p1, p2 in zip(t1.posts, t2.posts):
+        for p1, p2 in zip(t1.posts, t2.posts, strict=True):
             assert p1.content == p2.content
 
     def test_empty_personas(self, community):
@@ -453,6 +452,37 @@ class TestWhatIfInjector:
         )
         injected_content = [p.content for p in new_thread.posts[len(thread.posts) :]]
         assert any("LLM-generated" in c for c in injected_content)
+
+    def test_llm_sees_evolving_thread(self, community, personas):
+        """Each LLM prompt during inject() must include previously injected
+        posts so the counterfactual conversation conditions on its own turns."""
+        thread = self._make_thread(personas)
+
+        prompts_received: list[str] = []
+
+        def recording_llm(prompt, temperature):
+            prompts_received.append(prompt)
+            return f"Reply #{len(prompts_received)}"
+
+        injector = WhatIfInjector(
+            community=community,
+            llm_client=recording_llm,
+            max_injected_replies=3,
+        )
+        injector.inject(
+            thread,
+            "a provocative debater",
+            persona_name="Debater",
+            rng=random.Random(42),
+        )
+
+        # With max_injected_replies=3 we get 3 injected + 2 community responses
+        # = 5 LLM calls. Each successive prompt should contain earlier replies.
+        assert len(prompts_received) >= 3
+
+        # The second injected-reply prompt must contain "Reply #1"
+        # (the content of the first injected post)
+        assert "Reply #1" in prompts_received[2]
 
 
 # ---------------------------------------------------------------------------
@@ -644,7 +674,7 @@ class TestMultiverseRunner:
             config=config,
         )
         result = runner.run()
-        assert len(result.universes) >= 2
+        assert len(result.universes) == 4
         assert result.toxicity_mean >= 0.0
         assert result.p_mean >= 0.0
         assert result.p_mean <= 1.0
@@ -702,6 +732,29 @@ class TestMultiverseRunner:
         # Correlation should be in [-1, 1]
         assert -1.0 <= result.temperature_correlation <= 1.0
 
+    def test_universe_count_matches_config(self, community, personas):
+        """n_universes not evenly divisible by len(temperatures) must still
+        produce exactly n_universes runs (remainder distributed round-robin)."""
+        config = MultiverseConfig(
+            n_universes=10,
+            temperatures=[0.5, 0.7, 0.9],
+            threads_per_universe=2,
+            base_seed=42,
+        )
+        runner = MultiverseRunner(
+            community=community,
+            personas=personas,
+            config=config,
+        )
+        result = runner.run()
+        assert len(result.universes) == 10
+
+        # First temperature gets extra universe (10 = 3*3 + 1)
+        temps = [u.temperature for u in result.universes]
+        assert temps.count(0.5) == 4  # base 3 + 1 remainder
+        assert temps.count(0.7) == 3
+        assert temps.count(0.9) == 3
+
     def test_per_universe_metrics(self, community, personas):
         config = MultiverseConfig(
             n_universes=2,
@@ -750,20 +803,8 @@ class TestSimulacraEventTypes:
 class TestImports:
     def test_import_from_package(self):
         from swarm.bridges.concordia import (
-            CommunityConfig,
-            ExpandedPersona,
-            MultiverseConfig,
-            MultiverseResult,
             MultiverseRunner,
-            PersonaExpander,
             PersonaSeed,
-            Post,
-            Thread,
-            ThreadGenerator,
-            UniverseResult,
-            WhatIfInjector,
-            thread_to_narrative_samples,
-            threads_to_judge_ground_truth,
         )
 
         # Verify they're the right classes

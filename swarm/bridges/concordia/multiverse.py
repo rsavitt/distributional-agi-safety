@@ -159,11 +159,12 @@ class MultiverseRunner:
         universes: List[UniverseResult] = []
         universe_id = 0
 
-        for temp in self._config.temperatures:
-            n_per_temp = max(
-                1, self._config.n_universes // len(self._config.temperatures)
-            )
-            for run_idx in range(n_per_temp):
+        n_temps = len(self._config.temperatures)
+        base_count, remainder = divmod(self._config.n_universes, n_temps)
+
+        for temp_idx, temp in enumerate(self._config.temperatures):
+            n_for_temp = base_count + (1 if temp_idx < remainder else 0)
+            for run_idx in range(n_for_temp):
                 seed = self._config.base_seed + universe_id * 1000 + run_idx
                 result = self._run_single_universe(
                     universe_id=universe_id,

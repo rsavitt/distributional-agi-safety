@@ -578,15 +578,18 @@ class WhatIfInjector:
             seed_origin="whatif",
         )
 
-        # Clone thread
-        new_posts = list(thread.posts)
+        # Build an evolving thread so each LLM prompt sees prior injected turns
+        evolving_thread = Thread(
+            thread_id=f"{thread.thread_id}_whatif_{injected.persona_id[:8]}",
+            posts=list(thread.posts),
+        )
 
         # Generate injected persona's reply to a random post
         target_post = r.choice(thread.posts)
 
         for i in range(self._max_injected_replies):
             reply_content = self._generate_injected_reply(
-                injected, target_post, thread, r
+                injected, target_post, evolving_thread, r
             )
             reply = Post(
                 author=injected,
@@ -594,13 +597,13 @@ class WhatIfInjector:
                 parent_id=target_post.post_id,
                 depth=min(target_post.depth + 1, 5),
             )
-            new_posts.append(reply)
+            evolving_thread.posts.append(reply)
 
             # Generate community response to the injection
             if thread.participants and i < self._max_injected_replies - 1:
                 responder = r.choice(thread.participants)
                 response_content = self._generate_community_response(
-                    responder, reply, thread, r
+                    responder, reply, evolving_thread, r
                 )
                 response = Post(
                     author=responder,
@@ -608,14 +611,10 @@ class WhatIfInjector:
                     parent_id=reply.post_id,
                     depth=min(reply.depth + 1, 5),
                 )
-                new_posts.append(response)
+                evolving_thread.posts.append(response)
                 target_post = response  # next injection replies to response
 
-        new_thread = Thread(
-            thread_id=f"{thread.thread_id}_whatif_{injected.persona_id[:8]}",
-            posts=new_posts,
-        )
-        return new_thread, injected
+        return evolving_thread, injected
 
     def _generate_injected_reply(
         self,
