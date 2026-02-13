@@ -15,6 +15,7 @@ from swarm.boundaries.leakage import LeakageDetector, LeakageReport
 from swarm.boundaries.policies import PolicyEngine
 from swarm.core.boundary_handler import BoundaryHandler
 from swarm.core.handler_registry import HandlerRegistry
+from swarm.core.interaction_finalizer import InteractionFinalizer
 from swarm.core.kernel_handler import KernelOracleConfig, KernelOracleHandler
 from swarm.core.marketplace_handler import MarketplaceHandler
 from swarm.core.memory_handler import MemoryHandler, MemoryTierConfig
@@ -24,8 +25,10 @@ from swarm.core.observable_generator import (
     DefaultObservableGenerator,
     ObservableGenerator,
 )
+from swarm.core.observation_builder import ObservationBuilder
 from swarm.core.payoff import PayoffConfig, SoftPayoffEngine
 from swarm.core.proxy import ProxyComputer, ProxyObservables
+from swarm.core.redteam_inspector import RedTeamInspector
 from swarm.core.scholar_handler import ScholarConfig, ScholarHandler
 from swarm.env.composite_tasks import (
     CompositeTask,
@@ -35,7 +38,7 @@ from swarm.env.feed import Feed, VoteType
 from swarm.env.marketplace import Marketplace, MarketplaceConfig
 from swarm.env.network import AgentNetwork, NetworkConfig
 from swarm.env.state import EnvState, InteractionProposal
-from swarm.env.tasks import TaskPool, TaskStatus
+from swarm.env.tasks import TaskPool
 from swarm.forecaster.features import (
     combine_feature_dicts,
     extract_behavioral_features,
@@ -50,10 +53,7 @@ from swarm.models.agent import AgentState, AgentType
 from swarm.models.events import (
     Event,
     EventType,
-    interaction_completed_event,
     interaction_proposed_event,
-    payoff_computed_event,
-    reputation_updated_event,
 )
 from swarm.models.interaction import InteractionType, SoftInteraction
 
@@ -398,6 +398,33 @@ class Orchestrator:
             Callable[[SoftInteraction, float, float], None]
         ] = []
 
+        # Interaction finalization (extracted component)
+        self._finalizer = InteractionFinalizer(
+            state=self.state,
+            payoff_engine=self.payoff_engine,
+            proxy_computer=self.proxy_computer,
+            observable_generator=self._observable_generator,
+            governance_engine=self.governance_engine,
+            network=self.network,
+            agents=self._agents,
+            on_interaction_complete=self._on_interaction_complete,
+            emit_event=self._emit_event,
+        )
+
+        # Observation building (extracted component)
+        self._obs_builder = ObservationBuilder(
+            config=self.config,
+            state=self.state,
+            feed=self.feed,
+            task_pool=self.task_pool,
+            network=self.network,
+            handler_registry=self._handler_registry,
+            rng=self._rng,
+        )
+
+        # Red-team inspection (extracted component)
+        self._redteam = RedTeamInspector(self._agents, self.state)
+
     def register_agent(self, agent: BaseAgent) -> AgentState:
         """
         Register an agent with the simulation.
@@ -495,41 +522,30 @@ class Orchestrator:
 
         return self._epoch_metrics
 
-    def _run_epoch(self) -> EpochMetrics:
-        """Run a single epoch."""
-        epoch_start = self.state.current_epoch
-
+    def _epoch_pre_hooks(self) -> None:
+        """Shared epoch-start logic for sync and async paths."""
         self._update_adaptive_governance()
 
-        # Handler epoch-start hooks (via registry)
         for handler in self._handler_registry.all_handlers():
             try:
                 handler.on_epoch_start(self.state)
             except Exception:
                 pass  # handler hook failures must not break simulation
 
-        # Apply epoch-start governance (reputation decay, unfreezes)
         if self.governance_engine:
             gov_effect = self.governance_engine.apply_epoch_start(
                 self.state, self.state.current_epoch
             )
             self._apply_governance_effect(gov_effect)
 
-        for _step in range(self.config.steps_per_epoch):
-            if self.state.is_paused:
-                break
-
-            self._run_step()
-            self.state.advance_step()
-
-        # Handler epoch-end hooks (via registry)
+    def _epoch_post_hooks(self, epoch_start: int) -> EpochMetrics:
+        """Shared epoch-end logic for sync and async paths."""
         for handler in self._handler_registry.all_handlers():
             try:
                 handler.on_epoch_end(self.state)
             except Exception:
                 pass  # handler hook failures must not break simulation
 
-        # Apply network edge decay
         if self.network is not None:
             pruned = self.network.decay_edges()
             if pruned > 0:
@@ -541,13 +557,10 @@ class Orchestrator:
                     )
                 )
 
-        # Apply memory decay for rain/river agents at epoch boundary
         self._apply_agent_memory_decay(epoch_start)
 
-        # Compute epoch metrics
         metrics = self._compute_epoch_metrics()
 
-        # Log epoch completion
         self._emit_event(
             Event(
                 event_type=EventType.EPOCH_COMPLETED,
@@ -556,10 +569,57 @@ class Orchestrator:
             )
         )
 
-        # Advance to next epoch
         self.state.advance_epoch()
-
         return metrics
+
+    def _step_preamble(self) -> None:
+        """Shared step-start logic for sync and async paths."""
+        if (
+            self.governance_engine
+            and self.governance_engine.config.adaptive_use_behavioral_features
+        ):
+            self._update_adaptive_governance(include_behavioral=True)
+
+        if self.governance_engine:
+            step_effect = self.governance_engine.apply_step(
+                self.state, self.state.current_step
+            )
+            self._apply_governance_effect(step_effect)
+
+        for handler in self._handler_registry.all_handlers():
+            try:
+                handler.on_step(self.state, self.state.current_step)
+            except Exception:
+                pass  # handler hook failures must not break simulation
+
+    def _get_eligible_agents(self) -> List[str]:
+        """Return agents eligible to act this step (respects schedule, limits, governance)."""
+        agent_order = self._get_agent_schedule()
+        eligible: List[str] = []
+        for agent_id in agent_order:
+            if len(eligible) >= self.config.max_actions_per_step:
+                break
+            if not self.state.can_agent_act(agent_id):
+                continue
+            if self.governance_engine and not self.governance_engine.can_agent_act(
+                agent_id, self.state
+            ):
+                continue
+            eligible.append(agent_id)
+        return eligible
+
+    def _run_epoch(self) -> EpochMetrics:
+        """Run a single epoch."""
+        epoch_start = self.state.current_epoch
+        self._epoch_pre_hooks()
+
+        for _step in range(self.config.steps_per_epoch):
+            if self.state.is_paused:
+                break
+            self._run_step()
+            self.state.advance_step()
+
+        return self._epoch_post_hooks(epoch_start)
 
     def _apply_agent_memory_decay(self, epoch: int) -> None:
         """Apply memory decay to all agents that support it.
@@ -576,59 +636,14 @@ class Orchestrator:
 
     def _run_step(self) -> None:
         """Run a single step within an epoch."""
-        if (
-            self.governance_engine
-            and self.governance_engine.config.adaptive_use_behavioral_features
-        ):
-            self._update_adaptive_governance(include_behavioral=True)
+        self._step_preamble()
 
-        # Step-level governance hooks (e.g., decomposition checkpoints)
-        if self.governance_engine:
-            step_effect = self.governance_engine.apply_step(
-                self.state, self.state.current_step
-            )
-            self._apply_governance_effect(step_effect)
-
-        # Handler per-step hooks (via registry)
-        for handler in self._handler_registry.all_handlers():
-            try:
-                handler.on_step(self.state, self.state.current_step)
-            except Exception:
-                pass  # handler hook failures must not break simulation
-
-        # Get agent schedule for this step
-        agent_order = self._get_agent_schedule()
-
-        actions_this_step = 0
-
-        for agent_id in agent_order:
-            if actions_this_step >= self.config.max_actions_per_step:
-                break
-
-            if not self.state.can_agent_act(agent_id):
-                continue
-
-            # Check governance admission control (staking)
-            if self.governance_engine and not self.governance_engine.can_agent_act(
-                agent_id, self.state
-            ):
-                continue
-
+        for agent_id in self._get_eligible_agents():
             agent = self._agents[agent_id]
-
-            # Build observation for agent
             observation = self._build_observation(agent_id)
-
-            # Get agent action
             action = self._select_action(agent, observation)
+            self._execute_action(action)
 
-            # Execute action
-            success = self._execute_action(action)
-
-            if success:
-                actions_this_step += 1
-
-        # Resolve pending interactions
         self._resolve_pending_interactions()
 
     def _select_action(self, agent: BaseAgent, observation: Observation) -> Action:
@@ -727,174 +742,11 @@ class Orchestrator:
 
     def _build_observation(self, agent_id: str) -> Observation:
         """Build observation for an agent."""
-        agent_state = self.state.get_agent(agent_id)
-        rate_limit = self.state.get_rate_limit_state(agent_id)
-
-        # Get visible posts
-        visible_posts = [p.to_dict() for p in self.feed.get_ranked_posts(limit=20)]
-
-        # Get pending proposals for this agent
-        pending_proposals = [
-            {
-                "proposal_id": p.proposal_id,
-                "initiator_id": p.initiator_id,
-                "interaction_type": p.interaction_type,
-                "content": p.content,
-                "offered_transfer": p.metadata.get("offered_transfer", 0),
-            }
-            for p in self.state.get_proposals_for_agent(agent_id)
-        ]
-
-        # Get available tasks
-        available_tasks = [
-            t.to_dict()
-            for t in self.task_pool.get_claimable_tasks(
-                agent_reputation=agent_state.reputation if agent_state else 0,
-                current_epoch=self.state.current_epoch,
-            )
-        ]
-
-        # Get agent's active tasks
-        active_tasks = [
-            t.to_dict()
-            for t in self.task_pool.get_tasks_for_agent(agent_id)
-            if t.status in (TaskStatus.CLAIMED, TaskStatus.IN_PROGRESS)
-        ]
-
-        # Get visible agents (filtered by network if enabled)
-        active_agents = self.state.get_active_agents()
-
-        if self.network is not None:
-            # Only show network neighbors
-            neighbor_ids = set(self.network.neighbors(agent_id))
-            active_agents = [s for s in active_agents if s.agent_id in neighbor_ids]
-
-        visible_agents = [
-            {
-                "agent_id": s.agent_id,
-                "name": s.name,
-                "agent_type": s.agent_type.value,
-                "reputation": s.reputation,
-                "resources": s.resources,
-                "edge_weight": self.network.edge_weight(agent_id, s.agent_id)
-                if self.network
-                else 1.0,
-            }
-            for s in active_agents
-            if s.agent_id != agent_id
-        ]
-
-        visible_agents = [
-            self._apply_observation_noise(record) for record in visible_agents
-        ]
-
-        # Collect handler observation fields via registry
-        handler_fields: Dict[str, Any] = {}
-        for handler in self._handler_registry.all_handlers():
-            try:
-                handler.on_pre_observation(agent_id, self.state)
-                fields = handler.build_observation_fields(agent_id, self.state)
-            except Exception:
-                continue
-            mapping = handler.observation_field_mapping()
-            for key, value in fields.items():
-                obs_key = mapping.get(key, key)
-                if obs_key in handler_fields:
-                    raise ValueError(
-                        f"Observation field '{obs_key}' returned by "
-                        f"{type(handler).__name__} conflicts with a field "
-                        f"already set by another handler"
-                    )
-                handler_fields[obs_key] = value
-
-        return Observation(
-            agent_state=agent_state or AgentState(),
-            current_epoch=self.state.current_epoch,
-            current_step=self.state.current_step,
-            can_post=rate_limit.can_post(self.state.rate_limits)
-            if self.config.enable_rate_limits
-            else True,
-            can_interact=rate_limit.can_interact(self.state.rate_limits)
-            if self.config.enable_rate_limits
-            else True,
-            can_vote=rate_limit.can_vote(self.state.rate_limits)
-            if self.config.enable_rate_limits
-            else True,
-            can_claim_task=rate_limit.can_claim_task(self.state.rate_limits)
-            if self.config.enable_rate_limits
-            else True,
-            visible_posts=visible_posts,
-            pending_proposals=pending_proposals,
-            available_tasks=available_tasks,
-            active_tasks=active_tasks,
-            visible_agents=visible_agents,
-            # Marketplace fields
-            available_bounties=handler_fields.get("available_bounties", []),
-            active_bids=handler_fields.get("active_bids", []),
-            active_escrows=handler_fields.get("active_escrows", []),
-            pending_bid_decisions=handler_fields.get("pending_bid_decisions", []),
-            # Moltipedia fields
-            contested_pages=handler_fields.get("contested_pages", []),
-            search_results=handler_fields.get("search_results", []),
-            random_pages=handler_fields.get("random_pages", []),
-            leaderboard=handler_fields.get("leaderboard", []),
-            agent_points=handler_fields.get("agent_points", 0.0),
-            heartbeat_status=handler_fields.get("heartbeat_status", {}),
-            ecosystem_metrics=self._apply_observation_noise(
-                self.state.get_epoch_metrics_snapshot()
-            ),
-            # Moltbook fields
-            moltbook_published_posts=handler_fields.get("moltbook_published_posts", []),
-            moltbook_pending_posts=handler_fields.get("moltbook_pending_posts", []),
-            moltbook_rate_limits=handler_fields.get("moltbook_rate_limits", {}),
-            moltbook_karma=handler_fields.get("moltbook_karma", 0.0),
-            # Memory fields
-            memory_hot_cache=handler_fields.get("memory_hot_cache", []),
-            memory_pending_promotions=handler_fields.get("memory_pending_promotions", []),
-            memory_search_results=handler_fields.get("memory_search_results", []),
-            memory_challenged_entries=handler_fields.get("memory_challenged_entries", []),
-            memory_entry_counts=handler_fields.get("memory_entry_counts", {}),
-            memory_writes_remaining=handler_fields.get("memory_writes_remaining", 0),
-            # Scholar fields
-            scholar_query=handler_fields.get("scholar_query"),
-            scholar_passage_pool=handler_fields.get("scholar_passage_pool", []),
-            scholar_draft_citations=handler_fields.get("scholar_draft_citations", []),
-            scholar_citation_to_verify=handler_fields.get("scholar_citation_to_verify"),
-            scholar_synthesis_result=handler_fields.get("scholar_synthesis_result"),
-            # Kernel fields
-            kernel_available_challenges=handler_fields.get("kernel_available_challenges", []),
-            kernel_pending_submissions=handler_fields.get("kernel_pending_submissions", []),
-            kernel_submissions_to_verify=handler_fields.get("kernel_submissions_to_verify", []),
-            kernel_submission_history=handler_fields.get("kernel_submission_history", []),
-        )
+        return self._obs_builder.build(agent_id)
 
     def _apply_observation_noise(self, record: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Apply configurable gaussian noise to numeric observation fields.
-
-        Noise is only applied when enabled and never to boolean fields.
-        """
-        if (
-            self.config.observation_noise_probability <= 0
-            or self.config.observation_noise_std <= 0
-        ):
-            return record
-
-        noisy: Dict[str, Any] = {}
-        for key, value in record.items():
-            if isinstance(value, bool):
-                noisy[key] = value
-                continue
-            if isinstance(value, (int, float)):
-                if self._rng.random() < self.config.observation_noise_probability:
-                    noisy[key] = float(value) + self._rng.gauss(
-                        0.0, self.config.observation_noise_std
-                    )
-                else:
-                    noisy[key] = value
-                continue
-            noisy[key] = value
-        return noisy
+        """Apply configurable gaussian noise to numeric observation fields."""
+        return self._obs_builder.apply_noise(record)
 
     def _execute_action(self, action: Action) -> bool:
         """
@@ -1158,35 +1010,7 @@ class Orchestrator:
         accepted: bool,
     ) -> None:
         """Complete an interaction and compute payoffs."""
-        # Generate observables via the injectable generator
-        observables = self._observable_generator.generate(
-            proposal,
-            accepted,
-            self.state,
-        )
-
-        # Compute v_hat and p
-        v_hat, p = self.proxy_computer.compute_labels(observables)
-
-        # Create SoftInteraction
-        interaction = SoftInteraction(
-            interaction_id=proposal.proposal_id,
-            initiator=proposal.initiator_id,
-            counterparty=proposal.counterparty_id,
-            interaction_type=InteractionType(proposal.interaction_type),
-            accepted=accepted,
-            task_progress_delta=observables.task_progress_delta,
-            rework_count=observables.rework_count,
-            verifier_rejections=observables.verifier_rejections,
-            tool_misuse_flags=observables.tool_misuse_flags,
-            counterparty_engagement_delta=observables.counterparty_engagement_delta,
-            v_hat=v_hat,
-            p=p,
-            tau=proposal.metadata.get("offered_transfer", 0),
-            metadata=proposal.metadata,
-        )
-
-        self._finalize_interaction(interaction)
+        self._finalizer.complete_interaction(proposal, accepted)
 
     def _generate_observables(
         self,
@@ -1205,119 +1029,11 @@ class Orchestrator:
         interaction: SoftInteraction,
     ) -> Tuple[GovernanceEffect, float, float]:
         """Apply governance, compute payoffs, update state, and emit events."""
-        gov_effect = GovernanceEffect()
-        if self.governance_engine:
-            gov_effect = self.governance_engine.apply_interaction(
-                interaction, self.state
-            )
-            interaction.c_a += gov_effect.cost_a
-            interaction.c_b += gov_effect.cost_b
-            self._apply_governance_effect(gov_effect)
-
-            if gov_effect.cost_a > 0 or gov_effect.cost_b > 0:
-                self._emit_event(
-                    Event(
-                        event_type=EventType.GOVERNANCE_COST_APPLIED,
-                        interaction_id=interaction.interaction_id,
-                        initiator_id=interaction.initiator,
-                        counterparty_id=interaction.counterparty,
-                        payload={
-                            "cost_a": gov_effect.cost_a,
-                            "cost_b": gov_effect.cost_b,
-                            "levers": [e.lever_name for e in gov_effect.lever_effects],
-                        },
-                        epoch=self.state.current_epoch,
-                        step=self.state.current_step,
-                    )
-                )
-
-        payoff_init = self.payoff_engine.payoff_initiator(interaction)
-        payoff_counter = self.payoff_engine.payoff_counterparty(interaction)
-
-        if interaction.accepted:
-            initiator_state = self.state.get_agent(interaction.initiator)
-            counterparty_state = self.state.get_agent(interaction.counterparty)
-
-            if initiator_state:
-                initiator_state.record_initiated(accepted=True, p=interaction.p)
-                initiator_state.total_payoff += payoff_init
-                rep_delta = (interaction.p - 0.5) - interaction.c_a
-                self._update_reputation(interaction.initiator, rep_delta)
-
-            if counterparty_state:
-                counterparty_state.record_received(accepted=True, p=interaction.p)
-                counterparty_state.total_payoff += payoff_counter
-
-        if interaction.initiator in self._agents:
-            self._agents[interaction.initiator].update_from_outcome(
-                interaction, payoff_init
-            )
-        if interaction.counterparty in self._agents:
-            self._agents[interaction.counterparty].update_from_outcome(
-                interaction, payoff_counter
-            )
-
-        self.state.record_interaction(interaction)
-
-        self._emit_event(
-            interaction_completed_event(
-                interaction_id=interaction.interaction_id,
-                accepted=interaction.accepted,
-                payoff_initiator=payoff_init,
-                payoff_counterparty=payoff_counter,
-                epoch=self.state.current_epoch,
-                step=self.state.current_step,
-            )
-        )
-
-        self._emit_event(
-            payoff_computed_event(
-                interaction_id=interaction.interaction_id,
-                initiator_id=interaction.initiator,
-                counterparty_id=interaction.counterparty,
-                payoff_initiator=payoff_init,
-                payoff_counterparty=payoff_counter,
-                components={
-                    "p": interaction.p,
-                    "v_hat": interaction.v_hat,
-                    "tau": interaction.tau,
-                    "accepted": interaction.accepted,
-                },
-                epoch=self.state.current_epoch,
-                step=self.state.current_step,
-            )
-        )
-
-        if self.network is not None and interaction.accepted:
-            self.network.strengthen_edge(
-                interaction.initiator, interaction.counterparty
-            )
-
-        for callback in self._on_interaction_complete:
-            callback(interaction, payoff_init, payoff_counter)
-
-        return gov_effect, payoff_init, payoff_counter
+        return self._finalizer.finalize_interaction(interaction)
 
     def _update_reputation(self, agent_id: str, delta: float) -> None:
         """Update agent reputation."""
-        agent_state = self.state.get_agent(agent_id)
-        if not agent_state:
-            return
-
-        old_rep = agent_state.reputation
-        agent_state.update_reputation(delta)
-
-        self._emit_event(
-            reputation_updated_event(
-                agent_id=agent_id,
-                old_reputation=old_rep,
-                new_reputation=agent_state.reputation,
-                delta=delta,
-                reason="interaction_outcome",
-                epoch=self.state.current_epoch,
-                step=self.state.current_step,
-            )
-        )
+        self._finalizer._update_reputation(agent_id, delta)
 
     # =========================================================================
     # Marketplace Delegation (preserves public interface)
@@ -1346,37 +1062,7 @@ class Orchestrator:
 
     def _apply_governance_effect(self, effect: GovernanceEffect) -> None:
         """Apply governance effects to state (freeze/unfreeze, reputation, resources)."""
-        # Freeze agents
-        for agent_id in effect.agents_to_freeze:
-            self.state.freeze_agent(agent_id)
-
-        # Unfreeze agents
-        for agent_id in effect.agents_to_unfreeze:
-            self.state.unfreeze_agent(agent_id)
-
-        # Apply reputation deltas
-        for agent_id, delta in effect.reputation_deltas.items():
-            agent_state = self.state.get_agent(agent_id)
-            if agent_state:
-                old_rep = agent_state.reputation
-                agent_state.update_reputation(delta)
-                self._emit_event(
-                    reputation_updated_event(
-                        agent_id=agent_id,
-                        old_reputation=old_rep,
-                        new_reputation=agent_state.reputation,
-                        delta=delta,
-                        reason="governance",
-                        epoch=self.state.current_epoch,
-                        step=self.state.current_step,
-                    )
-                )
-
-        # Apply resource deltas
-        for agent_id, delta in effect.resource_deltas.items():
-            agent_state = self.state.get_agent(agent_id)
-            if agent_state:
-                agent_state.update_resources(delta)
+        self._finalizer.apply_governance_effect(effect)
 
     def _compute_epoch_metrics(self) -> EpochMetrics:
         """Compute metrics for the current epoch."""
@@ -1596,132 +1282,37 @@ class Orchestrator:
     async def _run_epoch_async(self) -> EpochMetrics:
         """Run a single epoch asynchronously."""
         epoch_start = self.state.current_epoch
-
-        self._update_adaptive_governance()
-
-        # Handler epoch-start hooks (via registry)
-        for handler in self._handler_registry.all_handlers():
-            try:
-                handler.on_epoch_start(self.state)
-            except Exception:
-                pass
-
-        # Apply epoch-start governance (reputation decay, unfreezes)
-        if self.governance_engine:
-            gov_effect = self.governance_engine.apply_epoch_start(
-                self.state, self.state.current_epoch
-            )
-            self._apply_governance_effect(gov_effect)
+        self._epoch_pre_hooks()
 
         for _step in range(self.config.steps_per_epoch):
             if self.state.is_paused:
                 break
-
             await self._run_step_async()
             self.state.advance_step()
 
-        # Handler epoch-end hooks (via registry)
-        for handler in self._handler_registry.all_handlers():
-            try:
-                handler.on_epoch_end(self.state)
-            except Exception:
-                pass
-
-        # Apply network edge decay
-        if self.network is not None:
-            pruned = self.network.decay_edges()
-            if pruned > 0:
-                self._emit_event(
-                    Event(
-                        event_type=EventType.EPOCH_COMPLETED,
-                        payload={"network_edges_pruned": pruned},
-                        epoch=epoch_start,
-                    )
-                )
-
-        # Compute epoch metrics
-        metrics = self._compute_epoch_metrics()
-
-        # Log epoch completion
-        self._emit_event(
-            Event(
-                event_type=EventType.EPOCH_COMPLETED,
-                payload=metrics.__dict__,
-                epoch=epoch_start,
-            )
-        )
-
-        # Advance to next epoch
-        self.state.advance_epoch()
-
-        return metrics
+        return self._epoch_post_hooks(epoch_start)
 
     async def _run_step_async(self) -> None:
         """Run a single step asynchronously with concurrent LLM calls."""
-        if (
-            self.governance_engine
-            and self.governance_engine.config.adaptive_use_behavioral_features
-        ):
-            self._update_adaptive_governance(include_behavioral=True)
+        self._step_preamble()
 
-        # Step-level governance hooks (e.g., decomposition checkpoints)
-        if self.governance_engine:
-            step_effect = self.governance_engine.apply_step(
-                self.state, self.state.current_step
-            )
-            self._apply_governance_effect(step_effect)
+        agents_to_act = self._get_eligible_agents()
 
-        # Handler per-step hooks (via registry)
-        for handler in self._handler_registry.all_handlers():
-            try:
-                handler.on_step(self.state, self.state.current_step)
-            except Exception:
-                pass
-
-        # Get agent schedule for this step
-        agent_order = self._get_agent_schedule()
-
-        actions_this_step = 0
-
-        # Collect agents that can act this step
-        agents_to_act = []
-        for agent_id in agent_order:
-            if actions_this_step >= self.config.max_actions_per_step:
-                break
-
-            if not self.state.can_agent_act(agent_id):
-                continue
-
-            # Check governance admission control (staking)
-            if self.governance_engine and not self.governance_engine.can_agent_act(
-                agent_id, self.state
-            ):
-                continue
-
-            agents_to_act.append(agent_id)
-            actions_this_step += 1
-
-        # Get actions concurrently for LLM agents
         async def get_agent_action(agent_id: str) -> Tuple[str, Action]:
             agent = self._agents[agent_id]
             observation = self._build_observation(agent_id)
             action = await self._select_action_async(agent, observation)
             return agent_id, action
 
-        # Execute all agent actions concurrently
         tasks = [get_agent_action(agent_id) for agent_id in agents_to_act]
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
-        # Process results
         for result in results:
             if isinstance(result, Exception):
-                # Log error but continue
                 continue
-
             agent_id, action = result  # type: ignore[misc]
             self._execute_action(action)
 
-        # Resolve pending interactions asynchronously
         await self._resolve_pending_interactions_async()
 
     async def _resolve_pending_interactions_async(self) -> None:
@@ -1838,17 +1429,8 @@ class Orchestrator:
     # =========================================================================
 
     def get_adaptive_adversary_reports(self) -> Dict[str, Dict]:
-        """
-        Get strategy reports from all adaptive adversaries.
-
-        Returns:
-            Dictionary mapping agent_id to strategy report
-        """
-        reports = {}
-        for agent_id, agent in self._agents.items():
-            if hasattr(agent, "get_strategy_report"):
-                reports[agent_id] = agent.get_strategy_report()
-        return reports
+        """Get strategy reports from all adaptive adversaries."""
+        return self._redteam.get_adaptive_adversary_reports()
 
     def notify_adversary_detection(
         self,
@@ -1856,104 +1438,12 @@ class Orchestrator:
         penalty: float = 0.0,
         detected: bool = True,
     ) -> None:
-        """
-        Notify an adaptive adversary of detection/penalty.
-
-        This allows adversaries to learn from governance feedback.
-
-        Args:
-            agent_id: The agent that was detected
-            penalty: Penalty amount applied
-            detected: Whether the agent was detected
-        """
-        agent = self._agents.get(agent_id)
-        if agent is not None and hasattr(agent, "update_adversary_outcome"):
-            # Get recent payoff for this agent
-            recent_payoff = 0.0
-            if self.state.completed_interactions:
-                agent_interactions = [
-                    i
-                    for i in self.state.completed_interactions
-                    if i.initiator == agent_id or i.counterparty == agent_id
-                ]
-                if agent_interactions:
-                    last = agent_interactions[-1]
-                    if last.initiator == agent_id:
-                        recent_payoff = last.payoff_initiator or 0.0  # type: ignore[attr-defined]
-                    else:
-                        recent_payoff = last.payoff_counterparty or 0.0  # type: ignore[attr-defined]
-
-            agent.update_adversary_outcome(
-                payoff=recent_payoff,
-                penalty=penalty,
-                detected=detected,
-            )
+        """Notify an adaptive adversary of detection/penalty."""
+        self._redteam.notify_adversary_detection(agent_id, penalty, detected)
 
     def get_evasion_metrics(self) -> Dict:
-        """
-        Get evasion metrics for adversarial agents.
-
-        Returns:
-            Dictionary with evasion statistics
-        """
-        metrics: Dict[str, Any] = {
-            "total_adversaries": 0,
-            "adaptive_adversaries": 0,
-            "avg_detection_rate": 0.0,
-            "avg_heat_level": 0.0,
-            "strategies_used": {},
-            "by_agent": {},
-        }
-
-        detection_rates = []
-        heat_levels = []
-
-        for agent_id, agent in self._agents.items():
-            agent_state = self.state.get_agent(agent_id)
-            if agent_state and agent_state.agent_type == AgentType.ADVERSARIAL:
-                metrics["total_adversaries"] += 1
-
-                if hasattr(agent, "get_strategy_report"):
-                    metrics["adaptive_adversaries"] += 1
-                    report = agent.get_strategy_report()
-                    metrics["by_agent"][agent_id] = report
-
-                    # Aggregate strategy usage
-                    for strategy, stats in report.get("strategy_stats", {}).items():
-                        if strategy not in metrics["strategies_used"]:
-                            metrics["strategies_used"][strategy] = {
-                                "total_attempts": 0,
-                                "total_detections": 0,
-                            }
-                        attempts = stats.get("attempts", 0)
-                        detection_rate = stats.get("detection_rate", 0)
-                        metrics["strategies_used"][strategy]["total_attempts"] += (
-                            attempts
-                        )
-                        metrics["strategies_used"][strategy]["total_detections"] += int(
-                            attempts * detection_rate
-                        )
-
-                    heat_levels.append(report.get("heat_level", 0))
-
-                    # Calculate detection rate from strategy stats
-                    total_attempts = sum(
-                        s.get("attempts", 0)
-                        for s in report.get("strategy_stats", {}).values()
-                    )
-                    total_detected = sum(
-                        s.get("attempts", 0) * s.get("detection_rate", 0)
-                        for s in report.get("strategy_stats", {}).values()
-                    )
-                    if total_attempts > 0:
-                        detection_rates.append(total_detected / total_attempts)
-
-        if detection_rates:
-            metrics["avg_detection_rate"] = sum(detection_rates) / len(detection_rates)
-        if heat_levels:
-            metrics["avg_heat_level"] = sum(heat_levels) / len(heat_levels)
-
-        return metrics
+        """Get evasion metrics for adversarial agents."""
+        return self._redteam.get_evasion_metrics()
 
     # =========================================================================
     # Boundary Delegation (preserves public interface)
