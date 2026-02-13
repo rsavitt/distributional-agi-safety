@@ -21,6 +21,26 @@ Run `/parse_eval` logic on the provided eval output to extract:
 - Stop conditions, timing, token usage
 - Example rollout narrative (if available)
 
+### Phase 1.5: Environment change detection
+
+Before writing analysis — especially when comparing against a previous run — check whether the environment code changed between runs:
+
+1. Extract the run timestamp from the job ID (format: `YYYYMMDD_HHMMSS` after the model name).
+2. Check for a previous run of the same environment. If one exists, extract its timestamp too.
+3. Run `git log --after="<earlier_time>" --before="<later_time>" -- environments/<env_name>/` in the lab directory (`~/dev/my-lab/`).
+4. **If commits exist between runs:**
+   - Run `git diff <before_sha>..<after_sha> -- environments/<env_name>/` to get the exact changes.
+   - Categorize changes: stop conditions, reward weights, scoring logic, bot behavior, system prompt, governance parameters.
+   - The blog post **MUST** attribute performance differences to the code changes, not sampling variance.
+   - Include before/after code snippets from the diff.
+   - Structure the post around "what changed and why it mattered" rather than "what the model did."
+5. **If no commits exist between runs:**
+   - Safe to attribute differences to sampling variance, model behavior, or scenario randomness.
+6. **If only one run exists (no comparison):**
+   - Skip this phase; proceed to Phase 2.
+
+This check prevents publishing incorrect causal narratives (e.g., attributing a 41% improvement to sampling variance when the environment code changed).
+
 ### Phase 2: Read environment source
 
 Locate the environment source code. Search in order:
@@ -79,3 +99,4 @@ Do NOT commit — let the user `/ship` when ready.
 - Include the eval metadata footer with job ID, model, provider, timing.
 - If the eval used multiple models, generate a comparison post instead of a single-model analysis.
 - Do NOT fabricate metrics — if a number isn't in the eval output, don't invent it.
+- When comparing runs, ALWAYS run Phase 1.5 before writing. Never attribute performance differences to sampling variance without first ruling out environment code changes.
