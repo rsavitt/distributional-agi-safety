@@ -75,4 +75,4 @@ The alphabet-sort task is trivial. The dynamics around training it are not. RL o
 
 ---
 
-*Run ID: `coji8ls68809k54riau47aut` on Prime Intellect. Model: Qwen/Qwen3-30B-A3B-Instruct-2507. Environment: primeintellect/alphabet-sort. 100 steps, batch size 256, ~2h12m wall-clock on H100. Full logs on the [Prime dashboard](https://app.primeintellect.ai/dashboard/training/coji8ls68809k54riau47aut).*
+*Trained on Prime Intellect. Model: Qwen/Qwen3-30B-A3B-Instruct-2507. Environment: primeintellect/alphabet-sort. 100 steps, batch size 256, ~2h12m wall-clock on H100.*

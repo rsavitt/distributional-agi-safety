@@ -9,7 +9,7 @@ Log a completed SWARM run to the SQLite runs database.
 Examples:
 - `/log_run runs/20260209-143000_collusion_detection_seed42`
 - `/log_run runs/20260209-143000_baseline_seed42 --notes "Increased rep decay to 0.15"`
-- `/log_run runs/20260209-143000_pi_safety_seed42 --external-run-id "coji8ls68809k54riau47aut"`
+- `/log_run runs/20260209-143000_pi_safety_seed42 --external-run-id "your-external-run-id"`
 
 ## Behavior
 
