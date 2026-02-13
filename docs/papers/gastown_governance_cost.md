@@ -10,7 +10,7 @@ We study the welfare–safety tradeoff in GasTown-style multi-agent workspaces b
 
 ## 1. Introduction
 
-Multi-agent AI workspaces face a fundamental tension: governance mechanisms that prevent adversarial exploitation impose friction on all participants, including honest ones. The GasTown workspace model — with its roles (Mayor, Polecats, Witnesses, Deacons, Rogues), bead-based task economy, and layered governance — provides a naturalistic setting to study this tradeoff.
+Multi-agent AI workspaces face a fundamental tension: governance mechanisms that prevent adversarial exploitation impose friction on all participants, including honest ones. GasTown [1] is a multi-agent orchestration system for AI coding agents that coordinates work through persistent state, git-backed task tracking (Beads), and structured roles — Mayor (coordinator), Polecats (worker agents), Witnesses (reviewers), and Deacons (monitors). Its role hierarchy and bead-based task economy provide a naturalistic setting to study this tradeoff.
 
 Prior SWARM composition studies have established that adversarial agent proportion degrades welfare monotonically and that governance levers reduce toxicity. However, the *net welfare impact* of governance — its benefit through harm reduction minus its cost through friction — has not been measured directly.
 
@@ -226,7 +226,9 @@ Data from this paper: `runs/20260213-103914_gastown_composition_study/`
 
 ## 8. References
 
-- SWARM framework: `swarm/` (v1.3.1)
-- GasTown scenario: `scenarios/gastown_workspace.yaml`
-- GasTown bridge: `swarm/bridges/gastown/`
-- Composition study runner: `examples/gastown_composition_study.py`
+1. S. Yegge, "Welcome to Gas Town," Medium, 2025. https://steve-yegge.medium.com/welcome-to-gas-town-4f25ee16dd04
+2. S. Yegge, *GasTown: Multi-agent orchestration system for Claude Code with persistent work tracking*, GitHub, 2025. https://github.com/steveyegge/gastown
+3. SWARM framework v1.3.1: `swarm/`
+4. GasTown scenario configuration: `scenarios/gastown_workspace.yaml`
+5. GasTown-SWARM bridge: `swarm/bridges/gastown/`
+6. Composition study runner: `examples/gastown_composition_study.py`
