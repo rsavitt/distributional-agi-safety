@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-02-13
+
+### Added
+- **GasTown governance cost study**: 42-run study (7 compositions x 2 regimes x 3 seeds) revealing governance cost paradox — safety levers reduce toxicity at all adversarial levels but impose net-negative welfare at current parameter tuning
+- **Research paper**: "The Cost of Safety: Governance Overhead vs. Toxicity Reduction in GasTown Multi-Agent Workspaces" with 5 figures
+- **Pre-commit private infra scan**: Blocks accidental commit of Prime Intellect dashboard URLs and run IDs in public-facing files
+
+### Changed
+- IMPLEMENTATION_PLAN.md updated to reflect v1.4.0 stats (2922 tests, 55 scenarios, 12 domain handlers, 22 agent modules)
+
 ## [1.4.0] - 2026-02-12
 
 ### Added
