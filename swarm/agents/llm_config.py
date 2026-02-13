@@ -12,6 +12,10 @@ class LLMProvider(Enum):
     OPENAI = "openai"
     OLLAMA = "ollama"
     OPENROUTER = "openrouter"
+    GROQ = "groq"
+    TOGETHER = "together"
+    DEEPSEEK = "deepseek"
+    GOOGLE = "google"
 
 
 class PersonaType(Enum):
@@ -86,6 +90,15 @@ class LLMConfig:
         if self.provider == LLMProvider.OPENROUTER and not self.base_url:
             self.base_url = "https://openrouter.ai/api/v1"
 
+        if self.provider == LLMProvider.GROQ and not self.base_url:
+            self.base_url = "https://api.groq.com/openai/v1"
+
+        if self.provider == LLMProvider.TOGETHER and not self.base_url:
+            self.base_url = "https://api.together.xyz/v1"
+
+        if self.provider == LLMProvider.DEEPSEEK and not self.base_url:
+            self.base_url = "https://api.deepseek.com/v1"
+
         if self.provider not in (LLMProvider.OLLAMA, LLMProvider.OPENROUTER) and not self.api_key:
             # Allow None - will be read from environment
             pass
@@ -133,6 +146,17 @@ class LLMUsageStats:
             "mistralai/mixtral-8x7b-instruct": 0.24,
             "meta-llama/llama-3-70b-instruct": 0.59,
             "google/gemini-pro-1.5": 1.25,
+            # Groq models
+            "llama-3.1-70b-versatile": 0.59,
+            "mixtral-8x7b-32768": 0.24,
+            # Together models
+            "meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo": 0.88,
+            # DeepSeek models
+            "deepseek-chat": 0.14,
+            "deepseek-reasoner": 0.55,
+            # Google Gemini models
+            "gemini-2.0-flash": 0.10,
+            "gemini-1.5-pro": 1.25,
         }
     )
 
@@ -148,6 +172,17 @@ class LLMUsageStats:
             "mistralai/mixtral-8x7b-instruct": 0.24,
             "meta-llama/llama-3-70b-instruct": 0.79,
             "google/gemini-pro-1.5": 5.0,
+            # Groq models
+            "llama-3.1-70b-versatile": 0.79,
+            "mixtral-8x7b-32768": 0.24,
+            # Together models
+            "meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo": 0.88,
+            # DeepSeek models
+            "deepseek-chat": 0.28,
+            "deepseek-reasoner": 2.19,
+            # Google Gemini models
+            "gemini-2.0-flash": 0.40,
+            "gemini-1.5-pro": 5.00,
         }
     )
 
