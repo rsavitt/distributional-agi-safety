@@ -152,6 +152,28 @@ class InteractionFinalizer:
             if initiator_state:
                 initiator_state.record_initiated(accepted=True, p=interaction.p)
                 initiator_state.total_payoff += payoff_init
+
+                # Reputation delta formula:
+                #   rep_delta = (p - 0.5) - c_a
+                #
+                # (p - 0.5)  Quality signal centered at neutral.  Interactions
+                #            with p > 0.5 (beneficial) raise reputation; those
+                #            below lower it.  The 0.5 baseline means a perfectly
+                #            ambiguous interaction produces zero signal.
+                #
+                # -c_a       Governance cost penalty.  Transaction taxes, audit
+                #            fees, and other governance costs levied on the
+                #            initiator reduce the reputation gain.  This couples
+                #            reputation to governance: agents under heavier
+                #            scrutiny must demonstrate higher quality (p >> 0.5)
+                #            to build reputation, while agents with zero
+                #            governance cost earn reputation at face value.
+                #
+                # The result feeds into the payoff equation as:
+                #   pi_a = theta * S_soft - tau - c_a - rho_a * E_soft + w_rep * r_a
+                #
+                # where r_a is cumulative reputation and w_rep weights its
+                # contribution to payoffs (default 1.0).
                 rep_delta = (interaction.p - 0.5) - interaction.c_a
                 self._update_reputation(interaction.initiator, rep_delta)
 

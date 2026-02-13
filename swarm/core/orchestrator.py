@@ -13,6 +13,8 @@ from swarm.boundaries.information_flow import FlowTracker
 from swarm.boundaries.leakage import LeakageDetector, LeakageReport
 from swarm.boundaries.policies import PolicyEngine
 from swarm.core.boundary_handler import BoundaryHandler
+from swarm.core.core_interaction_handler import CoreInteractionHandler
+from swarm.core.feed_handler import FeedHandler
 from swarm.core.handler_registry import HandlerRegistry
 from swarm.core.interaction_finalizer import InteractionFinalizer
 from swarm.core.kernel_handler import KernelOracleConfig, KernelOracleHandler
@@ -29,11 +31,12 @@ from swarm.core.payoff import PayoffConfig, SoftPayoffEngine
 from swarm.core.proxy import ProxyComputer, ProxyObservables
 from swarm.core.redteam_inspector import RedTeamInspector
 from swarm.core.scholar_handler import ScholarConfig, ScholarHandler
+from swarm.core.task_handler import TaskHandler
 from swarm.env.composite_tasks import (
     CompositeTask,
     CompositeTaskPool,
 )
-from swarm.env.feed import Feed, VoteType
+from swarm.env.feed import Feed
 from swarm.env.marketplace import Marketplace, MarketplaceConfig
 from swarm.env.network import AgentNetwork, NetworkConfig
 from swarm.env.state import EnvState, InteractionProposal
@@ -53,7 +56,6 @@ from swarm.models.agent import AgentState, AgentType
 from swarm.models.events import (
     Event,
     EventType,
-    interaction_proposed_event,
 )
 from swarm.models.interaction import InteractionType, SoftInteraction
 
@@ -423,6 +425,27 @@ class Orchestrator:
             on_interaction_complete=self._on_interaction_complete,
             event_bus=self._event_bus,
         )
+
+        # Core action handlers (extracted from _handle_core_action)
+        self._feed_handler = FeedHandler(
+            feed=self.feed,
+            max_content_length=self.config.max_content_length,
+            event_bus=self._event_bus,
+        )
+        self._handler_registry.register(self._feed_handler)
+
+        self._core_interaction_handler = CoreInteractionHandler(
+            finalizer=self._finalizer,
+            network=self.network,
+            event_bus=self._event_bus,
+        )
+        self._handler_registry.register(self._core_interaction_handler)
+
+        self._task_handler = TaskHandler(
+            task_pool=self.task_pool,
+            event_bus=self._event_bus,
+        )
+        self._handler_registry.register(self._task_handler)
 
         # Observation building (extracted component)
         self._obs_builder = ObservationBuilder(
@@ -853,133 +876,19 @@ class Orchestrator:
     def _handle_core_action(
         self, action: Action, rate_limit: Any
     ) -> Optional[bool]:
-        """Handle orchestrator-owned core actions.
+        """Handle NOOP — the only action still owned by the orchestrator.
+
+        All other former "core" actions (POST, REPLY, VOTE,
+        PROPOSE/ACCEPT/REJECT_INTERACTION, CLAIM_TASK, SUBMIT_OUTPUT)
+        are now dispatched via the handler registry through
+        ``FeedHandler``, ``CoreInteractionHandler``, and ``TaskHandler``.
 
         Returns ``None`` if the action is not a core action.
         """
-        agent_id = action.agent_id
-
         if action.action_type == ActionType.NOOP:
             return True
 
-        elif action.action_type == ActionType.POST:
-            if not rate_limit.can_post(self.state.rate_limits):
-                return False
-
-            try:
-                self.feed.create_post(
-                    author_id=agent_id,
-                    content=action.content[: self.config.max_content_length],
-                )
-                rate_limit.record_post()
-                return True
-            except ValueError:
-                return False
-
-        elif action.action_type == ActionType.REPLY:
-            if not rate_limit.can_post(self.state.rate_limits):
-                return False
-
-            try:
-                self.feed.create_post(
-                    author_id=agent_id,
-                    content=action.content[: self.config.max_content_length],
-                    parent_id=action.target_id,
-                )
-                rate_limit.record_post()
-                return True
-            except ValueError:
-                return False
-
-        elif action.action_type == ActionType.VOTE:
-            if not rate_limit.can_vote(self.state.rate_limits):
-                return False
-
-            vote_type = (
-                VoteType.UPVOTE if action.vote_direction > 0 else VoteType.DOWNVOTE
-            )
-            vote = self.feed.vote(action.target_id, agent_id, vote_type)
-            if vote:
-                rate_limit.record_vote()
-                return True
-            return False
-
-        elif action.action_type == ActionType.PROPOSE_INTERACTION:
-            if not rate_limit.can_interact(self.state.rate_limits):
-                return False
-
-            # Validate network constraint
-            if self.network is not None:
-                if not self.network.has_edge(agent_id, action.counterparty_id):
-                    # Cannot interact with non-neighbors
-                    return False
-
-            proposal = InteractionProposal(
-                initiator_id=agent_id,
-                counterparty_id=action.counterparty_id,
-                interaction_type=action.interaction_type.value,
-                content=action.content,
-                metadata=action.metadata,
-            )
-            self.state.add_proposal(proposal)
-            rate_limit.record_interaction()
-
-            # Log proposal event
-            self._emit_event(
-                interaction_proposed_event(
-                    interaction_id=proposal.proposal_id,
-                    initiator_id=agent_id,
-                    counterparty_id=action.counterparty_id,
-                    interaction_type=action.interaction_type.value,
-                    v_hat=0.0,  # Computed later
-                    p=0.5,
-                    epoch=self.state.current_epoch,
-                    step=self.state.current_step,
-                )
-            )
-
-            return True
-
-        elif action.action_type == ActionType.ACCEPT_INTERACTION:
-            accept_proposal: Optional[InteractionProposal] = self.state.remove_proposal(
-                action.target_id
-            )
-            if accept_proposal:
-                self._complete_interaction(accept_proposal, accepted=True)
-                return True
-            return False
-
-        elif action.action_type == ActionType.REJECT_INTERACTION:
-            proposal_rej: Optional[InteractionProposal] = self.state.remove_proposal(
-                action.target_id
-            )
-            if proposal_rej:
-                self._complete_interaction(proposal_rej, accepted=False)
-                return True
-            return False
-
-        elif action.action_type == ActionType.CLAIM_TASK:
-            agent_state = self.state.get_agent(agent_id)
-            if not agent_state:
-                return False
-
-            success = self.task_pool.claim_task(
-                task_id=action.target_id,
-                agent_id=agent_id,
-                agent_reputation=agent_state.reputation,
-            )
-            if success:
-                rate_limit.record_task_claim()
-            return success
-
-        elif action.action_type == ActionType.SUBMIT_OUTPUT:
-            task = self.task_pool.get_task(action.target_id)
-            if task and task.claimed_by == agent_id:
-                task.submit_output(agent_id, action.content)
-                return True
-            return False
-
-        return None  # Not a core action
+        return None  # Dispatched via handler registry
 
     def _resolve_pending_interactions(self) -> None:
         """Resolve any remaining pending interactions."""
