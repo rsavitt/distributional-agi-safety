@@ -28,6 +28,13 @@ Academic foundations and related publications.
 
     Addressing feedback loops in recursive agent research
 
+-   :material-briefcase-search: **[Case Study: AI PR Rejection](mjrathbun-website-case-study.md)**
+
+    ---
+
+    Agentic OSS PR rejection analysis with governance-aware mitigation patterns
+
+
 </div>
 
 ## Core Research Questions
