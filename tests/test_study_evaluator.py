@@ -90,6 +90,30 @@ class TestStudyEvaluatorInit:
         assert evaluator.council is not None
         assert evaluator.council.config is evaluator.config
 
+    def test_auto_builds_query_fns_from_config(self):
+        """Default constructor auto-builds LLMAgent query functions."""
+        evaluator = StudyEvaluator()
+        assert len(evaluator.council.query_fns) == 3
+        assert set(evaluator.council.query_fns.keys()) == {
+            "mechanism_designer", "statistician", "red_teamer",
+        }
+
+    def test_auto_builds_member_agents(self):
+        """Default constructor creates LLMAgent instances for each member."""
+        evaluator = StudyEvaluator()
+        assert len(evaluator._member_agents) == 3
+        for member_id, agent in evaluator._member_agents.items():
+            assert agent.agent_id == f"evaluator_{member_id}"
+
+    def test_explicit_query_fns_skip_auto_build(self):
+        """Passing query_fns explicitly skips LLMAgent creation."""
+        async def mock_query(sys: str, usr: str) -> str:
+            return "mock"
+
+        evaluator = StudyEvaluator(query_fns={"m1": mock_query})
+        assert len(evaluator.council.query_fns) == 1
+        assert len(evaluator._member_agents) == 0
+
 
 # ── parse_synthesis_sections ────────────────────────────────────────
 

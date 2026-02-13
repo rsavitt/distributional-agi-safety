@@ -309,6 +309,28 @@ class StudyEvaluator:
     Wraps the Council protocol with expert personas (mechanism designer,
     statistician, red-teamer) to provide structured feedback on simulation
     study results.
+
+    Usage with real LLM calls::
+
+        # Requires: pip install -e ".[runtime]"
+        # Requires: ANTHROPIC_API_KEY (or OPENAI_API_KEY, or Ollama running)
+
+        from swarm.council.study_evaluator import StudyEvaluator
+
+        evaluator = StudyEvaluator()  # auto-builds LLM query functions
+        evaluation = evaluator.evaluate_sweep("runs/my_sweep")
+
+    Custom providers::
+
+        from swarm.agents.llm_config import LLMConfig, LLMProvider
+        from swarm.council.study_evaluator import StudyEvaluator, default_evaluator_config
+
+        config = default_evaluator_config(provider_configs={
+            "mechanism_designer": LLMConfig(provider=LLMProvider.OPENAI, model="gpt-4o"),
+            "statistician": LLMConfig(provider=LLMProvider.ANTHROPIC, model="claude-sonnet-4-20250514"),
+            "red_teamer": LLMConfig(provider=LLMProvider.OLLAMA, model="llama3"),
+        })
+        evaluator = StudyEvaluator(config=config)
     """
 
     def __init__(
@@ -320,12 +342,53 @@ class StudyEvaluator:
 
         Args:
             config: Council configuration. Defaults to 3-member evaluator council.
-            query_fns: Dict of member_id -> async query function. If None, must be
-                provided before calling evaluate methods (useful for testing).
+            query_fns: Dict of member_id -> async query function. If provided,
+                used directly. If None, automatically builds query functions
+                from each member's LLMConfig using LLMAgent.
         """
         self.config = config or default_evaluator_config()
-        self._query_fns = query_fns or {}
+        self._member_agents: Dict[str, Any] = {}
+
+        if query_fns is not None:
+            self._query_fns = query_fns
+        else:
+            self._query_fns = self._build_query_fns()
+
         self.council = Council(config=self.config, query_fns=self._query_fns)
+
+    def _build_query_fns(self) -> Dict[str, QueryFn]:
+        """Build async query functions from council member LLMConfigs.
+
+        Creates an LLMAgent for each member and wraps its _call_llm_async
+        method as a QueryFn closure, following the pattern in council_agent.py.
+        """
+        from swarm.agents.llm_agent import LLMAgent
+
+        query_fns: Dict[str, QueryFn] = {}
+
+        for member_cfg in self.config.members:
+            # Inject the evaluator persona as the system prompt
+            llm_config = member_cfg.llm_config
+            persona_prompt = PERSONAS.get(member_cfg.member_id)
+            if persona_prompt and not llm_config.system_prompt:
+                llm_config.system_prompt = persona_prompt
+
+            agent = LLMAgent(
+                agent_id=f"evaluator_{member_cfg.member_id}",
+                llm_config=llm_config,
+                name=f"evaluator_{member_cfg.member_id}",
+            )
+            self._member_agents[member_cfg.member_id] = agent
+
+            def _make_query_fn(a: LLMAgent) -> QueryFn:
+                async def _query(sys: str, usr: str) -> str:
+                    text, _, _ = await a._call_llm_async(sys, usr)
+                    return str(text)
+                return _query
+
+            query_fns[member_cfg.member_id] = _make_query_fn(agent)
+
+        return query_fns
 
     def _deliberate_sync(self, system_prompt: str, user_prompt: str) -> CouncilResult:
         """Run council deliberation synchronously.

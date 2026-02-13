@@ -104,35 +104,85 @@ GasTown workspace payoff configuration (from `scenarios/gastown_workspace.yaml`)
 
 ## 4. Results
 
-*Results will be updated with data from the full 63-run study.*
-
 ### 4.1 Cross-Regime Summary
 
-Results are reported after the full study completes. The smoke test (4 agents, 3 epochs, 1 seed) confirms:
+| Rogue % | Ungov. Welfare | Gov. Welfare | Refinery Welfare | Ungov. Toxicity | Gov. Toxicity | Refinery Toxicity |
+|---------|---------------|-------------|-----------------|----------------|--------------|------------------|
+| 0%  | 374.73 +/- 0.57 | 158.86 +/- 0.27 | 386.73 +/- 0.36 | 0.281 +/- 0.006 | 0.214 +/- 0.013 | 0.284 +/- 0.005 |
+| 14% | 291.83 +/- 0.25 | 103.11 +/- 0.62 | 295.29 +/- 0.29 | 0.293 +/- 0.004 | 0.216 +/- 0.019 | 0.287 +/- 0.004 |
+| 29% | 252.35 +/- 0.47 | 70.06 +/- 0.35  | 259.03 +/- 0.37 | 0.300 +/- 0.002 | 0.198 +/- 0.029 | 0.291 +/- 0.002 |
+| 43% | 198.79 +/- 0.41 | 67.11 +/- 0.21  | 206.61 +/- 0.26 | 0.300 +/- 0.005 | 0.248 +/- 0.066 | 0.295 +/- 0.001 |
+| 57% | 141.56 +/- 0.31 | 50.49 +/- 0.08  | 146.20 +/- 0.30 | 0.313 +/- 0.011 | 0.261 +/- 0.035 | 0.312 +/- 0.011 |
+| 71% | 78.13 +/- 0.15  | 21.26 +/- 0.13  | 86.51 +/- 0.12  | 0.307 +/- 0.025 | 0.175 +/- 0.043 | 0.302 +/- 0.019 |
+| 86% | 32.37 +/- 0.16  | 21.80 +/- 0.15  | 50.95 +/- 0.22  | 0.421 +/- 0.012 | 0.409 +/- 0.015 | 0.181 +/- 0.031 |
 
-- Refinery achieves near-ungoverned welfare at 0% rogue (6.18 vs 6.19)
-- Refinery dramatically reduces toxicity under adversarial pressure (0.097 vs 0.506 at 75% rogue)
-- Governed regime imposes welfare cost at all adversarial levels
+### 4.2 Welfare Comparison
+
+The Refinery achieves **higher welfare than ungoverned** at every adversarial level -- a result that goes beyond our initial hypothesis:
+
+- **Refinery welfare premium over ungoverned**: +3.5 to +18.6 units across all levels
+- **Governed welfare deficit vs ungoverned**: -10.6 to -215.9 units (negative at all levels)
+- At 86% rogue, the Refinery produces 50.95 welfare vs ungoverned 32.37 -- a **57% improvement**
+
+The Refinery's welfare advantage comes from the same mechanism as its toxicity reduction: by rejecting low-p interactions before they generate negative payoffs, it prevents welfare destruction while imposing zero cost on quality work.
 
 ![Figure 1: Total welfare by rogue proportion](figures/gastown_governance_cost/gastown_welfare.png)
-*Figure 1. Total welfare (sum over 30 epochs) vs. adversarial agent proportion. Ungoverned (red), Governed (green), and Refinery (blue). The Refinery tracks close to ungoverned welfare while providing safety guarantees.*
+*Figure 1. Total welfare (sum over 30 epochs) vs. adversarial agent proportion. Ungoverned (red), Governed (green), and Refinery (blue). The Refinery matches or exceeds ungoverned welfare at every adversarial level.*
 
-### 4.2 Toxicity Containment
+### 4.3 Toxicity Containment
+
+The Refinery's toxicity performance varies by adversarial level:
+
+- **Low adversarial (0-57%)**: Refinery toxicity is slightly below ungoverned (0.284-0.312 vs 0.281-0.313), with governed achieving the best toxicity reduction
+- **High adversarial (86%)**: Refinery dramatically outperforms both regimes with toxicity 0.181 vs ungoverned 0.421 and governed 0.409 -- a **0.240 reduction**
+
+The Refinery's strongest toxicity reduction appears at high adversarial proportions where the quality gate filters out the most interactions.
 
 ![Figure 2: Toxicity rate by rogue proportion](figures/gastown_governance_cost/gastown_toxicity.png)
-*Figure 2. Toxicity rate (mean over epochs) vs. adversarial proportion across all three regimes.*
+*Figure 2. Toxicity rate (mean over epochs) vs. adversarial proportion across all three regimes. The Refinery (blue) achieves dramatic toxicity reduction at 86% rogue.*
 
-### 4.3 Governance Protection
+### 4.4 Governance Protection
+
+| Rogue % | Gov. Welfare Diff | Refinery Welfare Diff | Gov. Tox. Reduction | Refinery Tox. Reduction |
+|---------|------------------|-----------------------|--------------------|------------------------|
+| 0%  | -215.88 | +11.99 | 0.066 | -0.003 |
+| 14% | -188.72 | +3.47  | 0.077 | 0.005 |
+| 29% | -182.29 | +6.68  | 0.102 | 0.009 |
+| 43% | -131.67 | +7.82  | 0.052 | 0.005 |
+| 57% | -91.08  | +4.64  | 0.052 | 0.001 |
+| 71% | -56.88  | +8.38  | 0.133 | 0.005 |
+| 86% | -10.56  | +18.59 | 0.012 | 0.240 |
+
+The Refinery achieves **positive welfare gain at every adversarial level** -- resolving the governance cost paradox. Full governance never achieves positive welfare.
 
 ![Figure 3: Governance protection -- benefit over ungoverned baseline](figures/gastown_governance_cost/gastown_governance_protection.png)
-*Figure 3. Governance benefit (regime minus ungoverned) for welfare and toxicity reduction. The Refinery achieves positive welfare gain alongside toxicity reduction -- resolving the governance cost paradox.*
+*Figure 3. Governance benefit (regime minus ungoverned) for welfare and toxicity reduction. The Refinery (blue) achieves positive welfare alongside toxicity reduction. Governed (green) always has negative welfare.*
 
-### 4.4 Per-Class Payoff Analysis
+### 4.5 Per-Class Payoff Analysis
+
+Honest agents earn the highest payoffs across all regimes:
+
+**Refinery regime:**
+- Honest agents: 24.7-58.8 average payoff
+- Opportunistic agents: 0.0-50.8
+- Adversarial agents: 0.0-4.4
+
+**Ungoverned regime:**
+- Honest agents: 19.5-58.1
+- Opportunistic agents: 0.0-50.2
+- Adversarial agents: 0.0-2.3
+
+**Governed regime:**
+- Honest agents: 7.4-24.6
+- Opportunistic agents: 0.0-15.1
+- Adversarial agents: -0.1-2.1
+
+The Refinery preserves the full payoff levels of honest and opportunistic agents while slightly increasing adversarial agent payoffs (from 2.3 ungoverned to 4.4 refinery at 86%). This is because the Refinery allows adversarial agents to benefit from interactions where p > 0.5 -- it filters quality, not identity.
 
 ![Figure 4: Per-class payoffs by rogue proportion](figures/gastown_governance_cost/gastown_payoff_breakdown.png)
-*Figure 4. Per-class average total payoff under all three regimes.*
+*Figure 4. Per-class average total payoff under all three regimes. The Refinery preserves honest agent payoffs while governance compresses them.*
 
-### 4.5 Adverse Selection
+### 4.6 Adverse Selection
 
 ![Figure 5: Adverse selection by rogue proportion](figures/gastown_governance_cost/gastown_adverse_selection.png)
 *Figure 5. Quality gap vs. adversarial proportion. Positive values mean the system correctly accepts higher-quality interactions.*

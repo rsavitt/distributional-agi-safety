@@ -12,6 +12,37 @@ Examples:
 - `/council_review runs/study_a runs/study_b --type cross_study`
 - `/council_review runs/latest_sweep --provider ollama`
 
+## Prerequisites
+
+The evaluator automatically creates LLM agents from each council member's config. You need **at least one** LLM provider available:
+
+| Provider | Setup | Notes |
+|---|---|---|
+| **Anthropic** (default) | `export ANTHROPIC_API_KEY=sk-ant-...` | Uses `claude-sonnet-4-20250514` |
+| **OpenAI** | `export OPENAI_API_KEY=sk-...` | Uses `gpt-4o` |
+| **Ollama** (local, free) | `brew install ollama && ollama serve` | Requires a pulled model |
+
+To use a non-default provider, pass `--provider`:
+
+```
+/council_review runs/my_sweep --provider ollama
+```
+
+Or mix providers per member:
+
+```python
+from swarm.agents.llm_config import LLMConfig, LLMProvider
+from swarm.council.study_evaluator import StudyEvaluator, default_evaluator_config
+
+config = default_evaluator_config(provider_configs={
+    "mechanism_designer": LLMConfig(provider=LLMProvider.ANTHROPIC, model="claude-sonnet-4-20250514"),
+    "statistician": LLMConfig(provider=LLMProvider.OPENAI, model="gpt-4o"),
+    "red_teamer": LLMConfig(provider=LLMProvider.OLLAMA, model="llama3"),
+})
+evaluator = StudyEvaluator(config=config)
+evaluation = evaluator.evaluate_sweep("runs/my_sweep")
+```
+
 ## Arguments
 
 - `run_dir`: Path to the run directory (or scenario YAML if `--type scenario`, or multiple run dirs if `--type cross_study`).
@@ -23,7 +54,7 @@ Examples:
 
 ## Behavior
 
-1. **Build evaluator**: Create a `StudyEvaluator` with the 3-member council (mechanism designer as chairman, statistician, red-teamer).
+1. **Build evaluator**: Create a `StudyEvaluator` with the 3-member council (mechanism designer as chairman, statistician, red-teamer). Each member gets an `LLMAgent` instance wired as an async query function.
 
 2. **Run evaluation**: Call the appropriate method based on `--type`:
    - `sweep` → `evaluator.evaluate_sweep(run_dir)`
@@ -60,6 +91,7 @@ from swarm.council.study_evaluator import StudyEvaluator, save_evaluation
 # Parse arguments from $ARGUMENTS
 # Default type is "sweep", default provider is "anthropic"
 
+# StudyEvaluator() auto-builds LLMAgent query functions from config
 evaluator = StudyEvaluator()
 
 # Run the appropriate evaluation
