@@ -19,4 +19,4 @@ def test_illusion_delta_minimal_example_runs() -> None:
 
     assert result.returncode == 0, result.stderr
     assert "illusion_delta=" in result.stdout
-    assert "seed,avg_toxicity,perceived_coherence_proxy" in result.stdout
+    assert "seed,accepted_interactions" in result.stdout
