@@ -132,6 +132,14 @@ class LLMAgent(BaseAgent):
             return os.environ.get("OPENAI_API_KEY")
         elif self.llm_config.provider == LLMProvider.OPENROUTER:
             return os.environ.get("OPENROUTER_API_KEY")
+        elif self.llm_config.provider == LLMProvider.GROQ:
+            return os.environ.get("GROQ_API_KEY")
+        elif self.llm_config.provider == LLMProvider.TOGETHER:
+            return os.environ.get("TOGETHER_API_KEY")
+        elif self.llm_config.provider == LLMProvider.DEEPSEEK:
+            return os.environ.get("DEEPSEEK_API_KEY")
+        elif self.llm_config.provider == LLMProvider.GOOGLE:
+            return os.environ.get("GOOGLE_API_KEY")
         return None
 
     def _get_anthropic_client(self):
@@ -199,6 +207,16 @@ class LLMAgent(BaseAgent):
                     return await self._call_openrouter_async(system_prompt, user_prompt)
                 elif self.llm_config.provider == LLMProvider.OLLAMA:
                     return await self._call_ollama_async(system_prompt, user_prompt)
+                elif self.llm_config.provider in (
+                    LLMProvider.GROQ,
+                    LLMProvider.TOGETHER,
+                    LLMProvider.DEEPSEEK,
+                ):
+                    return await self._call_openai_compatible_async(
+                        system_prompt, user_prompt
+                    )
+                elif self.llm_config.provider == LLMProvider.GOOGLE:
+                    return await self._call_google_async(system_prompt, user_prompt)
                 else:
                     raise ValueError(f"Unknown provider: {self.llm_config.provider}")
 
@@ -291,12 +309,13 @@ class LLMAgent(BaseAgent):
 
         return text, input_tokens, output_tokens
 
-    async def _call_openrouter_async(
+    async def _call_openai_compatible_async(
         self,
         system_prompt: str,
         user_prompt: str,
+        extra_headers: Optional[Dict[str, str]] = None,
     ) -> tuple[str, int, int]:
-        """Call OpenRouter API (OpenAI-compatible)."""
+        """Call an OpenAI-compatible API (OpenRouter, Groq, Together, DeepSeek)."""
         try:
             import openai
         except ImportError as err:
@@ -305,15 +324,11 @@ class LLMAgent(BaseAgent):
                 "Install with: python -m pip install openai"
             ) from err
 
-        base_url = self.llm_config.base_url or "https://openrouter.ai/api/v1"
         client = openai.OpenAI(
             api_key=self._api_key,
-            base_url=base_url,
+            base_url=self.llm_config.base_url,
             timeout=self.llm_config.timeout,
-            default_headers={
-                "HTTP-Referer": "https://github.com/swarm-ai-safety",
-                "X-Title": "SWARM Council",
-            },
+            default_headers=extra_headers or {},
         )
 
         loop = asyncio.get_event_loop()
@@ -333,6 +348,68 @@ class LLMAgent(BaseAgent):
         text = response.choices[0].message.content or ""
         input_tokens = response.usage.prompt_tokens if response.usage else 0
         output_tokens = response.usage.completion_tokens if response.usage else 0
+
+        if self.llm_config.cost_tracking:
+            self.usage_stats.record_usage(
+                model=self.llm_config.model,
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+            )
+
+        return text, input_tokens, output_tokens
+
+    async def _call_openrouter_async(
+        self,
+        system_prompt: str,
+        user_prompt: str,
+    ) -> tuple[str, int, int]:
+        """Call OpenRouter API (OpenAI-compatible with custom headers)."""
+        return await self._call_openai_compatible_async(
+            system_prompt,
+            user_prompt,
+            extra_headers={
+                "HTTP-Referer": "https://github.com/swarm-ai-safety",
+                "X-Title": "SWARM Council",
+            },
+        )
+
+    async def _call_google_async(
+        self,
+        system_prompt: str,
+        user_prompt: str,
+    ) -> tuple[str, int, int]:
+        """Call Google Gemini API via the google-genai SDK."""
+        try:
+            from google import genai
+        except ImportError as err:
+            raise ImportError(
+                "google-genai package not installed. "
+                "Install with: python -m pip install google-genai"
+            ) from err
+
+        client = genai.Client(api_key=self._api_key)
+
+        loop = asyncio.get_event_loop()
+        response = await loop.run_in_executor(
+            None,
+            lambda: client.models.generate_content(
+                model=self.llm_config.model,
+                contents=user_prompt,
+                config={
+                    "system_instruction": system_prompt,
+                    "max_output_tokens": self.llm_config.max_tokens,
+                    "temperature": self.llm_config.temperature,
+                },
+            ),
+        )
+
+        text = response.text or ""
+        input_tokens = getattr(
+            getattr(response, "usage_metadata", None), "prompt_token_count", 0
+        ) or 0
+        output_tokens = getattr(
+            getattr(response, "usage_metadata", None), "candidates_token_count", 0
+        ) or 0
 
         if self.llm_config.cost_tracking:
             self.usage_stats.record_usage(
