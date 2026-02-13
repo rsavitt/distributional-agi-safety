@@ -28,6 +28,13 @@ Academic foundations and related publications.
 
     Addressing feedback loops in recursive agent research
 
+-   :material-briefcase-search: **[Website Case Study: mjrathbun](mjrathbun-website-case-study.md)**
+
+    ---
+
+    Practical rubric and improvement workflow for a personal website case study
+
+
 </div>
 
 ## Core Research Questions
