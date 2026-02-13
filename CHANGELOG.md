@@ -6,22 +6,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-02-12
+
 ### Added
-- **Handler extraction**: Extract 8 core actions from Orchestrator into FeedHandler, CoreInteractionHandler, and TaskHandler
-- **Decision theory studies**: Full studies comparing TDT vs FDT vs UDT at population scales up to 21 agents
-- **Prime Intellect bridge**: `external_run_id` column for cross-platform run tracking
-- **Event bus**: TypedDict schemas for event infrastructure
-- **GasTown bridge**: Branch-based observation support
+- **Handler extraction**: 8 core actions extracted from Orchestrator into FeedHandler (POST/REPLY/VOTE), CoreInteractionHandler (PROPOSE/ACCEPT/REJECT), and TaskHandler (CLAIM/SUBMIT)
+- **Decision theory studies**: Full studies comparing TDT vs FDT vs UDT at population scales up to 21 agents, including UDT precommitment advantage analysis
+- **Prime Intellect bridge**: `external_run_id` column in `scenario_runs` for cross-platform run tracking
+- **Event bus**: TypedDict schemas for event payloads and metadata, generalizing the WorktreeEvent pattern to the core framework
+- **GasTown bridge**: Branch-based observation support for multi-branch governance
+- **CHANGELOG auto-update**: `/release` command now automatically converts `[Unreleased]` to versioned entry with human-quality descriptions
+- **Comprehensive CHANGELOG**: Retroactive entries covering all releases from v0.1.0 through v1.3.1
 
 ### Changed
-- `SoftInteraction.to_dict()` now delegates to Pydantic `model_dump(mode='json')`
-- `SoftInteraction.from_dict()` now delegates to Pydantic `model_validate()`
-- Documented reputation delta formula `(p - 0.5) - c_a` in InteractionFinalizer
+- `SoftInteraction.to_dict()` now delegates to Pydantic `model_dump(mode='json')` instead of manual field enumeration
+- `SoftInteraction.from_dict()` now delegates to Pydantic `model_validate()` instead of manual construction
+- Documented reputation delta formula `(p - 0.5) - c_a` in InteractionFinalizer with full derivation and payoff coupling explanation
+- `_handle_core_action` reduced from 130 lines to 5 (NOOP only); all other actions dispatched via handler registry
 
 ### Fixed
 - 87 pre-existing mypy errors across tests/ and scripts/
 - CAPTCHA solver dash deobfuscation and multiply detection
-- Normalize submission author to SWARM Research Collective
+- Submission author normalization to SWARM Research Collective
 
 ## [1.3.1] - 2026-02-11
 
