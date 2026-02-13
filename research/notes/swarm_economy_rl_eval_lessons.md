@@ -5,13 +5,13 @@
 - Scenario: SWARM Economy Verifiers environment (`swarm-ai-research/swarm-economy`)
 - Seed(s): 42 (dataset generation), per-scenario seeds via `randint(0, 2^31)`
 - Config changes: See "Changes Applied" section below
-- Commit / branch: `rsavitt/my-lab@0da4c7e` (env changes), `rsavitt/my-lab@8f747b7` (lessons update)
+- Commit / branch: `rsavitt/my-lab@0da4c7e` (env changes), `rsavitt/my-lab@8f747b7` (lessons update), `rsavitt/my-lab@1cd7dc3` (RL training config)
 
 ## Context
 
 We built a [Verifiers](https://github.com/PrimeIntellect-ai/verifiers)-based RL training environment that implements the core SWARM framework: soft probabilistic labels, programmatic bot agents (honest, opportunistic, deceptive), governance mechanisms (taxes, audits, circuit breakers, reputation decay), and a marketplace with tasks and trades. An LLM agent interacts with the economy through tool calls over 25 steps (5 epochs x 5 steps).
 
-This note documents findings from baseline evaluation with `gpt-5-nano` (80 rollouts, medium difficulty) and follow-up evals (40 rollouts each on easy and medium difficulty) after applying fixes.
+This note documents findings from baseline evaluation with `gpt-5-nano` (80 rollouts, medium difficulty), follow-up evals (40 rollouts each on easy and medium difficulty) after applying fixes, and initial RL training attempts with `Qwen/Qwen3-30B-A3B-Thinking-2507`.
 
 ## Summary
 - Goal: Identify environment design issues before RL training
@@ -112,14 +112,50 @@ Easy difficulty (more honest bots, fewer adversarial bots, lower taxes) establis
 - **More rollouts reach simulation_complete on medium** (45% vs 25% on easy) — the agent uses turns more efficiently when facing competition, likely because bot actions create more actionable state (pending proposals, contested tasks) that prompts tool use.
 - **Judge scoring adds a credible quality signal** but hasn't been tested at scale. The heuristic fallback ensures training can proceed without API keys.
 
-## Remaining Issues for RL Training
+## Early RL Training Results
 
-1. **Claim-task waste** (10.2 claims / 5.8 submissions on medium) — clearest optimization target
-2. **Reply tool unused** (0.05 avg on medium) — incentive structure favors posts over replies
-3. **Trade engagement low** (1.9 proposals / 0.5 acceptances on medium) — high variance, low EV
-4. **Judge scoring unvalidated at scale** — may distort reward distribution
+### Config
+- Model: `Qwen/Qwen3-30B-A3B-Thinking-2507` (LoRA)
+- Batch size: 32 (reduced from 64 due to infrastructure issues)
+- Max tokens: 2048
+- Learning rate: 5e-5
+- Difficulty: easy
+- Platform: Prime Intellect (H100 cluster, 4 inference servers)
+
+### Steps 0-1 (pre-weight-update, run `tlzhomfn0wv409o0by31nkg5`)
+
+| Metric | Step 0 | Step 1 |
+|---|---|---|
+| reward (composite) | 1.232 | 1.245 |
+| payoff_reward (w=1.0) | 0.918 | 0.930 |
+| reputation_reward (w=0.6) | 0.522 | 0.525 |
+| survival_metric | 1.000 | 1.000 |
+| num_turns | 24.9 | 25.0 |
+| truncation rate | 53.1% | 53.1% |
+| error rate | 3.1% | 0.0% |
+| submit_work_calls | 4.9 | 4.9 |
+| claim_task_calls | 9.7 | 8.8 |
+
+### Observations
+
+- **Baseline reward is already high.** The thinking model (`Qwen3-30B-A3B-Thinking`) starts with reward 1.232, comparable to `gpt-5-nano` post-fix (1.205). Full turn utilization (25.0) and zero errors by step 1.
+- **Claim/submit ratio tightening.** Claims dropped from 9.7 to 8.8 between steps 0-1 with constant submits (4.9), suggesting even pre-update sampling is discovering more efficient task strategies.
+- **Truncation rate is concerning.** 53% of rollouts hit the 2048 token limit. The thinking model's chain-of-thought reasoning is being cut off, likely degrading action quality. A higher token budget (4096+) would help but increases compute cost.
+- **Training hangs on first post-weight-update step.** Across 5 independent runs with varying batch sizes (32, 64) and token limits (2048, 4096), the orchestrator consistently hangs on the first step after a LoRA weight update. Steps before the update complete normally. Filed as [PrimeIntellect-ai/prime#381](https://github.com/PrimeIntellect-ai/prime/issues/381). This is a platform-side issue, not an environment bug.
+
+**SWARM relevance:** The pre-training baseline already shows meaningful behavioral differentiation: the agent is more cautious on medium difficulty (lower proposal acceptance) and adapts claim strategy across steps. RL training should amplify these signals — once the platform issue is resolved.
+
+## Remaining Issues
+
+1. **RL training blocked by platform bug** — LoRA checkpoint distribution hangs on first weight update ([PrimeIntellect-ai/prime#381](https://github.com/PrimeIntellect-ai/prime/issues/381))
+2. **Claim-task waste** (9.7 claims / 4.9 submissions) — clearest optimization target once training resumes
+3. **Reply tool unused** (0.05 avg on medium) — incentive structure favors posts over replies
+4. **Trade engagement low** (1.9 proposals / 0.5 acceptances on medium) — high variance, low EV
+5. **Judge scoring unvalidated at scale** — may distort reward distribution
+6. **Truncation at 53%** — thinking model needs higher token budget, but increases cost
 
 ## Next Iteration
-- Parameter changes: Curriculum from easy → medium → hard difficulty during RL training
+- **Immediate:** Resolve LoRA checkpoint hang (waiting on Prime Intellect support)
+- Parameter changes: Increase max_tokens to 4096 once training unblocked; curriculum from easy → medium → hard difficulty
 - Additional scenarios: Hard difficulty eval to stress-test with more deceptive bots; judge-enabled run to validate LLM scoring
 - Follow-up analyses: Monitor interaction_quality_metric during RL training for reward hacking signals; track claim/submit ratio convergence; compare agent trade acceptance rates across difficulties to measure deceptive bot detection
