@@ -79,6 +79,9 @@ sandboxes/
 .worktrees/
 *.db
 
+# Allow documentation images
+!docs/**/*.png
+
 # Allow secrets scanner tooling (matched by *_secret* above)
 !.claude/hooks/scan_secrets.sh
 !.claude/hooks/post_write_secrets_check.sh
