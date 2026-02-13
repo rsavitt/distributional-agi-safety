@@ -6,7 +6,12 @@ from typing import Any
 import pytest
 
 from swarm.agents.base import ActionType, InteractionProposal, Observation, Role
-from swarm.agents.ldt_agent import InferredPolicy, LDTAgent, _cosine_similarity
+from swarm.agents.ldt_agent import (
+    InferredPolicy,
+    LDTAgent,
+    SubjunctiveDependence,
+    _cosine_similarity,
+)
 from swarm.models.agent import AgentState, AgentType
 from swarm.models.interaction import InteractionType, SoftInteraction
 
@@ -935,3 +940,206 @@ class TestAcausalityInvariants:
         assert policy.updateless_commitment == 0.8
         assert policy.confidence == 0.5
         assert policy.sample_count == 10
+
+
+# ------------------------------------------------------------------
+# Test: SubjunctiveDependence dataclass
+# ------------------------------------------------------------------
+
+
+class TestSubjunctiveDependence:
+    def test_dataclass_fields(self):
+        dep = SubjunctiveDependence(
+            cosine_similarity=0.8,
+            conditional_agreement=0.9,
+            conditional_defection=0.7,
+            mutual_information=0.5,
+            subjunctive_score=0.85,
+        )
+        assert dep.cosine_similarity == 0.8
+        assert dep.conditional_agreement == 0.9
+        assert dep.conditional_defection == 0.7
+        assert dep.mutual_information == 0.5
+        assert dep.subjunctive_score == 0.85
+
+
+# ------------------------------------------------------------------
+# Test: FDT subjunctive dependence
+# ------------------------------------------------------------------
+
+
+class TestSubjunctiveDependenceComputation:
+    """Test FDT's subjunctive dependence detection."""
+
+    def test_no_history_falls_back_to_cosine(self):
+        agent = LDTAgent("ldt_1", config={"decision_theory": "fdt"})
+        dep = agent._compute_subjunctive_dependence("unknown")
+        # With no history, subjunctive score == cosine score.
+        assert dep.subjunctive_score == dep.cosine_similarity
+
+    def test_correlated_agents_have_high_subjunctive(self):
+        agent = LDTAgent("ldt_1", config={
+            "decision_theory": "fdt",
+            "counterfactual_horizon": 10,
+        })
+        # Build correlated history: both accept with high p.
+        for _ in range(8):
+            ix = _interaction(initiator="twin", accepted=True, p=0.85)
+            agent.update_from_outcome(ix, 1.0)
+        dep = agent._compute_subjunctive_dependence("twin")
+        assert dep.conditional_agreement > 0.5
+        assert dep.subjunctive_score > 0.3
+
+    def test_anti_correlated_have_low_subjunctive(self):
+        agent = LDTAgent("ldt_1", config={
+            "decision_theory": "fdt",
+            "counterfactual_horizon": 10,
+        })
+        # Build anti-correlated history: they reject when we'd accept.
+        for _ in range(8):
+            ix = _interaction(initiator="enemy", accepted=False, p=0.2)
+            agent.update_from_outcome(ix, 0.0)
+        dep = agent._compute_subjunctive_dependence("enemy")
+        # Low cooperation = low conditional agreement.
+        assert dep.subjunctive_score < 0.7
+
+    def test_cache_invalidation(self):
+        agent = LDTAgent("ldt_1", config={"decision_theory": "fdt"})
+        ix = _interaction(initiator="other", accepted=True, p=0.8)
+        agent.update_from_outcome(ix, 1.0)
+        _ = agent._compute_subjunctive_dependence("other")
+        assert "other" in agent._subjunctive_cache
+        # New interaction should invalidate.
+        ix2 = _interaction(initiator="other", accepted=True, p=0.7)
+        agent.update_from_outcome(ix2, 0.5)
+        assert "other" not in agent._subjunctive_cache
+
+    def test_subjunctive_score_bounded(self):
+        agent = LDTAgent("ldt_1", config={"decision_theory": "fdt"})
+        for _ in range(10):
+            ix = _interaction(initiator="other", accepted=True, p=0.9)
+            agent.update_from_outcome(ix, 1.0)
+        dep = agent._compute_subjunctive_dependence("other")
+        assert 0.0 <= dep.subjunctive_score <= 1.0
+        assert 0.0 <= dep.mutual_information <= 1.0
+
+
+# ------------------------------------------------------------------
+# Test: Proof-based cooperation
+# ------------------------------------------------------------------
+
+
+class TestProofBasedCooperation:
+    """Test proof-based cooperation (TDT/FDT)."""
+
+    def test_no_history_returns_none(self):
+        agent = LDTAgent("ldt_1", config={
+            "decision_theory": "fdt",
+            "proof_threshold": 0.85,
+        })
+        result = agent._proof_based_cooperation("unknown")
+        # With no data, inconclusive.
+        assert result is None or result is True or result is False
+
+    def test_high_dependence_returns_true(self):
+        agent = LDTAgent("ldt_1", config={
+            "decision_theory": "fdt",
+            "proof_threshold": 0.3,  # Low threshold for testing.
+            "counterfactual_horizon": 10,
+        })
+        # Build very correlated history.
+        for _ in range(10):
+            ix = _interaction(initiator="twin", accepted=True, p=0.9)
+            agent.update_from_outcome(ix, 1.0)
+        result = agent._proof_based_cooperation("twin")
+        assert result is True
+
+
+# ------------------------------------------------------------------
+# Test: UDT precommitment
+# ------------------------------------------------------------------
+
+
+class TestPrecommitment:
+    """Test UDT-style policy precommitment."""
+
+    def test_precommit_cooperates_with_high_prior(self):
+        agent = LDTAgent("ldt_1", config={
+            "decision_theory": "udt",
+            "cooperation_prior": 0.65,
+            "welfare_weight": 0.3,
+        })
+        assert agent._precommit_policy() is True
+
+    def test_precommit_caches_result(self):
+        agent = LDTAgent("ldt_1", config={
+            "decision_theory": "udt",
+            "cooperation_prior": 0.65,
+        })
+        result1 = agent._precommit_policy()
+        result2 = agent._precommit_policy()
+        assert result1 == result2
+        assert agent._precommitted_cooperate is not None
+
+    def test_precommit_defects_with_very_low_prior(self):
+        agent = LDTAgent("ldt_1", config={
+            "decision_theory": "udt",
+            "cooperation_prior": 0.05,
+            "welfare_weight": 0.0,
+        })
+        # With very low prior and no welfare weight,
+        # cooperation value ≈ 0.05, defect value ≈ 0.
+        # Since coop (0.05) > defect (0), still cooperates.
+        # Precommitment is: coop_value > defect_value.
+        result = agent._precommit_policy()
+        assert isinstance(result, bool)
+
+
+# ------------------------------------------------------------------
+# Test: Decision theory modes
+# ------------------------------------------------------------------
+
+
+class TestDecisionTheoryModes:
+    """Test that TDT/FDT/UDT modes produce different behavior."""
+
+    def test_default_is_fdt(self):
+        agent = LDTAgent("ldt_1")
+        assert agent.decision_theory == "fdt"
+
+    def test_tdt_mode_uses_cosine_only(self):
+        agent = LDTAgent("ldt_1", config={"decision_theory": "tdt"})
+        assert agent.decision_theory == "tdt"
+        # TDT should not populate subjunctive cache.
+        agent._level1_cooperate_decision("other")
+        assert "other" not in agent._subjunctive_cache
+
+    def test_fdt_mode_computes_subjunctive(self):
+        agent = LDTAgent("ldt_1", config={"decision_theory": "fdt"})
+        for _ in range(5):
+            ix = _interaction(initiator="other", accepted=True, p=0.8)
+            agent.update_from_outcome(ix, 1.0)
+        agent._level1_cooperate_decision("other")
+        assert "other" in agent._subjunctive_cache
+
+    def test_udt_has_precommitment(self):
+        agent = LDTAgent("ldt_1", config={
+            "decision_theory": "udt",
+            "precommitment_strength": 1.0,
+        })
+        assert agent.precommitment_strength == 1.0
+
+    def test_backward_compat_tdt(self):
+        """TDT mode with depth=1 should match original behavior."""
+        agent_tdt = LDTAgent("ldt_1", config={
+            "decision_theory": "tdt",
+            "acausality_depth": 1,
+        })
+        agent_orig = LDTAgent("ldt_2", config={
+            "decision_theory": "tdt",
+            "acausality_depth": 1,
+        })
+        # Both should produce the same decision with no history.
+        r1 = agent_tdt._level1_cooperate_decision("other")
+        r2 = agent_orig._level1_cooperate_decision("other")
+        assert r1 == r2

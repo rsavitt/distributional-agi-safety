@@ -18,6 +18,7 @@ from swarm.agents.memory_agent import (
     DiligentRecorderAgent,
     MemoryPoisonerAgent,
 )
+from swarm.agents.modeling_adversary import ModelingAdversary
 from swarm.agents.moltbook_agent import (
     CollusiveVoterAgent,
     DiligentMoltbookAgent,
@@ -64,6 +65,7 @@ AGENT_TYPES: Dict[str, Type[BaseAgent]] = {
     "deceptive": DeceptiveAgent,
     "adversarial": AdversarialAgent,
     "adaptive_adversary": AdaptiveAdversary,
+    "modeling_adversary": ModelingAdversary,
     "diligent_editor": DiligentEditorAgent,
     "point_farmer": PointFarmerAgent,
     "collusive_editor": CollusiveEditorAgent,
