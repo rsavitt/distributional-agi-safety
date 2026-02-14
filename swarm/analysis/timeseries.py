@@ -21,15 +21,15 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
-import matplotlib.pyplot as plt
 import matplotlib.axes
+import matplotlib.pyplot as plt
 import numpy as np
 
 from swarm.analysis.theme import (
     COLORS,
     METRIC_COLOR_MAP,
-    annotate_events,
     add_danger_zone,
+    annotate_events,
     swarm_theme,
 )
 
@@ -337,7 +337,7 @@ def plot_multi_seed_timeseries(
         fig, ax = plt.subplots(figsize=(10, 5))
 
         # 2-D input: plot_metric_timeseries computes mean +/- std
-        plot_metric_timeseries(ax, epochs, stacked, label=metric, color=color)
+        plot_metric_timeseries(ax, list(epochs), stacked, label=metric, color=color)
 
         # Faint individual seed traces
         for i in range(stacked.shape[0]):

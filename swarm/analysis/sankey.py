@@ -27,18 +27,17 @@ Typical usage::
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional, Sequence, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
-import matplotlib.pyplot as plt
-import matplotlib.patches as mpatches
 import matplotlib.axes
+import matplotlib.patches as mpatches
+import matplotlib.pyplot as plt
 import numpy as np
 
 from swarm.analysis.theme import (
     COLORS,
     swarm_theme,
 )
-
 
 # ---------------------------------------------------------------------------
 # Internal helpers
@@ -121,8 +120,8 @@ def _draw_bezier_flow(
     The band extends from ``(x0, y0)`` to ``(x1, y1)`` with the given
     *width* (half above, half below the center line at each end).
     """
-    from matplotlib.path import Path
     from matplotlib.patches import PathPatch
+    from matplotlib.path import Path
 
     hw = width / 2.0
     mid_x = (x0 + x1) / 2.0
@@ -484,7 +483,6 @@ def plot_audit_evasion_flow(
         fig.savefig("enforcement.png")
     """
     # Extract values with safe defaults.
-    total = float(flow_data.get("total", 0))
     honest = float(flow_data.get("honest", 0))
     evaders = float(flow_data.get("evaders", 0))
     audited = float(flow_data.get("audited", 0))
@@ -628,7 +626,6 @@ def plot_enforcement_summary(
             ax = axes[row, col]
 
             # Build per-epoch flows (same logic as plot_audit_evasion_flow).
-            total = float(fd.get("total", 0))
             honest = float(fd.get("honest", 0))
             evaders = float(fd.get("evaders", 0))
             audited = float(fd.get("audited", 0))
@@ -641,9 +638,9 @@ def plot_enforcement_summary(
 
             epoch_flows: List[Dict[str, Any]] = []
 
-            def _add_e(src: int, tgt: int, val: float) -> None:
+            def _add_e(src: int, tgt: int, val: float, _ef: List[Dict[str, Any]] = epoch_flows) -> None:
                 if val > 0:
-                    epoch_flows.append(
+                    _ef.append(
                         {"source": src, "target": tgt, "value": val}
                     )
 

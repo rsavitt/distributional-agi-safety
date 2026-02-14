@@ -29,8 +29,6 @@ import logging
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Union
 
-from swarm.analysis.theme import COLORS, apply_theme
-
 logger = logging.getLogger(__name__)
 
 # Formats that matplotlib can render natively
@@ -95,7 +93,7 @@ def save_figure(
             )
         formats = [suffix]
 
-    unsupported = set(f.lower() for f in formats) - _MPL_FORMATS
+    unsupported = {f.lower() for f in formats} - _MPL_FORMATS
     if unsupported:
         raise ValueError(
             f"Unsupported matplotlib format(s): {unsupported}. "

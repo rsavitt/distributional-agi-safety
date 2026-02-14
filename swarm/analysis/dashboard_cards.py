@@ -20,9 +20,9 @@ from __future__ import annotations
 
 from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 
-import matplotlib.pyplot as plt
-import matplotlib.gridspec as gridspec
 import matplotlib.axes
+import matplotlib.gridspec as gridspec
+import matplotlib.pyplot as plt
 import numpy as np
 
 from swarm.analysis.theme import (
@@ -193,7 +193,8 @@ def plot_summary_cards(
         if title:
             fig.suptitle(title, fontsize=14, fontweight="bold", y=0.98)
 
-        fig.tight_layout(rect=[0, 0, 1, 0.94] if title else [0, 0, 1, 1])
+        rect = (0, 0, 1, 0.94) if title else (0, 0, 1, 1)
+        fig.tight_layout(rect=rect)
 
     return fig, axes_flat
 

@@ -18,10 +18,10 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
-import matplotlib.pyplot as plt
 import matplotlib.axes
 import matplotlib.colors as mcolors
 import matplotlib.patches as mpatches
+import matplotlib.pyplot as plt
 import numpy as np
 
 from swarm.analysis.theme import (
@@ -90,7 +90,7 @@ def render_grid(
     rows, cols = grid.shape
 
     # Ensure every unique value has a colour entry
-    for v in sorted(set(int(v) for v in np.unique(grid))):
+    for v in sorted({int(v) for v in np.unique(grid)}):
         if v not in cell_colors:
             cell_colors[v] = COLORS.BG_DARK
 

@@ -19,15 +19,14 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
-import matplotlib.pyplot as plt
 import matplotlib.axes
+import matplotlib.pyplot as plt
 import numpy as np
 
 from swarm.analysis.theme import (
     COLORS,
     swarm_theme,
 )
-
 
 # ---------------------------------------------------------------------------
 # Pure computation
@@ -154,7 +153,7 @@ def plot_tax_schedule(
     seen: dict[str, Any] = {}
     unique_handles = []
     unique_labels = []
-    for h, lbl in zip(handles, labels):
+    for h, lbl in zip(handles, labels, strict=False):
         if lbl not in seen:
             seen[lbl] = True
             unique_handles.append(h)
@@ -302,7 +301,7 @@ def plot_tax_schedule_evolution(
     with swarm_theme(mode):
         fig, ax = plt.subplots()
 
-        for idx, (schedule, epoch) in enumerate(zip(schedules, epochs)):
+        for idx, (schedule, epoch) in enumerate(zip(schedules, epochs, strict=False)):
             frac = idx / max(n - 1, 1)
             # Interpolate: early epochs -> faded, later epochs -> full color
             color = tuple(fade_target + frac * (base_rgb - fade_target))

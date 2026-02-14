@@ -22,9 +22,7 @@ from dataclasses import dataclass
 from typing import Any, Dict, Iterator, List, Optional, Sequence
 
 import matplotlib as mpl
-import matplotlib.pyplot as plt
 import numpy as np
-
 
 # ---------------------------------------------------------------------------
 # Semantic color constants

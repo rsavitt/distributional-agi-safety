@@ -22,11 +22,11 @@ Usage::
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional, Sequence, Tuple
+from typing import Dict, List, Optional, Tuple
 
-import matplotlib.pyplot as plt
 import matplotlib.axes
 import matplotlib.patches as mpatches
+import matplotlib.pyplot as plt
 import numpy as np
 
 from swarm.analysis.theme import (
@@ -34,7 +34,6 @@ from swarm.analysis.theme import (
     agent_color,
     swarm_theme,
 )
-
 
 # ---------------------------------------------------------------------------
 # Layout

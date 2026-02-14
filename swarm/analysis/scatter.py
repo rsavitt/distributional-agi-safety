@@ -14,8 +14,8 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
-import matplotlib.pyplot as plt
 import matplotlib.axes
+import matplotlib.pyplot as plt
 import numpy as np
 
 from swarm.analysis.theme import (
@@ -188,8 +188,9 @@ def plot_toxicity_welfare_scatter(
         # Colours
         point_colors: Optional[List[str]] = None
         if color_by is not None:
-            from swarm.analysis.theme import AGENT_CYCLE
             from matplotlib.lines import Line2D
+
+            from swarm.analysis.theme import AGENT_CYCLE
             groups = [d.get(color_by, "unknown") for d in data]
             unique = _unique_groups(groups)
             palette: Dict[str, str] = {}
@@ -253,7 +254,7 @@ def plot_welfare_frontier(
         if color_metric and all(color_metric in d for d in sweep_data):
             from swarm.analysis.theme import color_for_values
             cvals = np.array([d[color_metric] for d in sweep_data], dtype=float)
-            rgba = color_for_values(cvals, cmap=SWARM_DIVERGING)
+            rgba = color_for_values(list(cvals), cmap=SWARM_DIVERGING)
             pcols: Any = [rgba[i] for i in range(len(cvals))]
         else:
             pcols = [COLORS.WELFARE] * len(xs)
@@ -322,7 +323,7 @@ def plot_sweep_scatter(
         for idx, fval in enumerate(facet_values):
             ax = axes_flat[idx]
             if fval is not None:
-                subset = [d for d in sweep_results if d.get(facet_param) == fval]
+                subset = [d for d in sweep_results if d.get(facet_param or "") == fval]
                 ax.set_title(f"{facet_param}={fval}", fontsize=10)
             else:
                 subset = list(sweep_results)
@@ -334,7 +335,7 @@ def plot_sweep_scatter(
             if color_param and all(color_param in d for d in subset):
                 from swarm.analysis.theme import color_for_values
                 cvals = np.array([d[color_param] for d in subset], dtype=float)
-                rgba = color_for_values(cvals, cmap=SWARM_DIVERGING)
+                rgba = color_for_values(list(cvals), cmap=SWARM_DIVERGING)
                 pcols = [rgba[i] for i in range(len(cvals))]
 
             ax.scatter(

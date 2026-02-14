@@ -16,10 +16,10 @@ Usage::
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
+from typing import Any, Dict, Optional, Sequence, Tuple
 
-import matplotlib.pyplot as plt
 import matplotlib.axes
+import matplotlib.pyplot as plt
 import numpy as np
 
 from swarm.analysis.theme import (
@@ -250,14 +250,14 @@ def plot_difference_heatmap(
             figsize=(max(16, len(col_labels) * 3.0), max(4, len(row_labels) * 0.7)),
         )
 
-        common_kw: Dict[str, Any] = dict(
-            row_labels=row_labels,
-            col_labels=col_labels,
-            annotate=True,
-            fmt=".2f",
-            cmap=resolved_cmap,
-            mode=mode,
-        )
+        common_kw: Dict[str, Any] = {
+            "row_labels": row_labels,
+            "col_labels": col_labels,
+            "annotate": True,
+            "fmt": ".2f",
+            "cmap": resolved_cmap,
+            "mode": mode,
+        }
 
         # Panel A
         center_a = float(np.nanmean(mat_a))

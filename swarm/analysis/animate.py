@@ -20,7 +20,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from swarm.analysis.theme import (
-    COLORS,
     swarm_theme,
 )
 
@@ -83,7 +82,7 @@ def render_epoch_frames(
     frames: List[Any] = []
     for i, datum in enumerate(epoch_data):
         frame = render_frame(
-            lambda _i=i, _d=datum: plot_func(_i, _d),
+            lambda _i=i, _d=datum: plot_func(_i, _d),  # type: ignore[misc]
             mode=mode, figsize=figsize, dpi=dpi,
         )
         frames.append(frame)
@@ -136,7 +135,7 @@ def save_animation(
         raise ValueError(f"Unsupported animation format: {format!r}")
 
     logger.info("Saved animation (%d frames) to %s", len(frames), path)
-    return path
+    return path  # type: ignore[return-value]
 
 
 def _save_gif(frames: List[Any], path: Path, *, fps: int, loop: int) -> None:
@@ -152,7 +151,7 @@ def _save_mp4(frames: List[Any], path: Path, *, fps: int) -> None:
     """Save frames as MP4.  FFMpegWriter -> imageio.v3 -> imageio legacy."""
     # Strategy 1: matplotlib FFMpegWriter
     try:
-        from matplotlib.animation import FuncAnimation, FFMpegWriter
+        from matplotlib.animation import FFMpegWriter, FuncAnimation
 
         fig, ax = plt.subplots()
         ax.set_axis_off()
@@ -189,11 +188,11 @@ def _save_mp4(frames: List[Any], path: Path, *, fps: int) -> None:
             writer.append_data(np.array(f))
         writer.close()
         return
-    except ImportError:
+    except ImportError as err:
         raise ImportError(
             "MP4 export requires ffmpeg (for matplotlib) or imageio. "
             "Install with: pip install imageio[ffmpeg]"
-        )
+        ) from err
 
 
 # ---------------------------------------------------------------------------

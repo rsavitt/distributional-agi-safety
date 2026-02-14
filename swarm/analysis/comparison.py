@@ -25,13 +25,13 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
-import matplotlib.pyplot as plt
 import matplotlib.axes
+import matplotlib.pyplot as plt
 import numpy as np
 
 from swarm.analysis.theme import (
-    COLORS,
     AGENT_COLOR_MAP,
+    COLORS,
     agent_color,
     swarm_theme,
 )
@@ -185,10 +185,10 @@ def plot_slope_chart(
         )
         ax.plot(x, series, marker="o", linewidth=2, color=color, label=name)
         # Annotate start and end values.
-        for xi, yi in zip(x, series):
+        for xi, yi in zip(x, series, strict=False):
             ax.annotate(
                 f"{yi:.2f}",
-                (xi, yi),
+                (float(xi), yi),
                 textcoords="offset points",
                 xytext=(6, 4),
                 fontsize=7,
