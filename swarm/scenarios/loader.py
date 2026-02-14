@@ -53,6 +53,7 @@ from swarm.core.moltipedia_handler import MoltipediaConfig
 from swarm.core.orchestrator import Orchestrator, OrchestratorConfig
 from swarm.core.payoff import PayoffConfig
 from swarm.core.scholar_handler import ScholarConfig
+from swarm.core.spawn import PayoffAttributionMode, SpawnConfig
 from swarm.env.marketplace import MarketplaceConfig
 from swarm.env.network import NetworkConfig, NetworkTopology
 from swarm.env.state import RateLimits
@@ -580,6 +581,47 @@ def parse_kernel_oracle_config(
     return KernelOracleConfig(**data)
 
 
+def parse_spawn_config(data: Dict[str, Any]) -> Optional[SpawnConfig]:
+    """
+    Parse spawn section from YAML into SpawnConfig.
+
+    Args:
+        data: The spawn section from YAML
+
+    Returns:
+        SpawnConfig if enabled, None otherwise
+    """
+    if not data:
+        return None
+
+    if data.get("enabled") is False:
+        return None
+
+    # Parse attribution mode
+    mode_str = data.get("attribution_mode", "leaf_only").lower()
+    try:
+        attribution_mode = PayoffAttributionMode(mode_str)
+    except ValueError as err:
+        raise ValueError(f"Unknown attribution mode: {mode_str}") from err
+
+    return SpawnConfig(
+        enabled=data.get("enabled", True),
+        spawn_cost=data.get("spawn_cost", 10.0),
+        max_depth=data.get("max_depth", 3),
+        max_children=data.get("max_children", 3),
+        max_total_spawned=data.get("max_total_spawned", 50),
+        attribution_mode=attribution_mode,
+        propagation_fraction=data.get("propagation_fraction", 0.3),
+        reputation_inheritance_factor=data.get("reputation_inheritance_factor", 0.5),
+        initial_child_resources=data.get("initial_child_resources", 50.0),
+        depth_noise_per_level=data.get("depth_noise_per_level", 0.05),
+        cascade_ban=data.get("cascade_ban", True),
+        cascade_freeze=data.get("cascade_freeze", True),
+        min_resources_to_spawn=data.get("min_resources_to_spawn", 20.0),
+        spawn_cooldown_steps=data.get("spawn_cooldown_steps", 5),
+    )
+
+
 def load_scenario(path: Path) -> ScenarioConfig:
     """
     Load a scenario from a YAML file.
@@ -609,6 +651,7 @@ def load_scenario(path: Path) -> ScenarioConfig:
     memory_tier_config = parse_memory_tier_config(data.get("memory_tiers", {}))
     scholar_config = parse_scholar_config(data.get("scholar", {}))
     kernel_oracle_config = parse_kernel_oracle_config(data.get("kernel_oracle", {}))
+    spawn_config = parse_spawn_config(data.get("spawn", {}))
 
     # Parse simulation settings
     sim_data = data.get("simulation", {})
@@ -635,6 +678,7 @@ def load_scenario(path: Path) -> ScenarioConfig:
         memory_tier_config=memory_tier_config,
         scholar_config=scholar_config,
         kernel_oracle_config=kernel_oracle_config,
+        spawn_config=spawn_config,
         log_path=Path(outputs_data["event_log"])
         if outputs_data.get("event_log")
         else None,
