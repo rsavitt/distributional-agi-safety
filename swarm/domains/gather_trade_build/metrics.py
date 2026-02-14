@@ -6,10 +6,13 @@ Provides economist-style welfare metrics and SWARM systemic-risk diagnostics.
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass, field
-from typing import Dict, List, Optional
+from dataclasses import dataclass
+from typing import Dict, List
 
-from swarm.domains.gather_trade_build.entities import GTBEvent, ResourceType, WorkerState
+from swarm.domains.gather_trade_build.entities import (
+    GTBEvent,
+    WorkerState,
+)
 
 
 @dataclass
@@ -111,7 +114,7 @@ def compute_atkinson(incomes: List[float], epsilon: float = 0.5) -> float:
     else:
         power = 1.0 - epsilon
         powered_sum = sum(max(inc, 1e-9) ** power for inc in incomes) / n
-        return max(0.0, 1.0 - (powered_sum ** (1.0 / power)) / mean_inc)
+        return float(max(0.0, 1.0 - (powered_sum ** (1.0 / power)) / mean_inc))
 
 
 def compute_bunching_intensity(
@@ -175,7 +178,6 @@ def compute_gtb_metrics(
 
     # Tax
     total_tax = sum(w.tax_paid_this_epoch for w in workers.values())
-    reported = [w.reported_income_this_epoch for w in workers.values()]
     mean_eff_rate = (
         sum(
             w.tax_paid_this_epoch / max(w.reported_income_this_epoch, 1e-9)

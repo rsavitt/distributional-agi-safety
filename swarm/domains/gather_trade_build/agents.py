@@ -194,7 +194,6 @@ class EvasiveWorkerPolicy(GTBWorkerPolicy):
         self._reported_this_epoch = False
 
     def decide(self, obs: dict) -> GTBAction:
-        energy = obs.get("energy", 0)
         gross = obs.get("gross_income", 0.0)
         step = obs.get("step", 0)
 

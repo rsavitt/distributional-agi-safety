@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import random
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List
 
 from swarm.domains.gather_trade_build.config import GTBConfig
 from swarm.domains.gather_trade_build.entities import (
@@ -17,7 +17,6 @@ from swarm.domains.gather_trade_build.entities import (
     MarketOrder,
     Resource,
     ResourceType,
-    TradeResult,
     WorkerState,
 )
 from swarm.domains.gather_trade_build.tax_schedule import TaxSchedule
@@ -815,7 +814,7 @@ class GTBEnvironment:
                     continue
 
                 matches = sum(
-                    1 for a, b in zip(trace_a[-min_len:], trace_b[-min_len:])
+                    1 for a, b in zip(trace_a[-min_len:], trace_b[-min_len:], strict=False)
                     if a == b
                 )
                 similarity = matches / min_len
@@ -936,7 +935,7 @@ class GTBEnvironment:
         if total_income > 0:
             cumulative = 0.0
             gini_sum = 0.0
-            for i, inc in enumerate(sorted_inc):
+            for _i, inc in enumerate(sorted_inc):
                 cumulative += inc
                 gini_sum += cumulative
             gini = 1.0 - 2.0 * gini_sum / (n * total_income) + 1.0 / n

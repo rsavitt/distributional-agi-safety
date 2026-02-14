@@ -13,7 +13,6 @@ from __future__ import annotations
 import csv
 import json
 import logging
-import os
 import random
 from datetime import datetime
 from pathlib import Path
@@ -141,7 +140,7 @@ class GTBScenarioRunner:
                 )
 
             # Run steps within epoch
-            for step in range(self._steps_per_epoch):
+            for _step in range(self._steps_per_epoch):
                 actions: Dict[str, GTBAction] = {}
                 for agent_id, policy in self._policies.items():
                     obs = self._env.obs(agent_id)
@@ -251,17 +250,16 @@ class GTBScenarioRunner:
         workers_path = csv_dir / "workers.csv"
         workers = self._env.workers
         if workers:
-            sample = next(iter(workers.values()))
             with open(workers_path, "w", newline="") as f:
-                writer = csv.writer(f)
-                writer.writerow([
+                w_writer = csv.writer(f)
+                w_writer.writerow([
                     "agent_id", "position", "coin", "wood", "stone",
                     "houses_built", "cumulative_income",
                     "times_audited", "times_caught", "total_fines",
                     "coalition_id",
                 ])
                 for aid, w in workers.items():
-                    writer.writerow([
+                    w_writer.writerow([
                         aid, str(w.position),
                         f"{w.get_resource(ResourceType.COIN):.2f}",
                         f"{w.get_resource(ResourceType.WOOD):.2f}",

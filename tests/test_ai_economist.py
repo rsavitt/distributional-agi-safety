@@ -15,7 +15,6 @@ Covers:
 from __future__ import annotations
 
 import json
-import math
 import tempfile
 from pathlib import Path
 
@@ -28,8 +27,8 @@ from swarm.domains.gather_trade_build.agents import (
     HonestWorkerPolicy,
 )
 from swarm.domains.gather_trade_build.config import (
-    GTBConfig,
     GamingConfig,
+    GTBConfig,
     MisreportingConfig,
     TaxBracket,
     TaxScheduleConfig,
@@ -50,7 +49,6 @@ from swarm.domains.gather_trade_build.planner import PlannerAgent
 from swarm.domains.gather_trade_build.reward import compute_worker_utility
 from swarm.domains.gather_trade_build.runner import GTBScenarioRunner
 from swarm.domains.gather_trade_build.tax_schedule import TaxSchedule
-
 
 # ═══════════════════════════════════════════════════════════════════════
 # Tax Schedule Tests

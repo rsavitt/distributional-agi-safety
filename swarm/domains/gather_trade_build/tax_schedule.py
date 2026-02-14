@@ -123,7 +123,7 @@ class TaxSchedule:
         damping = self._config.damping
         if damping > 0 and len(new_brackets) == len(self._brackets):
             damped = []
-            for old, new in zip(self._brackets, new_brackets):
+            for old, new in zip(self._brackets, new_brackets, strict=True):
                 damped_rate = old.rate + (1.0 - damping) * (new.rate - old.rate)
                 damped_rate = max(0.0, min(1.0, damped_rate))
                 damped.append(TaxBracket(threshold=new.threshold, rate=damped_rate))
