@@ -90,7 +90,7 @@ export const PhaseTransition: React.FC = () => {
       <div style={{ display: "flex", gap: 40, marginBottom: 50 }}>
         <RegimeCard
           title="Cooperative"
-          adversarial="0\u201320%"
+          adversarial="0–20%"
           welfare="Stable"
           color={colors.success}
           frame={frame}
@@ -98,7 +98,7 @@ export const PhaseTransition: React.FC = () => {
         />
         <RegimeCard
           title="Contested"
-          adversarial="20\u201337.5%"
+          adversarial="20–37.5%"
           welfare="Declining"
           color={colors.warning}
           frame={frame}

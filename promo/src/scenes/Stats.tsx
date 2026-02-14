@@ -97,48 +97,30 @@ export const Stats: React.FC = () => {
 
       <div style={{ display: "flex", gap: 80, marginBottom: 50 }}>
         <AnimatedNumber
-          value={83287}
-          label="lines of code"
+          value={10}
+          label="framework bridges"
           frame={frame}
           delay={15}
         />
         <AnimatedNumber
-          value={2922}
-          label="tests"
+          value={45}
+          suffix="+"
+          label="scenarios"
           frame={frame}
           delay={25}
         />
         <AnimatedNumber
-          value={55}
-          suffix="+"
-          label="scenarios"
+          value={29}
+          label="governance levers"
           frame={frame}
           delay={35}
         />
         <AnimatedNumber
-          value={24}
-          suffix="+"
-          label="governance levers"
+          value={40}
+          label="agent types"
           frame={frame}
           delay={45}
         />
-      </div>
-
-      <div
-        style={{
-          fontSize: 28,
-          color: colors.textDim,
-          opacity: bottomP,
-          display: "flex",
-          gap: 24,
-          alignItems: "center",
-        }}
-      >
-        <span style={{ color: colors.accent }}>23 agent types</span>
-        <span style={{ color: colors.textMuted }}>&middot;</span>
-        <span style={{ color: colors.accent }}>8 framework bridges</span>
-        <span style={{ color: colors.textMuted }}>&middot;</span>
-        <span style={{ color: colors.accent }}>3 research papers</span>
       </div>
     </AbsoluteFill>
   );
