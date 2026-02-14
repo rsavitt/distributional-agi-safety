@@ -210,7 +210,7 @@ def _is_private_ip(hostname: str) -> bool:
     # Resolve the hostname and check all returned IPs
     try:
         results = socket.getaddrinfo(hostname, None, socket.AF_UNSPEC, socket.SOCK_STREAM)
-        for family, _, _, _, sockaddr in results:
+        for _family, _, _, _, sockaddr in results:
             ip_str = sockaddr[0]
             addr = ipaddress.ip_address(ip_str)
             if (
@@ -240,8 +240,8 @@ def _validate_callback_url(url: Optional[str]) -> None:
         return
     try:
         parsed = urlparse(url)
-    except Exception:
-        raise HTTPException(status_code=400, detail="Invalid callback_url")
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail="Invalid callback_url") from exc
 
     if parsed.scheme not in _ALLOWED_CALLBACK_SCHEMES:
         raise HTTPException(
@@ -305,7 +305,6 @@ def _execute_run(run_id: str) -> None:
             store.save(run)
             return
 
-        from swarm.analysis.aggregation import EpochSnapshot, SimulationHistory
         from swarm.scenarios.loader import build_orchestrator, load_scenario
 
         scenario_path = _resolve_scenario_path(run.scenario_id)

@@ -16,7 +16,12 @@ from pathlib import Path
 from typing import Optional
 
 from swarm.api.models.post import PostResponse
-from swarm.api.models.run import RunResponse, RunStatus, RunSummaryMetrics, RunVisibility
+from swarm.api.models.run import (
+    RunResponse,
+    RunStatus,
+    RunSummaryMetrics,
+    RunVisibility,
+)
 
 logger = logging.getLogger(__name__)
 
