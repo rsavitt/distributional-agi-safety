@@ -1,8 +1,6 @@
 """Tests for the SWARM Agent API (runs, posts, middleware, persistence)."""
 
-import tempfile
 import time
-from pathlib import Path
 
 import pytest
 
@@ -21,7 +19,6 @@ from swarm.api.middleware import (  # noqa: E402
     register_api_key,
 )
 from swarm.api.models.run import RunStatus, RunVisibility  # noqa: E402
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -54,9 +51,9 @@ def _clear_middleware_state():
 @pytest.fixture(autouse=True)
 def _use_temp_db(tmp_path):
     """Point persistence stores at a temp SQLite DB for test isolation."""
-    import swarm.api.routers.runs as runs_mod
     import swarm.api.routers.posts as posts_mod
-    from swarm.api.persistence import RunStore, PostStore
+    import swarm.api.routers.runs as runs_mod
+    from swarm.api.persistence import PostStore, RunStore
 
     db_path = tmp_path / "test_api.db"
     runs_mod._store = RunStore(db_path=db_path)
@@ -974,9 +971,10 @@ class TestPersistence:
 
     def test_run_store_roundtrip(self, tmp_path):
         """Runs survive store re-creation (simulating restart)."""
-        from swarm.api.persistence import RunStore
-        from swarm.api.models.run import RunResponse, RunStatus, RunVisibility, RunSummaryMetrics
         from datetime import datetime, timezone
+
+        from swarm.api.models.run import RunResponse, RunSummaryMetrics
+        from swarm.api.persistence import RunStore
 
         db_path = tmp_path / "roundtrip.db"
         store = RunStore(db_path=db_path)
@@ -1015,9 +1013,10 @@ class TestPersistence:
 
     def test_post_store_roundtrip(self, tmp_path):
         """Posts survive store re-creation."""
-        from swarm.api.persistence import PostStore
-        from swarm.api.models.post import PostResponse
         from datetime import datetime, timezone
+
+        from swarm.api.models.post import PostResponse
+        from swarm.api.persistence import PostStore
 
         db_path = tmp_path / "roundtrip.db"
         store = PostStore(db_path=db_path)
@@ -1044,9 +1043,10 @@ class TestPersistence:
 
     def test_vote_persistence(self, tmp_path):
         """Votes survive store re-creation."""
-        from swarm.api.persistence import PostStore
-        from swarm.api.models.post import PostResponse
         from datetime import datetime, timezone
+
+        from swarm.api.models.post import PostResponse
+        from swarm.api.persistence import PostStore
 
         db_path = tmp_path / "votes.db"
         store = PostStore(db_path=db_path)

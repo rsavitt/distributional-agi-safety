@@ -114,7 +114,8 @@ def get_request_key_hash(request: Request) -> str:
     This avoids re-computing the expensive PBKDF2 hash on every call
     to ``is_trusted`` / ``get_quotas`` within the same request.
     """
-    return request.state._swarm_key_hash  # type: ignore[attr-defined]
+    key_hash: str = request.state._swarm_key_hash  # type: ignore[attr-defined]
+    return key_hash
 
 
 def _extract_bearer_token(header_value: Optional[str]) -> Optional[str]:

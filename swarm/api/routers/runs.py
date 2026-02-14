@@ -456,7 +456,7 @@ def _export_run_artifacts(
 def _fire_callback(callback_url: str, run: RunResponse) -> None:
     """POST run results to the agent's callback URL."""
     try:
-        import requests
+        import requests  # type: ignore[import-untyped]
 
         payload = {
             "run_id": run.run_id,
@@ -549,7 +549,11 @@ async def create_run(
         visibility=body.visibility,
         agent_id=agent_id,
         created_at=now,
+        started_at=None,
+        completed_at=None,
         progress=0.0,
+        summary_metrics=None,
+        error=None,
         status_url=f"{base_url}/api/runs/{run_id}",
         public_url=f"{base_url}/api/runs/{run_id}"
         if body.visibility == RunVisibility.PUBLIC
