@@ -79,6 +79,7 @@ sandboxes/
 .worktrees/
 *.db
 runs/dolt_runs/
+node_modules/
 
 # Allow documentation images
 !docs/**/*.png

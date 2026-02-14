@@ -1,7 +1,7 @@
 """Base class for environment handlers in the orchestration layer.
 
 All handlers share a common pattern:
-- Accept an ``emit_event`` callback for append-only event logging
+- Accept an ``event_bus: EventBus`` for append-only event logging
 - Declare which ``ActionType`` values they own via ``handled_action_types``
 - Dispatch agent actions via ``handle_action``
 - Build per-agent observation fields via ``build_observation_fields``
@@ -13,15 +13,13 @@ the orchestrator uses for proxy computation and interaction finalization.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Any, Callable, Dict, FrozenSet, Optional
+from typing import Any, Callable, Dict, FrozenSet, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from swarm.logging.event_bus import EventBus
 from swarm.models.events import Event
 from swarm.models.interaction import InteractionType
-
-if TYPE_CHECKING:
-    from swarm.logging.event_bus import EventBus
 
 
 class HandlerActionResult(BaseModel):
@@ -77,15 +75,10 @@ class Handler(ABC):
     def __init__(
         self,
         *,
-        emit_event: Callable[[Event], None] | None = None,
-        event_bus: EventBus | None = None,
+        event_bus: EventBus,
     ) -> None:
-        if event_bus is not None:
-            self._emit_event: Callable[[Event], None] = event_bus.emit
-        elif emit_event is not None:
-            self._emit_event = emit_event
-        else:
-            raise ValueError("Handler requires either emit_event or event_bus")
+        self._event_bus = event_bus
+        self._emit_event: Callable[[Event], None] = event_bus.emit
 
     @staticmethod
     @abstractmethod

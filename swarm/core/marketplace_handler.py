@@ -5,7 +5,7 @@ management, escrow settlement, dispute handling, and epoch
 maintenance.
 """
 
-from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 from swarm.agents.base import Action, ActionType
 from swarm.core.handler import Handler, HandlerActionResult
@@ -13,11 +13,9 @@ from swarm.env.marketplace import EscrowStatus, Marketplace
 from swarm.env.state import EnvState
 from swarm.env.tasks import TaskPool
 from swarm.governance.engine import GovernanceEngine
+from swarm.logging.event_bus import EventBus
 from swarm.models.events import Event, EventType
 from swarm.models.interaction import InteractionType, SoftInteraction
-
-if TYPE_CHECKING:
-    from swarm.logging.event_bus import EventBus
 
 
 class MarketplaceHandler(Handler):
@@ -43,12 +41,11 @@ class MarketplaceHandler(Handler):
         self,
         marketplace: Marketplace,
         task_pool: TaskPool,
-        emit_event: Optional[Callable[[Event], None]] = None,
         *,
-        event_bus: Optional["EventBus"] = None,
+        event_bus: EventBus,
         enable_rate_limits: bool = True,
     ):
-        super().__init__(emit_event=emit_event, event_bus=event_bus)
+        super().__init__(event_bus=event_bus)
         self.marketplace = marketplace
         self.task_pool = task_pool
         self._enable_rate_limits = enable_rate_limits
