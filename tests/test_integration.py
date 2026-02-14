@@ -176,7 +176,7 @@ class TestAdversarialHeavyEcosystem:
 
     @pytest.fixture(scope="class")
     def adversarial_metrics(self):
-        config = OrchestratorConfig(n_epochs=5, steps_per_epoch=8, seed=99)
+        config = OrchestratorConfig(n_epochs=8, steps_per_epoch=10, seed=42)
         orch = Orchestrator(config=config)
         orch.register_agent(HonestAgent(agent_id="honest_1"))
         for i in range(3):
@@ -185,7 +185,7 @@ class TestAdversarialHeavyEcosystem:
 
     @pytest.fixture(scope="class")
     def honest_metrics(self):
-        config = OrchestratorConfig(n_epochs=5, steps_per_epoch=8, seed=99)
+        config = OrchestratorConfig(n_epochs=8, steps_per_epoch=10, seed=42)
         orch = Orchestrator(config=config)
         for i in range(4):
             orch.register_agent(HonestAgent(agent_id=f"honest_{i}"))
