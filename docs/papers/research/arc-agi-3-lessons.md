@@ -130,11 +130,21 @@ Key optimizations:
 
 ### vc33 (Click Only)
 
-- **Grid:** Green left half, black right half, with maroon/grey/teal objects
-- **Timer:** Cycles every ~8 frames (fast)
+- **Grid structure (discovered V12 via pixel analysis):**
+  - Left half: green (3) structural area (2580px)
+  - Upper-right: black (0) empty area (1216px)
+  - **Grey (5) horizontal bar** at rows 28-31 (168px) with **cyan (11) markers** at cols 38-39
+  - **Maroon (9) squares** (32px): two 4x4 blocks at far right, rows 24-27 and 32-35
+  - **Yellow (4) + cyan (11) cross shape** at rows 44-49, cols 46-51 (37px total)
+  - **Timer bar** (orange/7) at row 0, filling rightward then resetting
+- **Timer:** Timer bar fills left-to-right; when it expires (~75 frames), the green/black boundary shifts leftward (grid changes autonomously)
+- **4 unique grid states** observed across 201 frames — timer resets cycle through them
 - **7 levels to complete**
-- **Grid never changed across 111 frames** in V6 run — suggests clicks weren't landing on interactive targets
-- Not yet tested with game-type-aware V8/V9 agent
+- **V6 failure:** Agent only took action 0 (noop) for all 111 frames — older agent version without game-type detection
+- **V11 failure:** Previous recording bug in framework's `_convert_raw_frame_data` drops `action_input`, making recordings show all noops. Logs confirm clicks ARE sent to API.
+- **V12 result:** 0 levels, 201 actions. Stuck detection now works (timer bar at row 0, not row 62-63). Claude clicks on detected object centers — `(48,46)` yellow cross, `(61,29)` maroon square, `(41,29)` grey bar, `(45,39)` between features — but grid never changes in response to clicks.
+- **Key finding:** `extract_objects()` detects 5 objects but mislabels colors (calls maroon "blue", orange "pink"). More critically, none of the detected objects respond to clicks. Interactive targets may be individual pixels (e.g., cyan markers at (38-39, 28-31)) or require undiscovered game mechanics.
+- **Recording bug:** Framework's `_convert_raw_frame_data` doesn't copy `action_input` from API response, so all recordings show `action_id=0`. This masked the noop bug in V6 (couldn't tell if agent was clicking or not).
 
 ## Cost Analysis
 
@@ -147,6 +157,7 @@ Key optimizations:
 | V9 | ls20 | 201 | ~1.8M | ~14K | 0 | ~$6.00 |
 | V10 | ls20 | 201 | ~500K | ~7K | 0 | ~$1.50 |
 | V10.4 | ls20 | 201 | ~570K | ~7K | 0 | ~$1.70 |
+| V12 | vc33 | 201 | ~190K | ~2.5K | 0 | ~$0.60 |
 
 The key cost driver is images. Each 512x512 PNG is ~1500-3000 tokens. Sending images every turn for 200 actions adds ~400K-600K tokens. For movement games, sending every 3rd turn saves ~70% of image cost.
 
@@ -187,17 +198,22 @@ A catalog of bugs encountered during development, useful for anyone building sim
 | Content change interruption fires every step | V10.3 | navigate_to interrupted on every step, defeating its purpose | Player movement changes grid (2 px), timer changes grid (49+ px), threshold too low | Changed to pixel magnitude threshold (>5), then discovered 51px noise floor from timer |
 | Nav queue infinite oscillation | V10.3b→V10.4 | 25+ actions wasted bouncing between two positions | Wall retry counter resets on successful perpendicular moves | Progress-based abort: if no distance improvement after 12 steps, abort |
 | Wrong game model (entire paradigm) | V4→V11 | 6 versions optimizing for non-existent mechanics | Never analyzed recordings to verify switch/rotation hypothesis | Frame-by-frame recording analysis revealed autonomous indicator, no switch |
+| Timer at row 0 breaks content_hash | V11→V12 | Stuck detection fails for vc33 (timer at top, not bottom) | `content_hash` only strips last 2 rows, but vc33 timer is at row 0 | Strip both row 0 AND last 2 rows |
+| Framework drops action_input in recording | V6→V12 | All recordings show action_id=0 regardless of actual action | `_convert_raw_frame_data` doesn't copy `action_input` from API response | Framework bug — not yet fixed upstream |
+| extract_objects mislabels colors | V12 | Claude told "blue object at (61,29)" when it's actually maroon | Color name mapping in extract_objects doesn't match ARC palette | Needs color mapping fix |
+| Stuck counter not reset on manual reset | V12→V12b | Stuck counter accumulates across resets (13, 14, 15...) | Only `on_level_complete()` resets counter, manual reset doesn't trigger it | Reset `stuck_counter` when agent chooses reset action |
 
 ## Version History
 
-| Version | Key Changes | ft09 Score | ls20 Score |
-|---------|------------|------------|------------|
-| V1-V3 | Basic vision + tool calling | 0 | 0 |
-| V4-V6 | MazeNavigator (DFS), multi-layer dedup | 0 | 0 |
-| V7-V8 | Game type detection, game-specific prompts | 2.0 | 0 |
-| V9 | content_hash, confirm spam cap, disable MazeNav | **11.36** | 0 |
-| V10 | navigate_to virtual tool | — | 0 |
-| V10.1 | Wall detection fix | — | 0 |
-| V10.2 | Spatial layout hints | — | 0 |
-| V10.3-10.4 | Content change detection, progress abort | — | 0 |
-| V11 | Corrected game mechanics from recording analysis | — | TBD |
+| Version | Key Changes | ft09 Score | ls20 Score | vc33 Score |
+|---------|------------|------------|------------|------------|
+| V1-V3 | Basic vision + tool calling | 0 | 0 | — |
+| V4-V6 | MazeNavigator (DFS), multi-layer dedup | 0 | 0 | 0 (noop) |
+| V7-V8 | Game type detection, game-specific prompts | 2.0 | 0 | — |
+| V9 | content_hash, confirm spam cap, disable MazeNav | **11.36** | 0 | — |
+| V10 | navigate_to virtual tool | — | 0 | — |
+| V10.1 | Wall detection fix | — | 0 | — |
+| V10.2 | Spatial layout hints | — | 0 | — |
+| V10.3-10.4 | Content change detection, progress abort | — | 0 | — |
+| V11 | Corrected game mechanics from recording analysis | — | 0 | — |
+| V12 | Fix content_hash for top-row timers, click-only prompt | — | — | 0 |
