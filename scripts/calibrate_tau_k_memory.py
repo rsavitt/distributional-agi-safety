@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
 """Run a seeded baseline vs Arm A vs Arm B calibration for tau_min and K_max.
 
-This script uses the memory-tier scenario as a concrete proxy for two-gate
-self-modification governance:
+This script uses the memory-tier scenario and maps the two-gate policy to
+governance controls that are active in the current SWARM implementation:
 
-- tau_min proxy: ``governance.memory_promotion_min_quality``
+- tau_min proxy: ``governance.refinery_p_threshold``
 - K_max proxy: ``governance.memory_write_rate_limit_per_epoch``
 
 Arms:
-- baseline: no memory promotion gate, no memory write cap
-- arm_a: promotion gate only (sweep tau)
-- arm_b: promotion gate + write cap (sweep tau x K)
+- baseline: no refinery gate, no write cap
+- arm_a: refinery gate only (sweep tau)
+- arm_b: refinery gate + write cap (sweep tau x K)
 """
 
 from __future__ import annotations
@@ -87,21 +87,21 @@ def _configure_arm(
     gov.transaction_tax_rate = 0.0
     gov.reputation_decay_rate = 1.0
 
-    # Shared memory-governance defaults for calibration.
+    # Shared governance defaults for calibration.
+    gov.refinery_enabled = False
+    gov.memory_write_rate_limit_enabled = False
+    gov.memory_promotion_gate_enabled = False
     gov.memory_cross_verification_enabled = False
     gov.memory_provenance_enabled = False
-    gov.memory_promotion_min_verifications = 1
 
     if arm_cfg.arm == "baseline":
-        gov.memory_promotion_gate_enabled = False
-        gov.memory_write_rate_limit_enabled = False
+        pass
     elif arm_cfg.arm == "arm_a":
-        gov.memory_promotion_gate_enabled = True
-        gov.memory_promotion_min_quality = float(arm_cfg.tau_min)
-        gov.memory_write_rate_limit_enabled = False
+        gov.refinery_enabled = True
+        gov.refinery_p_threshold = float(arm_cfg.tau_min)
     elif arm_cfg.arm == "arm_b":
-        gov.memory_promotion_gate_enabled = True
-        gov.memory_promotion_min_quality = float(arm_cfg.tau_min)
+        gov.refinery_enabled = True
+        gov.refinery_p_threshold = float(arm_cfg.tau_min)
         gov.memory_write_rate_limit_enabled = True
         gov.memory_write_rate_limit_per_epoch = int(arm_cfg.k_max)
     else:
@@ -130,9 +130,6 @@ def _run_single(base_path: Path, arm_cfg: ArmConfig, n_epochs: int, steps_per_ep
     governance_cost_events = [
         e for e in events if e.event_type == EventType.GOVERNANCE_COST_APPLIED
     ]
-    promotion_gate_hits = sum(
-        1 for e in governance_cost_events if "memory_promotion_gate" in e.payload.get("levers", [])
-    )
     write_cap_hits = sum(
         1 for e in governance_cost_events if "memory_write_rate_limit" in e.payload.get("levers", [])
     )
@@ -146,6 +143,7 @@ def _run_single(base_path: Path, arm_cfg: ArmConfig, n_epochs: int, steps_per_ep
         "steps_per_epoch": steps_per_epoch,
         "total_interactions": total_interactions,
         "accepted_interactions": accepted_interactions,
+        "rejected_interactions": total_interactions - accepted_interactions,
         "acceptance_rate": (accepted_interactions / total_interactions) if total_interactions else 0.0,
         "avg_toxicity": avg_toxicity,
         "total_welfare": total_welfare,
@@ -160,7 +158,6 @@ def _run_single(base_path: Path, arm_cfg: ArmConfig, n_epochs: int, steps_per_ep
         "memory_promotions": sum(1 for e in events if e.event_type == EventType.MEMORY_PROMOTED),
         "memory_challenges": sum(1 for e in events if e.event_type == EventType.MEMORY_CHALLENGED),
         "memory_reverted": sum(1 for e in events if e.event_type == EventType.MEMORY_REVERTED),
-        "promotion_gate_hits": promotion_gate_hits,
         "write_cap_hits": write_cap_hits,
         "governance_cost_events": len(governance_cost_events),
     }
@@ -178,6 +175,7 @@ def _aggregate(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
 
     metrics = [
         "acceptance_rate",
+        "rejected_interactions",
         "avg_toxicity",
         "total_welfare",
         "avg_welfare_per_epoch",
@@ -191,7 +189,6 @@ def _aggregate(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         "memory_promotions",
         "memory_challenges",
         "memory_reverted",
-        "promotion_gate_hits",
         "write_cap_hits",
         "governance_cost_events",
     ]
@@ -222,6 +219,7 @@ def _score(summary: Dict[str, Any], baseline: Dict[str, Any]) -> float:
     filter_gain = summary["governance_filter_rate_mean"] - baseline["governance_filter_rate_mean"]
     tox_gain = baseline["avg_toxicity_mean"] - summary["avg_toxicity_mean"]
     welfare_ratio = summary["total_welfare_mean"] / max(abs(baseline["total_welfare_mean"]), 1.0)
+    acceptance_delta = summary["acceptance_rate_mean"] - baseline["acceptance_rate_mean"]
 
     return (
         3.0 * poison_gain
@@ -229,6 +227,7 @@ def _score(summary: Dict[str, Any], baseline: Dict[str, Any]) -> float:
         + 2.0 * filter_gain
         + 1.0 * tox_gain
         + 0.5 * welfare_ratio
+        + 2.0 * acceptance_delta
     )
 
 
@@ -309,13 +308,13 @@ def main() -> int:
     parser.add_argument(
         "--tau-values",
         type=str,
-        default="0.45,0.50,0.55,0.60",
+        default="0.45,0.55,0.65",
         help="Comma-separated tau_min candidates for Arm A/B",
     )
     parser.add_argument(
         "--k-values",
         type=str,
-        default="12,16,20",
+        default="2,4,6",
         help="Comma-separated K_max candidates for Arm B",
     )
     parser.add_argument("--epochs", type=int, default=10, help="Epochs per run")
