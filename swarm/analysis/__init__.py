@@ -27,11 +27,23 @@ from swarm.analysis.sweep import (
 if TYPE_CHECKING:
     from swarm.analysis.theme import (
         COLORS as COLORS,
+    )
+    from swarm.analysis.theme import (
         SWARM_LIGHT_STYLE as SWARM_LIGHT_STYLE,
+    )
+    from swarm.analysis.theme import (
         SWARM_STYLE as SWARM_STYLE,
+    )
+    from swarm.analysis.theme import (
         agent_color as agent_color,
+    )
+    from swarm.analysis.theme import (
         apply_theme as apply_theme,
+    )
+    from swarm.analysis.theme import (
         metric_color as metric_color,
+    )
+    from swarm.analysis.theme import (
         swarm_theme as swarm_theme,
     )
 
