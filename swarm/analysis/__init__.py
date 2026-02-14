@@ -23,12 +23,12 @@ from swarm.analysis.sweep import (
 # Visual upgrade modules (lazy-importable via swarm.analysis.<module>)
 from swarm.analysis.theme import (  # noqa: F401
     COLORS,
-    SWARM_STYLE,
     SWARM_LIGHT_STYLE,
-    apply_theme,
-    swarm_theme,
+    SWARM_STYLE,
     agent_color,
+    apply_theme,
     metric_color,
+    swarm_theme,
 )
 
 __all__ = [

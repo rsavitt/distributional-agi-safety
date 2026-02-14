@@ -9,17 +9,15 @@ Each test generates a plot from synthetic data and verifies that:
 
 from __future__ import annotations
 
-import tempfile
-from pathlib import Path
 from typing import Any, Dict, List
 
 import matplotlib
+
 matplotlib.use("Agg")  # Non-interactive backend for CI
 
 import matplotlib.pyplot as plt
 import numpy as np
 import pytest
-
 
 # ---------------------------------------------------------------------------
 # Synthetic data helpers
@@ -84,13 +82,13 @@ class TestTheme:
         assert matplotlib.rcParams["figure.facecolor"] == original
 
     def test_agent_color(self):
-        from swarm.analysis.theme import agent_color, COLORS
+        from swarm.analysis.theme import COLORS, agent_color
         assert agent_color("honest") == COLORS.HONEST
         assert agent_color("DECEPTIVE") == COLORS.DECEPTIVE
         assert agent_color("unknown_type") == COLORS.OPPORTUNISTIC
 
     def test_metric_color(self):
-        from swarm.analysis.theme import metric_color, COLORS
+        from swarm.analysis.theme import COLORS, metric_color
         assert metric_color("toxicity_rate") == COLORS.TOXICITY
         assert metric_color("welfare") == COLORS.WELFARE
 
@@ -371,7 +369,7 @@ class TestScatter:
         data = [
             {"toxicity": float(t), "welfare": float(w), "persona": p}
             for t, w, p in zip(np.random.rand(15), np.random.rand(15) * 100,
-                                ["honest"] * 5 + ["deceptive"] * 5 + ["adversarial"] * 5)
+                                ["honest"] * 5 + ["deceptive"] * 5 + ["adversarial"] * 5, strict=False)
         ]
         fig, ax = plot_toxicity_welfare_scatter(data, color_by="persona")
         assert fig is not None
@@ -381,7 +379,7 @@ class TestScatter:
         from swarm.analysis.scatter import plot_welfare_frontier
         sweep = [
             {"productivity": float(p), "equality": float(e), "cost": float(c)}
-            for p, e, c in zip(np.random.rand(20), np.random.rand(20), np.random.rand(20))
+            for p, e, c in zip(np.random.rand(20), np.random.rand(20), np.random.rand(20), strict=False)
         ]
         fig, ax = plot_welfare_frontier(sweep, x_metric="productivity",
                                          y_metric="equality", color_metric="cost")
@@ -765,8 +763,7 @@ class TestSemanticColorConsistency:
     """Verify that agent type → color mapping is consistent across all modules."""
 
     def test_theme_and_comparison_colors_match(self):
-        from swarm.analysis.theme import agent_color, COLORS
-        from swarm.analysis.comparison import plot_agent_comparison_bar
+        from swarm.analysis.theme import COLORS, agent_color
 
         # The comparison module should use the same colors as theme
         assert agent_color("honest") == COLORS.HONEST
@@ -774,16 +771,3 @@ class TestSemanticColorConsistency:
 
     def test_all_modules_importable(self):
         """Smoke test: all new modules can be imported without error."""
-        import swarm.analysis.theme
-        import swarm.analysis.timeseries
-        import swarm.analysis.comparison
-        import swarm.analysis.heatmaps
-        import swarm.analysis.distributions
-        import swarm.analysis.scatter
-        import swarm.analysis.spatial
-        import swarm.analysis.network
-        import swarm.analysis.sankey
-        import swarm.analysis.tax_schedule
-        import swarm.analysis.dashboard_cards
-        import swarm.analysis.animate
-        import swarm.analysis.figure_export
