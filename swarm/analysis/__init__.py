@@ -10,6 +10,7 @@ from swarm.analysis.dashboard import (
     extract_metrics_from_orchestrator,
     run_dashboard,
 )
+from swarm.analysis.phylogeny import generate_phylogeny
 from swarm.analysis.sweep import (
     SweepConfig,
     SweepParameter,
@@ -34,4 +35,6 @@ __all__ = [
     "extract_agent_snapshots",
     "create_dashboard_file",
     "run_dashboard",
+    # Phylogeny
+    "generate_phylogeny",
 ]
