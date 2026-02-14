@@ -18,6 +18,7 @@ from swarm.core.sandbox import (
     SandboxConfig,
     SandboxEnvironment,
     SandboxFileSystem,
+    _sanitize_error,
     execute_with_retry,
     execute_with_retry_sync,
 )
@@ -795,3 +796,117 @@ class TestEndToEnd:
         assert result.succeeded
         assert result.value == 42
         assert playground.iteration_count == 2
+
+
+# ── _sanitize_error ──────────────────────────────────────────────────────────
+
+
+class TestSanitizeError:
+    def test_none_returns_empty(self):
+        assert _sanitize_error(None) == ""
+
+    def test_basic_error(self):
+        result = _sanitize_error(ValueError("bad input"))
+        assert result == "ValueError: bad input"
+
+    def test_truncation(self):
+        long_msg = "x" * 300
+        result = _sanitize_error(Exception(long_msg), max_len=50)
+        assert "... [truncated]" in result
+        # Type prefix + ": " + 50 chars + truncation marker
+        assert result.startswith("Exception: ")
+
+    def test_credential_url_redacted(self):
+        err = Exception("Connection to https://user:s3cret@host.com/api failed")
+        result = _sanitize_error(err)
+        assert "s3cret" not in result
+        assert "[REDACTED]" in result
+
+    def test_token_redacted(self):
+        err = Exception("Auth failed: token=abc123xyz secret: mypassword")
+        result = _sanitize_error(err)
+        assert "abc123xyz" not in result
+        assert "mypassword" not in result
+        assert "[REDACTED]" in result
+
+
+# ── Checkpoint collision after eviction ──────────────────────────────────────
+
+
+class TestCheckpointEviction:
+    def test_monotonic_labels_no_collision(self):
+        """After eviction, auto-generated labels must not collide."""
+        sandbox = SandboxEnvironment(SandboxConfig(max_checkpoints=3))
+        ids = []
+        for _ in range(5):
+            ids.append(sandbox.checkpoint())
+        # All generated IDs must be unique (even though eviction removed some)
+        assert len(set(ids)) == 5
+        # Only 3 remain (max_checkpoints=3)
+        assert len(sandbox.list_checkpoints()) == 3
+
+    def test_eviction_removes_oldest(self):
+        sandbox = SandboxEnvironment(SandboxConfig(max_checkpoints=2))
+        cp1 = sandbox.checkpoint("first")
+        sandbox.checkpoint("second")
+        sandbox.checkpoint("third")  # evicts "first"
+        assert "first" not in sandbox.list_checkpoints()
+        assert len(sandbox.list_checkpoints()) == 2
+        with pytest.raises(KeyError):
+            sandbox.restore(cp1)
+
+
+# ── run_sync failover in async context ───────────────────────────────────────
+
+
+class TestRunSyncFailoverAsync:
+    @pytest.mark.asyncio
+    async def test_run_sync_failover_inside_async(self):
+        """run_sync with failover must not crash when an event loop is running."""
+        chain = FailoverChain([_SuccessBackend()])
+        playground = AgentPlayground(
+            PlaygroundConfig(
+                sandbox_config=SandboxConfig(
+                    retry_policy=RetryPolicy(max_retries=0)
+                )
+            ),
+            failover_chain=chain,
+        )
+
+        def failing_task(sb: SandboxEnvironment):
+            raise Exception("primary fails")
+
+        # This runs inside an async test → event loop is already running
+        result = playground.run_sync(failing_task)
+        # Failover should succeed via ThreadPoolExecutor fallback
+        assert result.succeeded
+
+
+# ── Aggregate storage limit ──────────────────────────────────────────────────
+
+
+class TestAggregateStorageLimit:
+    def test_aggregate_limit_enforced(self):
+        sandbox = SandboxEnvironment(
+            SandboxConfig(max_total_bytes=100, max_file_size=1_000_000)
+        )
+        sandbox.write_file("/a.txt", "x" * 50)
+        sandbox.write_file("/b.txt", "y" * 40)
+        with pytest.raises(ValueError, match="Aggregate storage limit"):
+            sandbox.write_file("/c.txt", "z" * 20)  # 50+40+20 > 100
+
+
+# ── Bounded execution log ────────────────────────────────────────────────────
+
+
+class TestBoundedExecutionLog:
+    def test_log_bounded_by_config(self):
+        sandbox = SandboxEnvironment(
+            SandboxConfig(
+                max_log_entries=3,
+                retry_policy=RetryPolicy(max_retries=0),
+            )
+        )
+        for i in range(5):
+            sandbox.execute_sync(lambda sb, _i=i: _i)
+        assert len(sandbox.execution_log) == 3

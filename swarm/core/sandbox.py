@@ -12,15 +12,18 @@ write code, inspect files, and learn — with production-grade resilience:
 from __future__ import annotations
 
 import asyncio
+import collections
+import concurrent.futures
 import copy
 import hashlib
 import logging
 import random
+import re
 import time
 import uuid
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import (
     Any,
@@ -37,6 +40,30 @@ from typing import (
 logger = logging.getLogger(__name__)
 
 T = TypeVar("T")
+
+
+def _utcnow() -> datetime:
+    """Return timezone-aware UTC now (avoids deprecated ``datetime.utcnow()``)."""
+    return datetime.now(timezone.utc)
+
+
+_CREDENTIAL_PATTERNS = [
+    re.compile(r"://[^@\s]+@"),  # URLs with user:pass@host
+    re.compile(r"(?i)(key|token|password|secret|credential)\s*[=:]\s*\S+"),
+]
+
+
+def _sanitize_error(error: object, max_len: int = 200) -> str:
+    """Return a redacted, length-bounded string representation of *error*."""
+    if error is None:
+        return ""
+    type_name = type(error).__name__
+    msg = str(error)
+    for pat in _CREDENTIAL_PATTERNS:
+        msg = pat.sub("[REDACTED]", msg)
+    if len(msg) > max_len:
+        msg = msg[: max_len] + "... [truncated]"
+    return f"{type_name}: {msg}"
 
 
 # ---------------------------------------------------------------------------
@@ -214,8 +241,8 @@ class FileEntry:
 
     path: str
     content: str
-    created_at: datetime = field(default_factory=datetime.utcnow)
-    modified_at: datetime = field(default_factory=datetime.utcnow)
+    created_at: datetime = field(default_factory=_utcnow)
+    modified_at: datetime = field(default_factory=_utcnow)
     checksum: str = ""
 
     def __post_init__(self) -> None:
@@ -245,7 +272,7 @@ class SandboxFileSystem:
     def write(self, path: str, content: str) -> FileEntry:
         """Create or overwrite a file."""
         norm = self._normalize(path)
-        now = datetime.utcnow()
+        now = _utcnow()
         entry = FileEntry(
             path=norm,
             content=content,
@@ -331,6 +358,9 @@ class SandboxConfig:
     sandbox_id: str = field(default_factory=lambda: str(uuid.uuid4())[:8])
     max_file_size: int = 1_000_000  # bytes
     max_file_count: int = 100
+    max_total_bytes: int = 50_000_000  # aggregate storage limit
+    max_checkpoints: int = 20  # eviction threshold
+    max_log_entries: int = 500  # bounded execution log
     execution_timeout: float = 30.0  # seconds
     retry_policy: RetryPolicy = field(default_factory=RetryPolicy)
     enable_logging: bool = True
@@ -358,14 +388,24 @@ class SandboxEnvironment:
         self.config = config or SandboxConfig()
         self.fs = SandboxFileSystem()
         self._checkpoints: Dict[str, Dict[str, FileEntry]] = {}
-        self._execution_log: List[Dict[str, Any]] = []
-        self._created_at = datetime.utcnow()
+        self._internal_checkpoints: Dict[str, Dict[str, FileEntry]] = {}
+        self._checkpoint_counter: int = 0
+        self._execution_log: collections.deque[Dict[str, Any]] = collections.deque(
+            maxlen=self.config.max_log_entries
+        )
+        self._created_at = _utcnow()
 
     # -- filesystem helpers --------------------------------------------------
 
     def write_file(self, path: str, content: str) -> FileEntry:
-        """Write a file into the sandbox (with limit checks)."""
-        if len(content.encode()) > self.config.max_file_size:
+        """Write a file into the sandbox (with limit checks).
+
+        .. warning::
+           The sandbox filesystem is in-memory only. Do not store secrets or
+           credentials — contents may appear in logs or checkpoints.
+        """
+        content_bytes = len(content.encode())
+        if content_bytes > self.config.max_file_size:
             raise ValueError(
                 f"File exceeds max size ({self.config.max_file_size} bytes)"
             )
@@ -375,6 +415,14 @@ class SandboxEnvironment:
         ):
             raise ValueError(
                 f"Sandbox file limit reached ({self.config.max_file_count})"
+            )
+        # Aggregate storage check
+        current_total = sum(
+            len(e.content.encode()) for e in self.fs._files.values()
+        )
+        if current_total + content_bytes > self.config.max_total_bytes:
+            raise ValueError(
+                f"Aggregate storage limit reached ({self.config.max_total_bytes} bytes)"
             )
         return self.fs.write(path, content)
 
@@ -394,15 +442,28 @@ class SandboxEnvironment:
 
     def checkpoint(self, label: Optional[str] = None) -> str:
         """Snapshot the current filesystem state. Returns checkpoint id."""
-        cp_id = label or f"cp-{len(self._checkpoints)}"
+        self._checkpoint_counter += 1
+        cp_id = label or f"cp-{self._checkpoint_counter}"
         self._checkpoints[cp_id] = self.fs.snapshot()
+        self._evict_checkpoints()
         return cp_id
+
+    def _evict_checkpoints(self) -> None:
+        """Remove oldest checkpoints when the limit is exceeded."""
+        limit = self.config.max_checkpoints
+        while len(self._checkpoints) > limit:
+            oldest = next(iter(self._checkpoints))
+            del self._checkpoints[oldest]
 
     def restore(self, checkpoint_id: str) -> None:
         """Restore filesystem to a previous checkpoint."""
-        if checkpoint_id not in self._checkpoints:
+        # Check both user and internal checkpoints
+        if checkpoint_id in self._checkpoints:
+            self.fs.restore(self._checkpoints[checkpoint_id])
+        elif checkpoint_id in self._internal_checkpoints:
+            self.fs.restore(self._internal_checkpoints[checkpoint_id])
+        else:
             raise KeyError(f"Unknown checkpoint: {checkpoint_id}")
-        self.fs.restore(self._checkpoints[checkpoint_id])
 
     def list_checkpoints(self) -> List[str]:
         return list(self._checkpoints.keys())
@@ -425,8 +486,9 @@ class SandboxEnvironment:
         effective_timeout = timeout or self.config.execution_timeout
         start = time.monotonic()
 
-        # Checkpoint before execution so we can roll back on failure
-        rollback_id = self.checkpoint(f"pre-exec-{uuid.uuid4().hex[:6]}")
+        # Internal checkpoint for rollback isolation (not user-visible)
+        rollback_id = f"_internal-exec-{uuid.uuid4().hex[:6]}"
+        self._internal_checkpoints[rollback_id] = self.fs.snapshot()
 
         retries_used: List[Dict[str, Any]] = []
 
@@ -434,9 +496,9 @@ class SandboxEnvironment:
             retries_used.append(
                 {
                     "attempt": attempt,
-                    "error": str(error),
+                    "error": _sanitize_error(error),
                     "delay": delay,
-                    "timestamp": datetime.utcnow().isoformat(),
+                    "timestamp": _utcnow().isoformat(),
                 }
             )
             # Roll back to pre-execution state before re-trying
@@ -496,16 +558,17 @@ class SandboxEnvironment:
         """Synchronous execution with retry."""
         policy = retry_policy or self.config.retry_policy
         start = time.monotonic()
-        rollback_id = self.checkpoint(f"pre-exec-{uuid.uuid4().hex[:6]}")
+        rollback_id = f"_internal-exec-{uuid.uuid4().hex[:6]}"
+        self._internal_checkpoints[rollback_id] = self.fs.snapshot()
         retries_used: List[Dict[str, Any]] = []
 
         def _on_retry(attempt: int, error: Exception, delay: float) -> None:
             retries_used.append(
                 {
                     "attempt": attempt,
-                    "error": str(error),
+                    "error": _sanitize_error(error),
                     "delay": delay,
-                    "timestamp": datetime.utcnow().isoformat(),
+                    "timestamp": _utcnow().isoformat(),
                 }
             )
             self.restore(rollback_id)
@@ -546,8 +609,8 @@ class SandboxEnvironment:
                     "status": result.status.value,
                     "duration_ms": result.duration_ms,
                     "retries": result.retry_stats.retries,
-                    "error": str(result.error) if result.error else None,
-                    "timestamp": datetime.utcnow().isoformat(),
+                    "error": _sanitize_error(result.error) if result.error else None,
+                    "timestamp": _utcnow().isoformat(),
                 }
             )
 
@@ -559,6 +622,7 @@ class SandboxEnvironment:
         """Clear all files, checkpoints, and logs."""
         self.fs.clear()
         self._checkpoints.clear()
+        self._internal_checkpoints.clear()
         self._execution_log.clear()
 
 
@@ -635,7 +699,7 @@ class FailoverChain:
                     backends_tried=tried,
                     failover_errors=errors,
                 )
-            errors[backend.name] = str(exec_result.error)
+            errors[backend.name] = _sanitize_error(exec_result.error)
             logger.warning(
                 "Backend %s failed, trying next (%d/%d): %s",
                 backend.name,
@@ -768,10 +832,20 @@ class AgentPlayground:
         if self.config.learn_from_failures:
             self._record_failure(result)
 
-        # Failover needs async — run it in an event loop
-        fo_result = asyncio.get_event_loop().run_until_complete(
-            self._failover.execute(self.sandbox)
-        )
+        # Failover needs async — detect running loop to avoid crash
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = None
+
+        if loop is not None and loop.is_running():
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                future = executor.submit(
+                    asyncio.run, self._failover.execute(self.sandbox)
+                )
+                fo_result = future.result()
+        else:
+            fo_result = asyncio.run(self._failover.execute(self.sandbox))
         self._history.append(fo_result.result)
         return fo_result.result  # type: ignore[return-value]
 
@@ -804,7 +878,7 @@ class AgentPlayground:
         failure_doc = (
             f"# Execution failure at iteration {self._iterations}\n"
             f"status: {result.status.value}\n"
-            f"error: {result.error}\n"
+            f"error: {_sanitize_error(result.error)}\n"
             f"retries: {result.retry_stats.retries}\n"
             f"duration_ms: {result.duration_ms:.1f}\n"
         )
