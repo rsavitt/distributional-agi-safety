@@ -62,7 +62,7 @@ CREATE TABLE IF NOT EXISTS posts (
 _CREATE_VOTES_TABLE = """
 CREATE TABLE IF NOT EXISTS votes (
     vote_id   INTEGER PRIMARY KEY AUTOINCREMENT,
-    post_id   TEXT NOT NULL,
+    post_id   TEXT NOT NULL REFERENCES posts(post_id),
     agent_id  TEXT NOT NULL,
     direction INTEGER NOT NULL,  -- +1 upvote, -1 downvote
     voted_at  TEXT NOT NULL,
@@ -116,6 +116,7 @@ class RunStore:
         conn = sqlite3.connect(str(self._db_path), timeout=10)
         conn.execute("PRAGMA journal_mode=WAL;")
         conn.execute("PRAGMA busy_timeout=5000;")
+        conn.execute("PRAGMA foreign_keys=ON;")
         conn.row_factory = sqlite3.Row
         return conn
 
@@ -124,51 +125,55 @@ class RunStore:
     # ------------------------------------------------------------------
 
     def save(self, run: RunResponse) -> None:
-        """Upsert a run into both cache and DB."""
+        """Upsert a run into both cache and DB.
+
+        Lock covers both cache and DB write to prevent inconsistency
+        (security fix 1.7).
+        """
+        summary_json = (
+            run.summary_metrics.model_dump_json() if run.summary_metrics else None
+        )
+
         with self._lock:
-            # Always update cache for active runs
+            # Update cache for active runs
             terminal = {RunStatus.COMPLETED, RunStatus.FAILED, RunStatus.CANCELLED}
             if run.status not in terminal:
                 self._cache[run.run_id] = run
             else:
                 self._cache.pop(run.run_id, None)
 
-        summary_json = (
-            run.summary_metrics.model_dump_json() if run.summary_metrics else None
-        )
-
-        with self._connect() as conn:
-            conn.execute(
-                """
-                INSERT INTO runs
-                    (run_id, scenario_id, status, visibility, agent_id,
-                     created_at, started_at, completed_at, progress,
-                     summary_json, status_url, public_url, error)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT(run_id) DO UPDATE SET
-                    status=excluded.status,
-                    started_at=excluded.started_at,
-                    completed_at=excluded.completed_at,
-                    progress=excluded.progress,
-                    summary_json=excluded.summary_json,
-                    error=excluded.error
-                """,
-                (
-                    run.run_id,
-                    run.scenario_id,
-                    run.status.value,
-                    run.visibility.value,
-                    run.agent_id,
-                    _iso(run.created_at),
-                    _iso(run.started_at),
-                    _iso(run.completed_at),
-                    run.progress,
-                    summary_json,
-                    run.status_url,
-                    run.public_url,
-                    run.error,
-                ),
-            )
+            with self._connect() as conn:
+                conn.execute(
+                    """
+                    INSERT INTO runs
+                        (run_id, scenario_id, status, visibility, agent_id,
+                         created_at, started_at, completed_at, progress,
+                         summary_json, status_url, public_url, error)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(run_id) DO UPDATE SET
+                        status=excluded.status,
+                        started_at=excluded.started_at,
+                        completed_at=excluded.completed_at,
+                        progress=excluded.progress,
+                        summary_json=excluded.summary_json,
+                        error=excluded.error
+                    """,
+                    (
+                        run.run_id,
+                        run.scenario_id,
+                        run.status.value,
+                        run.visibility.value,
+                        run.agent_id,
+                        _iso(run.created_at),
+                        _iso(run.started_at),
+                        _iso(run.completed_at),
+                        run.progress,
+                        summary_json,
+                        run.status_url,
+                        run.public_url,
+                        run.error,
+                    ),
+                )
 
     # ------------------------------------------------------------------
     # Read
@@ -231,7 +236,10 @@ class RunStore:
     def _row_to_run(self, row: sqlite3.Row) -> RunResponse:
         summary = None
         if row["summary_json"]:
-            summary = RunSummaryMetrics.model_validate_json(row["summary_json"])
+            try:
+                summary = RunSummaryMetrics.model_validate_json(row["summary_json"])
+            except Exception:
+                logger.warning("Corrupt summary_json for run %s", row["run_id"])
         return RunResponse(
             run_id=row["run_id"],
             scenario_id=row["scenario_id"],
@@ -269,6 +277,7 @@ class PostStore:
         conn = sqlite3.connect(str(self._db_path), timeout=10)
         conn.execute("PRAGMA journal_mode=WAL;")
         conn.execute("PRAGMA busy_timeout=5000;")
+        conn.execute("PRAGMA foreign_keys=ON;")
         conn.row_factory = sqlite3.Row
         return conn
 
@@ -308,6 +317,12 @@ class PostStore:
     def vote(self, post_id: str, agent_id: str, direction: int) -> dict:
         """Cast or change a vote. direction: +1 (up) or -1 (down).
 
+        Uses BEGIN IMMEDIATE to take a write lock upfront, preventing
+        race conditions between concurrent voters (security fix 1.2).
+
+        Vote counts are recomputed from the votes table rather than
+        maintained as denormalized counters, eliminating drift.
+
         Returns {"upvotes": int, "downvotes": int, "your_vote": int|None}.
         """
         if direction not in (1, -1):
@@ -315,8 +330,12 @@ class PostStore:
 
         now = datetime.now(timezone.utc).isoformat()
 
-        with self._connect() as conn:
-            # Check existing vote
+        conn = self._connect()
+        try:
+            # BEGIN IMMEDIATE acquires a write lock upfront, preventing
+            # concurrent vote operations from interleaving.
+            conn.execute("BEGIN IMMEDIATE")
+
             existing = conn.execute(
                 "SELECT direction FROM votes WHERE post_id = ? AND agent_id = ?",
                 (post_id, agent_id),
@@ -329,16 +348,6 @@ class PostStore:
                         "DELETE FROM votes WHERE post_id = ? AND agent_id = ?",
                         (post_id, agent_id),
                     )
-                    if direction == 1:
-                        conn.execute(
-                            "UPDATE posts SET upvotes = MAX(0, upvotes - 1) WHERE post_id = ?",
-                            (post_id,),
-                        )
-                    else:
-                        conn.execute(
-                            "UPDATE posts SET downvotes = MAX(0, downvotes - 1) WHERE post_id = ?",
-                            (post_id,),
-                        )
                     your_vote = None
                 else:
                     # Switch vote
@@ -346,16 +355,6 @@ class PostStore:
                         "UPDATE votes SET direction = ?, voted_at = ? WHERE post_id = ? AND agent_id = ?",
                         (direction, now, post_id, agent_id),
                     )
-                    if direction == 1:
-                        conn.execute(
-                            "UPDATE posts SET upvotes = upvotes + 1, downvotes = MAX(0, downvotes - 1) WHERE post_id = ?",
-                            (post_id,),
-                        )
-                    else:
-                        conn.execute(
-                            "UPDATE posts SET downvotes = downvotes + 1, upvotes = MAX(0, upvotes - 1) WHERE post_id = ?",
-                            (post_id,),
-                        )
                     your_vote = direction
             else:
                 # New vote
@@ -363,31 +362,38 @@ class PostStore:
                     "INSERT INTO votes (post_id, agent_id, direction, voted_at) VALUES (?, ?, ?, ?)",
                     (post_id, agent_id, direction, now),
                 )
-                if direction == 1:
-                    conn.execute(
-                        "UPDATE posts SET upvotes = upvotes + 1 WHERE post_id = ?",
-                        (post_id,),
-                    )
-                else:
-                    conn.execute(
-                        "UPDATE posts SET downvotes = downvotes + 1 WHERE post_id = ?",
-                        (post_id,),
-                    )
                 your_vote = direction
 
-            # Fetch updated counts
-            row = conn.execute(
-                "SELECT upvotes, downvotes FROM posts WHERE post_id = ?",
+            # Recompute counts from ground truth (votes table) to prevent drift
+            up_row = conn.execute(
+                "SELECT COUNT(*) FROM votes WHERE post_id = ? AND direction = 1",
+                (post_id,),
+            ).fetchone()
+            down_row = conn.execute(
+                "SELECT COUNT(*) FROM votes WHERE post_id = ? AND direction = -1",
                 (post_id,),
             ).fetchone()
 
-        if row is None:
-            raise ValueError(f"Post {post_id} not found")
+            upvotes = up_row[0] if up_row else 0
+            downvotes = down_row[0] if down_row else 0
+
+            conn.execute(
+                "UPDATE posts SET upvotes = ?, downvotes = ? WHERE post_id = ?",
+                (upvotes, downvotes, post_id),
+            )
+
+            conn.execute("COMMIT")
+
+        except Exception:
+            conn.execute("ROLLBACK")
+            raise
+        finally:
+            conn.close()
 
         return {
             "post_id": post_id,
-            "upvotes": row["upvotes"],
-            "downvotes": row["downvotes"],
+            "upvotes": upvotes,
+            "downvotes": downvotes,
             "your_vote": your_vote,
         }
 
@@ -412,28 +418,33 @@ class PostStore:
         limit: int = 20,
         offset: int = 0,
     ) -> list[PostResponse]:
-        """List posts newest first, with optional filters."""
+        """List posts newest first, with optional filters.
+
+        Tag filtering is pushed into the SQL query using json_each()
+        to avoid post-LIMIT filtering issues (security fix 3.2).
+        """
         conditions = []
         params: list = []
 
         if agent_id:
-            conditions.append("agent_id = ?")
+            conditions.append("p.agent_id = ?")
             params.append(agent_id)
 
+        if tag:
+            # Use a subquery with json_each to filter tags in SQL
+            conditions.append(
+                "EXISTS (SELECT 1 FROM json_each(p.tags) WHERE json_each.value = ?)"
+            )
+            params.append(tag)
+
         where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
-        query = f"SELECT * FROM posts {where} ORDER BY published_at DESC LIMIT ? OFFSET ?"
+        query = f"SELECT p.* FROM posts p {where} ORDER BY p.published_at DESC LIMIT ? OFFSET ?"
         params.extend([limit, offset])
 
         with self._connect() as conn:
             rows = conn.execute(query, params).fetchall()
 
-        posts = [self._row_to_post(r) for r in rows]
-
-        # Tag filter is applied in Python since tags are JSON
-        if tag:
-            posts = [p for p in posts if tag in p.tags]
-
-        return posts
+        return [self._row_to_post(r) for r in rows]
 
     def total_count(self) -> int:
         with self._connect() as conn:
@@ -454,14 +465,25 @@ class PostStore:
     # ------------------------------------------------------------------
 
     def _row_to_post(self, row: sqlite3.Row) -> PostResponse:
+        try:
+            key_metrics = json.loads(row["key_metrics"])
+        except (json.JSONDecodeError, TypeError):
+            logger.warning("Corrupt key_metrics for post %s", row["post_id"])
+            key_metrics = {}
+        try:
+            tags = json.loads(row["tags"])
+        except (json.JSONDecodeError, TypeError):
+            logger.warning("Corrupt tags for post %s", row["post_id"])
+            tags = []
+
         return PostResponse(
             post_id=row["post_id"],
             run_id=row["run_id"],
             agent_id=row["agent_id"],
             title=row["title"],
             blurb=row["blurb"],
-            key_metrics=json.loads(row["key_metrics"]),
-            tags=json.loads(row["tags"]),
+            key_metrics=key_metrics,
+            tags=tags,
             published_at=_parse_dt(row["published_at"]),  # type: ignore[arg-type]
             run_url=row["run_url"],
         )

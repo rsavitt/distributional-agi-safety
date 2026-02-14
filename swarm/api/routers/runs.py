@@ -9,8 +9,10 @@ Implements Patterns A/B/C from the agent API design:
   GET  /api/runs/:id/artifacts — list / download run artifacts
 """
 
+import ipaddress
 import logging
 import re
+import socket
 import threading
 import uuid
 from datetime import datetime, timezone
@@ -50,6 +52,9 @@ _run_callbacks: dict[str, str] = {}
 
 # Hard cap on total stored runs to prevent unbounded growth.
 MAX_STORED_RUNS = 100_000
+
+# Max artifact files returned per listing request (DoS protection).
+MAX_ARTIFACT_FILES = 1_000
 
 # Scenario allowlist: only these scenario IDs can be run via the API.
 _SCENARIO_ALLOWLIST: set[str] = set()
@@ -113,15 +118,70 @@ def _resolve_scenario_path(scenario_id: str) -> Path:
         raise HTTPException(status_code=500, detail="Scenarios directory not found")
     path = _SCENARIOS_DIR / f"{scenario_id}.yaml"
     resolved = path.resolve()
-    if not str(resolved).startswith(str(_SCENARIOS_DIR.resolve())):
+    if not str(resolved).startswith(str(_SCENARIOS_DIR.resolve()) + "/"):
         raise HTTPException(status_code=400, detail="Invalid scenario path")
     if not resolved.exists():
         raise HTTPException(status_code=404, detail="Scenario file not found")
     return resolved
 
 
+def _is_private_ip(hostname: str) -> bool:
+    """Check if a hostname resolves to a private/loopback/reserved IP.
+
+    Uses the ipaddress module for robust detection (covers IPv4, IPv6,
+    IPv6-mapped IPv4, decimal/octal encodings, link-local, etc.).
+    """
+    try:
+        addr = ipaddress.ip_address(hostname)
+        return (
+            addr.is_private
+            or addr.is_loopback
+            or addr.is_link_local
+            or addr.is_reserved
+            or addr.is_multicast
+            or addr.is_unspecified
+        )
+    except ValueError:
+        pass  # Not a bare IP — it's a hostname, check via DNS below
+
+    # Hostname blocklist for well-known internal names
+    blocked_hostnames = {
+        "localhost",
+        "metadata.google.internal",
+        "metadata.google.internal.",
+    }
+    if hostname.lower() in blocked_hostnames:
+        return True
+
+    # Resolve the hostname and check all returned IPs
+    try:
+        results = socket.getaddrinfo(hostname, None, socket.AF_UNSPEC, socket.SOCK_STREAM)
+        for family, _, _, _, sockaddr in results:
+            ip_str = sockaddr[0]
+            addr = ipaddress.ip_address(ip_str)
+            if (
+                addr.is_private
+                or addr.is_loopback
+                or addr.is_link_local
+                or addr.is_reserved
+                or addr.is_multicast
+                or addr.is_unspecified
+            ):
+                return True
+    except (socket.gaierror, OSError):
+        # If we can't resolve, reject to be safe
+        return True
+
+    return False
+
+
 def _validate_callback_url(url: Optional[str]) -> None:
-    """Validate callback_url to prevent SSRF."""
+    """Validate callback_url to prevent SSRF.
+
+    Uses the ipaddress module for robust private-IP detection (covers IPv6,
+    IPv6-mapped IPv4, decimal/octal IP encodings, DNS rebinding via
+    pre-resolution, etc.).
+    """
     if url is None:
         return
     try:
@@ -137,23 +197,38 @@ def _validate_callback_url(url: Optional[str]) -> None:
     if not parsed.hostname:
         raise HTTPException(status_code=400, detail="callback_url missing hostname")
 
-    hostname = parsed.hostname.lower()
-    blocked_hosts = {
-        "localhost", "127.0.0.1", "0.0.0.0", "::1",
-        "metadata.google.internal", "169.254.169.254",
-    }
-    if hostname in blocked_hosts:
+    if _is_private_ip(parsed.hostname):
         raise HTTPException(
             status_code=400,
             detail="callback_url must not point to internal/private hosts",
         )
-    if hostname.startswith(("10.", "192.168.", "172.16.", "172.17.", "172.18.",
-                            "172.19.", "172.2", "172.30.", "172.31.",
-                            "169.254.", "fc", "fd", "fe80")):
-        raise HTTPException(
-            status_code=400,
-            detail="callback_url must not point to private network addresses",
-        )
+
+
+# ---------------------------------------------------------------------------
+# Concurrency tracking
+# ---------------------------------------------------------------------------
+
+def _count_live_threads(agent_id: str) -> int:
+    """Count background threads still alive for an agent.
+
+    This provides a ground-truth concurrency count that cannot be bypassed
+    by cancelling runs (which only changes DB status).
+    """
+    store = get_store()
+    with _lock:
+        live = 0
+        dead_ids = []
+        for run_id, thread in _run_threads.items():
+            if not thread.is_alive():
+                dead_ids.append(run_id)
+                continue
+            run = store.get(run_id)
+            if run and run.agent_id == agent_id:
+                live += 1
+        # Clean up dead thread references (fixes memory leak 2.10)
+        for rid in dead_ids:
+            _run_threads.pop(rid, None)
+    return live
 
 
 # ---------------------------------------------------------------------------
@@ -258,8 +333,10 @@ def _execute_run(run_id: str) -> None:
         run.error = f"{exc_type}: {exc_msg}"
         store.save(run)
     finally:
+        # Clean up all stashed data to prevent memory leaks (fixes 2.4)
         _run_params.pop(run_id, None)
         _run_quotas.pop(run_id, None)
+        _run_callbacks.pop(run_id, None)
 
 
 def _export_run_artifacts(
@@ -333,7 +410,8 @@ def _get_run_artifacts_dir(run_id: str) -> Optional[Path]:
     # Defense-in-depth: ensure resolved path is under runs/
     resolved = run_dir.resolve()
     runs_root = (repo_root / "runs").resolve()
-    if not str(resolved).startswith(str(runs_root)):
+    # Use trailing "/" to prevent prefix collision (e.g., runs/abc vs runs/abc-evil)
+    if not (str(resolved) + "/").startswith(str(runs_root) + "/"):
         return None
     if run_dir.is_dir():
         return run_dir
@@ -366,11 +444,12 @@ async def create_run(
             detail="Only trusted API keys can create public runs",
         )
 
-    # Enforce concurrency quota
+    # Enforce concurrency quota — count live threads, not DB status,
+    # to prevent bypass via cancel-then-create (security fix 2.6).
     quotas = get_quotas(token)
     max_concurrent = quotas.get("max_concurrent", 5)
-    active = store.count_active(agent_id)
-    if active >= max_concurrent:
+    live = _count_live_threads(agent_id)
+    if live >= max_concurrent:
         raise HTTPException(
             status_code=429,
             detail=f"Concurrency limit reached ({max_concurrent} active runs)",
@@ -519,8 +598,15 @@ async def list_artifacts(
                 "path": str(rel),
                 "size_bytes": f.stat().st_size,
             })
+        # Cap to prevent DoS from runs with many files (security fix 2.3)
+        if len(artifacts) >= MAX_ARTIFACT_FILES:
+            break
 
-    return JSONResponse(content={"run_id": run_id, "artifacts": artifacts})
+    return JSONResponse(content={
+        "run_id": run_id,
+        "artifacts": artifacts,
+        "truncated": len(artifacts) >= MAX_ARTIFACT_FILES,
+    })
 
 
 @router.get("/{run_id}/artifacts/{file_path:path}")
@@ -542,8 +628,10 @@ async def download_artifact(
         raise HTTPException(status_code=404, detail="No artifacts for this run")
 
     target = (artifacts_dir / file_path).resolve()
-    # Path traversal defense
-    if not str(target).startswith(str(artifacts_dir.resolve())):
+    artifacts_root = artifacts_dir.resolve()
+    # Path traversal defense — use trailing "/" to prevent prefix collision
+    # (security fix 2.2)
+    if not (str(target) + "/").startswith(str(artifacts_root) + "/"):
         raise HTTPException(status_code=400, detail="Invalid file path")
     if not target.is_file():
         raise HTTPException(status_code=404, detail="Artifact not found")

@@ -32,17 +32,23 @@ from swarm.api.models.run import RunStatus, RunVisibility  # noqa: E402
 @pytest.fixture(autouse=True)
 def _clear_middleware_state():
     """Reset middleware state between tests."""
+    import swarm.api.routers.agents as agents_mod
+
     _api_keys.clear()
     _api_key_hashes.clear()
     _key_quotas.clear()
     _rate_limit_windows.clear()
     _trusted_keys.clear()
+    agents_mod._registration_rate.clear()
+    agents_mod._registered_agents.clear()
     yield
     _api_keys.clear()
     _api_key_hashes.clear()
     _key_quotas.clear()
     _rate_limit_windows.clear()
     _trusted_keys.clear()
+    agents_mod._registration_rate.clear()
+    agents_mod._registered_agents.clear()
 
 
 @pytest.fixture(autouse=True)
@@ -139,6 +145,31 @@ class TestMiddleware:
         resp = client.get("/api/runs", headers=headers)
         assert resp.status_code == 429
 
+    def test_registration_rate_limiting(self, client):
+        """Registration endpoint has per-IP rate limiting."""
+        import swarm.api.routers.agents as agents_mod
+
+        # Reset rate state and set low limit for test
+        agents_mod._registration_rate.clear()
+        old_limit = agents_mod._REGISTRATION_LIMIT
+        agents_mod._REGISTRATION_LIMIT = 3
+        try:
+            for i in range(3):
+                resp = client.post(
+                    "/api/v1/agents/register",
+                    json={"name": f"Bot{i}", "description": "test"},
+                )
+                assert resp.status_code == 200
+
+            resp = client.post(
+                "/api/v1/agents/register",
+                json={"name": "Bot-overflow", "description": "test"},
+            )
+            assert resp.status_code == 429
+        finally:
+            agents_mod._REGISTRATION_LIMIT = old_limit
+            agents_mod._registration_rate.clear()
+
 
 # ---------------------------------------------------------------------------
 # Security-specific tests
@@ -202,6 +233,45 @@ class TestSecurityHardening:
                 headers=_auth_header(api_key),
             )
             assert resp.status_code == 400, f"Expected 400 for {host}"
+
+    def test_ssrf_callback_ipv6_loopback_rejected(self, client):
+        """IPv6 loopback (::1) is rejected."""
+        _, api_key = _register_agent(client)
+        resp = client.post(
+            "/api/runs",
+            json={
+                "scenario_id": "baseline",
+                "callback_url": "https://[::1]/hook",
+            },
+            headers=_auth_header(api_key),
+        )
+        assert resp.status_code == 400
+
+    def test_ssrf_callback_ipv6_mapped_ipv4_rejected(self, client):
+        """IPv6-mapped IPv4 addresses like ::ffff:127.0.0.1 are rejected."""
+        _, api_key = _register_agent(client)
+        resp = client.post(
+            "/api/runs",
+            json={
+                "scenario_id": "baseline",
+                "callback_url": "https://[::ffff:127.0.0.1]/hook",
+            },
+            headers=_auth_header(api_key),
+        )
+        assert resp.status_code == 400
+
+    def test_ssrf_callback_zero_ip_rejected(self, client):
+        """0.0.0.0 is rejected."""
+        _, api_key = _register_agent(client)
+        resp = client.post(
+            "/api/runs",
+            json={
+                "scenario_id": "baseline",
+                "callback_url": "https://0.0.0.0/hook",
+            },
+            headers=_auth_header(api_key),
+        )
+        assert resp.status_code == 400
 
     def test_path_traversal_scenario_id_rejected(self, client):
         """Path traversal attempts in scenario_id are rejected."""
