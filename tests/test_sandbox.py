@@ -18,6 +18,7 @@ from swarm.core.sandbox import (
     SandboxConfig,
     SandboxEnvironment,
     SandboxFileSystem,
+    _sanitize_error,
     execute_with_retry,
     execute_with_retry_sync,
 )
@@ -158,6 +159,29 @@ class TestExecuteWithRetry:
         assert result == "done"
         assert len(callbacks) == 2
 
+    @pytest.mark.asyncio
+    async def test_on_retry_callback_failure_does_not_abort(self):
+        """M-6: on_retry callback that raises should not break the retry loop."""
+        call_count = 0
+
+        async def task():
+            nonlocal call_count
+            call_count += 1
+            if call_count < 3:
+                raise Exception("fail")
+            return "recovered"
+
+        def bad_callback(attempt, error, delay):
+            raise RuntimeError("callback exploded")
+
+        result, stats = await execute_with_retry(
+            task,
+            RetryPolicy(max_retries=3, base_delay=0.01),
+            on_retry=bad_callback,
+        )
+        assert result == "recovered"
+        assert stats.retries == 2
+
 
 # ── execute_with_retry_sync ──────────────────────────────────────────────────
 
@@ -193,6 +217,26 @@ class TestExecuteWithRetrySync:
             execute_with_retry_sync(
                 task, RetryPolicy(max_retries=1, base_delay=0.01)
             )
+
+    def test_sync_on_retry_callback_failure_does_not_abort(self):
+        """M-6: sync variant of callback protection."""
+        counter = {"n": 0}
+
+        def task():
+            counter["n"] += 1
+            if counter["n"] < 2:
+                raise Exception("not yet")
+            return "ok"
+
+        def bad_cb(attempt, error, delay):
+            raise RuntimeError("cb boom")
+
+        result, stats = execute_with_retry_sync(
+            task,
+            RetryPolicy(max_retries=3, base_delay=0.01),
+            on_retry=bad_cb,
+        )
+        assert result == "ok"
 
 
 # ── SandboxFileSystem ────────────────────────────────────────────────────────
@@ -256,10 +300,54 @@ class TestSandboxFileSystem:
         fs.clear()
         assert fs.file_count == 0
 
-    def test_checksum_set(self):
+    def test_checksum_is_full_sha256(self):
+        """L-5: checksum is now full SHA-256 hex (64 chars)."""
         fs = SandboxFileSystem()
         entry = fs.write("/f.txt", "hello")
-        assert len(entry.checksum) == 16
+        assert len(entry.checksum) == 64
+
+    def test_total_bytes(self):
+        fs = SandboxFileSystem()
+        fs.write("/a", "hello")  # 5 bytes
+        fs.write("/b", "world!")  # 6 bytes
+        assert fs.total_bytes == 11
+
+
+# ── SandboxFileSystem: path traversal (M-1) ─────────────────────────────────
+
+
+class TestPathTraversal:
+    """M-1: Verify path traversal via '..' is resolved and clamped."""
+
+    def test_dotdot_resolved_to_same_file(self):
+        fs = SandboxFileSystem()
+        fs.write("/a/../b.txt", "content")
+        # /a/../b.txt resolves to /b.txt
+        assert fs.read("/b.txt") == "content"
+        assert fs.file_count == 1
+
+    def test_dotdot_cannot_escape_root(self):
+        fs = SandboxFileSystem()
+        fs.write("/../../../etc/passwd", "fake")
+        # Should resolve to /etc/passwd (clamped under /)
+        assert fs.read("/etc/passwd") == "fake"
+        assert fs.file_count == 1
+
+    def test_dot_resolved(self):
+        fs = SandboxFileSystem()
+        fs.write("/./foo/./bar.txt", "x")
+        assert fs.read("/foo/bar.txt") == "x"
+
+    def test_complex_traversal(self):
+        fs = SandboxFileSystem()
+        fs.write("/a/b/../../c/d/../e.txt", "val")
+        # Resolves: /a/b/../../c/d/../e.txt → /c/e.txt
+        assert fs.read("/c/e.txt") == "val"
+
+    def test_normalize_backslash_and_dotdot(self):
+        fs = SandboxFileSystem()
+        fs.write("foo\\..\\bar.txt", "win")
+        assert fs.read("/bar.txt") == "win"
 
 
 # ── SandboxEnvironment ───────────────────────────────────────────────────────
@@ -291,6 +379,26 @@ class TestSandboxEnvironment:
         sandbox.write_file("/a", "v2")  # should not raise
         assert sandbox.read_file("/a") == "v2"
 
+    def test_aggregate_storage_limit(self):
+        """M-2: Aggregate storage cap is enforced."""
+        sandbox = SandboxEnvironment(
+            SandboxConfig(max_file_size=100, max_total_bytes=150)
+        )
+        sandbox.write_file("/a", "x" * 100)  # 100 bytes
+        sandbox.write_file("/b", "y" * 50)  # 50 bytes, total 150
+        with pytest.raises(ValueError, match="Aggregate storage"):
+            sandbox.write_file("/c", "z")  # 1 more byte exceeds 150
+
+    def test_aggregate_storage_allows_overwrite_within_limit(self):
+        """M-2: Overwriting a file reclaims old space in the aggregate check."""
+        sandbox = SandboxEnvironment(
+            SandboxConfig(max_file_size=100, max_total_bytes=100)
+        )
+        sandbox.write_file("/a", "x" * 100)
+        # Overwrite same file with same-size content: should succeed
+        sandbox.write_file("/a", "y" * 100)
+        assert sandbox.read_file("/a") == "y" * 100
+
     def test_checkpoint_and_restore(self):
         sandbox = SandboxEnvironment()
         sandbox.write_file("/a.txt", "original")
@@ -305,6 +413,47 @@ class TestSandboxEnvironment:
         sandbox = SandboxEnvironment()
         with pytest.raises(KeyError):
             sandbox.restore("nonexistent")
+
+    def test_checkpoint_eviction(self):
+        """H-1: Oldest checkpoints are evicted when limit is exceeded."""
+        sandbox = SandboxEnvironment(SandboxConfig(max_checkpoints=3))
+        sandbox.checkpoint("a")
+        sandbox.checkpoint("b")
+        sandbox.checkpoint("c")
+        # This should evict "a"
+        sandbox.checkpoint("d")
+        cps = sandbox.list_checkpoints()
+        assert "a" not in cps
+        assert "b" in cps
+        assert "d" in cps
+        assert len(cps) == 3
+
+    def test_internal_checkpoints_not_visible(self):
+        """M-3: Internal rollback checkpoints are not in list_checkpoints."""
+        sandbox = SandboxEnvironment(
+            SandboxConfig(retry_policy=RetryPolicy(max_retries=0))
+        )
+        sandbox.write_file("/f.txt", "data")
+
+        def task(sb):
+            return "ok"
+
+        sandbox.execute_sync(task)
+        # Internal checkpoints used by execute should not leak
+        for cp in sandbox.list_checkpoints():
+            assert not cp.startswith("_internal")
+
+    def test_internal_checkpoints_freed_after_execution(self):
+        """H-1: Internal checkpoints are discarded after execute completes."""
+        sandbox = SandboxEnvironment(
+            SandboxConfig(retry_policy=RetryPolicy(max_retries=0))
+        )
+
+        def task(sb):
+            return "ok"
+
+        sandbox.execute_sync(task)
+        assert len(sandbox._internal_checkpoints) == 0
 
     @pytest.mark.asyncio
     async def test_execute_success(self):
@@ -427,6 +576,35 @@ class TestSandboxEnvironment:
         assert log[0]["status"] == "success"
         assert log[1]["status"] == "failed"
 
+    def test_execution_log_bounded(self):
+        """L-3: Execution log is a bounded ring buffer."""
+        sandbox = SandboxEnvironment(
+            SandboxConfig(
+                retry_policy=RetryPolicy(max_retries=0),
+                max_log_entries=3,
+            )
+        )
+        for i in range(10):
+            sandbox.execute_sync(lambda sb, _i=i: _i)
+        assert len(sandbox.execution_log) == 3
+
+    def test_execution_log_errors_are_sanitized(self):
+        """M-5/L-4: Error strings in execution log are truncated."""
+        sandbox = SandboxEnvironment(
+            SandboxConfig(retry_policy=RetryPolicy(max_retries=0))
+        )
+        long_secret = "SECRET_KEY_" + "x" * 500
+
+        def task(sb):
+            raise Exception(long_secret)
+
+        sandbox.execute_sync(task)
+        log = sandbox.execution_log
+        assert log[0]["error"] is not None
+        assert "SECRET_KEY_" in log[0]["error"]  # prefix kept
+        assert "[truncated]" in log[0]["error"]
+        assert len(log[0]["error"]) < len(long_secret)
+
     def test_reset(self):
         sandbox = SandboxEnvironment()
         sandbox.write_file("/f", "x")
@@ -436,6 +614,58 @@ class TestSandboxEnvironment:
         assert sandbox.fs.file_count == 0
         assert sandbox.list_checkpoints() == []
         assert sandbox.execution_log == []
+
+
+# ── Checkpoint collision (M-3) ───────────────────────────────────────────────
+
+
+class TestCheckpointSecurity:
+    def test_agent_cannot_overwrite_internal_rollback(self):
+        """M-3: Agent code using sandbox.checkpoint() cannot affect internal
+        rollback state used by execute()."""
+        sandbox = SandboxEnvironment(
+            SandboxConfig(retry_policy=RetryPolicy(max_retries=0))
+        )
+        sandbox.write_file("/original.txt", "safe-data")
+
+        def malicious_task(sb: SandboxEnvironment):
+            # Try to create a checkpoint with the internal prefix
+            sb.write_file("/original.txt", "corrupted")
+            # Even if agent checkpoints with _internal prefix,
+            # it goes to user checkpoints, not internal ones
+            for cp in sb.list_checkpoints():
+                assert not cp.startswith("_internal")
+            raise Exception("force failure to trigger rollback")
+
+        result = sandbox.execute_sync(malicious_task)
+        assert not result.succeeded
+        # Internal rollback should have restored original
+        assert sandbox.read_file("/original.txt") == "safe-data"
+
+
+# ── Error sanitization (M-5) ────────────────────────────────────────────────
+
+
+class TestErrorSanitization:
+    def test_sanitize_none(self):
+        assert _sanitize_error(None) == ""
+
+    def test_sanitize_short_error(self):
+        err = ValueError("oops")
+        result = _sanitize_error(err)
+        assert result == "ValueError: oops"
+
+    def test_sanitize_long_error_truncated(self):
+        msg = "A" * 500
+        err = Exception(msg)
+        result = _sanitize_error(err, max_len=50)
+        assert len(result) < 100  # type prefix + 50 chars + truncation marker
+        assert "[truncated]" in result
+
+    def test_sanitize_preserves_type_name(self):
+        err = ConnectionRefusedError("db at 10.0.0.1:5432 with password=s3cret")
+        result = _sanitize_error(err)
+        assert result.startswith("ConnectionRefusedError:")
 
 
 # ── FailoverChain ────────────────────────────────────────────────────────────
@@ -538,6 +768,31 @@ class TestFailoverChain:
         assert fo.result.succeeded
         assert fo.backend_name == "counting"
 
+    @pytest.mark.asyncio
+    async def test_failover_errors_are_sanitized(self):
+        """M-5: Error messages in failover_errors are sanitized."""
+
+        class LeakyBackend(ExecutionBackend):
+            @property
+            def name(self):
+                return "leaky"
+
+            async def run(self, sandbox):
+                raise Exception("connect to db://user:p@ss@host:5432 failed " + "x" * 500)
+
+            @property
+            def retry_policy(self):
+                return RetryPolicy(max_retries=0)
+
+        chain = FailoverChain([LeakyBackend(), _SuccessBackend()])
+        sandbox = SandboxEnvironment(
+            SandboxConfig(retry_policy=RetryPolicy(max_retries=0))
+        )
+        fo = await chain.execute(sandbox)
+        assert fo.result.succeeded
+        error_msg = fo.failover_errors["leaky"]
+        assert "[truncated]" in error_msg
+
 
 # ── AgentPlayground ──────────────────────────────────────────────────────────
 
@@ -583,6 +838,29 @@ class TestAgentPlayground:
         assert playground.sandbox.file_exists("/.failures/iter-1.md")
         content = playground.sandbox.read_file("/.failures/iter-1.md")
         assert "something broke" in content
+
+    @pytest.mark.asyncio
+    async def test_failure_docs_are_sanitized(self):
+        """I-4: Failure docs use sanitized error strings."""
+        playground = AgentPlayground(
+            PlaygroundConfig(
+                sandbox_config=SandboxConfig(
+                    retry_policy=RetryPolicy(max_retries=0)
+                ),
+                learn_from_failures=True,
+            )
+        )
+
+        long_secret = "API_KEY=" + "s" * 500
+
+        async def task(sb):
+            raise Exception(long_secret)
+
+        await playground.run(task)
+        content = playground.sandbox.read_file("/.failures/iter-1.md")
+        assert "[truncated]" in content
+        # Full secret should not appear
+        assert long_secret not in content
 
     @pytest.mark.asyncio
     async def test_run_with_failover(self):
