@@ -20,6 +20,17 @@ from swarm.analysis.sweep import (
     quick_sweep,
 )
 
+# Visual upgrade modules (lazy-importable via swarm.analysis.<module>)
+from swarm.analysis.theme import (  # noqa: F401
+    COLORS,
+    SWARM_STYLE,
+    SWARM_LIGHT_STYLE,
+    apply_theme,
+    swarm_theme,
+    agent_color,
+    metric_color,
+)
+
 __all__ = [
     # Sweep
     "SweepConfig",
@@ -41,4 +52,12 @@ __all__ = [
     # Dolt export
     "export_to_dolt",
     "export_run_summary_to_dolt",
+    # Theme & colors
+    "COLORS",
+    "SWARM_STYLE",
+    "SWARM_LIGHT_STYLE",
+    "apply_theme",
+    "swarm_theme",
+    "agent_color",
+    "metric_color",
 ]
