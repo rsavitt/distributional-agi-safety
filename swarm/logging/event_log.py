@@ -210,9 +210,15 @@ class EventLog:
         return last
 
     def clear(self) -> None:
-        """Clear the log file (destructive)."""
+        """Archive the current log and start fresh.
+
+        Preserves append-only semantics by rotating the existing file
+        to ``<name>.cleared_<timestamp>.jsonl`` before truncating.
+        If the log file does not exist, this is a no-op.
+        """
         if self.path.exists():
-            self.path.unlink()
+            self.rotate(suffix="cleared_" + datetime.now().strftime("%Y%m%d_%H%M%S"))
+            # rotate() moves the file, so nothing left to delete
 
     def rotate(self, suffix: Optional[str] = None) -> Path:
         """
