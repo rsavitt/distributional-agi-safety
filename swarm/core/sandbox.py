@@ -25,6 +25,7 @@ inspect files, and learn — with production-grade resilience:
 from __future__ import annotations
 
 import asyncio
+import concurrent.futures
 import copy
 import hashlib
 import logging
@@ -473,7 +474,12 @@ class SandboxEnvironment:
     # -- filesystem helpers --------------------------------------------------
 
     def write_file(self, path: str, content: str) -> FileEntry:
-        """Write a file into the sandbox (with limit checks)."""
+        """Write a file into the sandbox (with limit checks).
+
+        .. warning::
+           The sandbox filesystem is in-memory only. Do not store secrets or
+           credentials — contents may appear in logs or checkpoints.
+        """
         content_bytes = len(content.encode())
         if content_bytes > self.config.max_file_size:
             raise ValueError(
@@ -933,23 +939,20 @@ class AgentPlayground:
         if self.config.learn_from_failures:
             self._record_failure(result)
 
-        # Failover backends are async — we need an event loop.
-        # Detect whether we're already inside one (Jupyter, async frameworks)
-        # and raise a clear error instead of crashing with asyncio.run().
+        # Failover backends are async — detect running event loop to avoid crash
         try:
-            asyncio.get_running_loop()
-            raise RuntimeError(
-                "run_sync() with a failover chain cannot be called from an "
-                "async context (a running event loop was detected). "
-                "Use 'await playground.run(task)' instead."
-            )
-        except RuntimeError as e:
-            # Re-raise our own error; swallow the "no running event loop" one
-            if "run_sync()" in str(e):
-                raise
-        fo_result = asyncio.run(
-            self._failover.execute(self.sandbox)
-        )
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = None
+
+        if loop is not None and loop.is_running():
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                future = executor.submit(
+                    asyncio.run, self._failover.execute(self.sandbox)
+                )
+                fo_result = future.result()
+        else:
+            fo_result = asyncio.run(self._failover.execute(self.sandbox))
         self._history.append(fo_result.result)
         return fo_result.result  # type: ignore[return-value]
 

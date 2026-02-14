@@ -73,12 +73,19 @@ secrets.json
 *.parquet
 **/fontlist*.json
 
+# Lean 4 build artifacts
+lean/.lake/
+lean/lake-packages/
+lean/lake-manifest.json
+lean/build/
+
 # Runtime artifacts
 .DS_Store
 sandboxes/
 .worktrees/
 *.db
 runs/dolt_runs/
+node_modules/
 
 # Allow documentation images
 !docs/**/*.png

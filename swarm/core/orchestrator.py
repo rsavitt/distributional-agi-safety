@@ -1,6 +1,7 @@
 """Orchestrator for running the multi-agent simulation."""
 
 import asyncio
+import logging
 import random
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
@@ -28,9 +29,12 @@ from swarm.core.observable_generator import (
 )
 from swarm.core.observation_builder import ObservationBuilder
 from swarm.core.payoff import PayoffConfig, SoftPayoffEngine
+from swarm.core.perturbation import PerturbationConfig, PerturbationEngine
 from swarm.core.proxy import ProxyComputer, ProxyObservables
 from swarm.core.redteam_inspector import RedTeamInspector
+from swarm.core.rivals_handler import RivalsConfig, RivalsHandler
 from swarm.core.scholar_handler import ScholarConfig, ScholarHandler
+from swarm.core.spawn import SpawnConfig, SpawnTree
 from swarm.core.task_handler import TaskHandler
 from swarm.env.composite_tasks import (
     CompositeTask,
@@ -58,6 +62,8 @@ from swarm.models.events import (
     EventType,
 )
 from swarm.models.interaction import InteractionType, SoftInteraction
+
+logger = logging.getLogger(__name__)
 
 
 class OrchestratorConfig(BaseModel):
@@ -105,6 +111,12 @@ class OrchestratorConfig(BaseModel):
     # Kernel oracle configuration
     kernel_oracle_config: Optional[KernelOracleConfig] = None
 
+    # Spawn configuration
+    spawn_config: Optional[SpawnConfig] = None
+
+    # Rivals (Team-of-Rivals) configuration
+    rivals_config: Optional["RivalsConfig"] = None
+
     # Composite task configuration
     enable_composite_tasks: bool = False
 
@@ -127,6 +139,9 @@ class OrchestratorConfig(BaseModel):
     observation_noise_probability: float = 0.0
     observation_noise_std: float = 0.0
 
+    # Perturbation engine configuration
+    perturbation_config: Optional[PerturbationConfig] = None
+
 
 class EpochMetrics(BaseModel):
     """Metrics collected at the end of each epoch."""
@@ -144,6 +159,7 @@ class EpochMetrics(BaseModel):
     total_welfare: float = 0.0
     network_metrics: Optional[Dict[str, float]] = None
     capability_metrics: Optional[EmergentCapabilityMetrics] = None
+    spawn_metrics: Optional[Dict[str, Any]] = None
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for serialization."""
@@ -167,6 +183,7 @@ class EpochMetrics(BaseModel):
             )
         else:
             result["capability_metrics"] = None
+        result["spawn_metrics"] = self.spawn_metrics
         return result
 
 
@@ -261,7 +278,7 @@ class Orchestrator:
         self.proxy_computer = proxy_computer or ProxyComputer()
         self.metrics_calculator = metrics_calculator or SoftMetrics(self.payoff_engine)
         self._observable_generator: ObservableGenerator = (
-            observable_generator or DefaultObservableGenerator()
+            observable_generator or DefaultObservableGenerator(rng=self._rng)
         )
 
         # Governance engine (injectable)
@@ -274,6 +291,19 @@ class Orchestrator:
             )
         else:
             self.governance_engine = None
+
+        # Perturbation engine
+        if self.config.perturbation_config is not None:
+            self._perturbation_engine: Optional[PerturbationEngine] = (
+                PerturbationEngine(
+                    config=self.config.perturbation_config,
+                    state=self.state,
+                    network=self.network,
+                    governance_engine=self.governance_engine,
+                )
+            )
+        else:
+            self._perturbation_engine = None
 
         # Event bus (central publish-subscribe for all events)
         self._event_bus = EventBus()
@@ -365,6 +395,16 @@ class Orchestrator:
         else:
             self._kernel_handler = None
 
+        # Rivals handler (Team-of-Rivals pipeline)
+        if self.config.rivals_config is not None:
+            self._rivals_handler: Optional[RivalsHandler] = RivalsHandler(
+                config=self.config.rivals_config,
+                event_bus=self._event_bus,
+            )
+            self._handler_registry.register(self._rivals_handler)
+        else:
+            self._rivals_handler = None
+
         # Boundary handler
         if self.config.enable_boundaries:
             external_world = ExternalWorld().create_default_world()
@@ -447,6 +487,14 @@ class Orchestrator:
         )
         self._handler_registry.register(self._task_handler)
 
+        # Spawn tree (must be initialized before observation builder)
+        if self.config.spawn_config is not None and self.config.spawn_config.enabled:
+            self._spawn_tree: Optional[SpawnTree] = SpawnTree(self.config.spawn_config)
+            self._spawn_counter: int = 0
+        else:
+            self._spawn_tree = None
+            self._spawn_counter = 0
+
         # Observation building (extracted component)
         self._obs_builder = ObservationBuilder(
             config=self.config,
@@ -456,6 +504,7 @@ class Orchestrator:
             network=self.network,
             handler_registry=self._handler_registry,
             rng=self._rng,
+            spawn_tree=self._spawn_tree,
         )
 
         # Red-team inspection (extracted component)
@@ -482,6 +531,10 @@ class Orchestrator:
             name=getattr(agent, "name", agent.agent_id),
             agent_type=agent.agent_type,
         )
+
+        # Register as root in spawn tree
+        if self._spawn_tree is not None:
+            self._spawn_tree.register_root(agent.agent_id)
 
         # Log event
         self._emit_event(
@@ -562,11 +615,14 @@ class Orchestrator:
         """Shared epoch-start logic for sync and async paths."""
         self._update_adaptive_governance()
 
+        if self._perturbation_engine is not None:
+            self._perturbation_engine.on_epoch_start(self.state.current_epoch)
+
         for handler in self._handler_registry.all_handlers():
             try:
                 handler.on_epoch_start(self.state)
             except Exception:
-                pass  # handler hook failures must not break simulation
+                logger.debug("Handler %s.on_epoch_start failed", type(handler).__name__, exc_info=True)
 
         if self.governance_engine:
             gov_effect = self.governance_engine.apply_epoch_start(
@@ -580,7 +636,7 @@ class Orchestrator:
             try:
                 handler.on_epoch_end(self.state)
             except Exception:
-                pass  # handler hook failures must not break simulation
+                logger.debug("Handler %s.on_epoch_end failed", type(handler).__name__, exc_info=True)
 
         if self.network is not None:
             pruned = self.network.decay_edges()
@@ -594,6 +650,23 @@ class Orchestrator:
                 )
 
         self._apply_agent_memory_decay(epoch_start)
+
+        # Check condition-triggered perturbation shocks against epoch metrics
+        if self._perturbation_engine is not None:
+            epoch_metrics_dict = {
+                "epoch": epoch_start,
+                "toxicity_rate": 0.0,
+                "quality_gap": 0.0,
+            }
+            interactions = self.state.completed_interactions
+            if interactions:
+                epoch_metrics_dict["toxicity_rate"] = (
+                    self.metrics_calculator.toxicity_rate(interactions)
+                )
+                epoch_metrics_dict["quality_gap"] = (
+                    self.metrics_calculator.quality_gap(interactions)
+                )
+            self._perturbation_engine.check_condition(epoch_metrics_dict)
 
         metrics = self._compute_epoch_metrics()
 
@@ -610,6 +683,11 @@ class Orchestrator:
 
     def _step_preamble(self) -> None:
         """Shared step-start logic for sync and async paths."""
+        if self._perturbation_engine is not None:
+            self._perturbation_engine.on_step_start(
+                self.state.current_epoch, self.state.current_step
+            )
+
         if (
             self.governance_engine
             and self.governance_engine.config.adaptive_use_behavioral_features
@@ -626,15 +704,22 @@ class Orchestrator:
             try:
                 handler.on_step(self.state, self.state.current_step)
             except Exception:
-                pass  # handler hook failures must not break simulation
+                logger.debug("Handler %s.on_step failed", type(handler).__name__, exc_info=True)
 
     def _get_eligible_agents(self) -> List[str]:
         """Return agents eligible to act this step (respects schedule, limits, governance)."""
         agent_order = self._get_agent_schedule()
+        dropped = (
+            self._perturbation_engine.get_dropped_agents()
+            if self._perturbation_engine is not None
+            else set()
+        )
         eligible: List[str] = []
         for agent_id in agent_order:
             if len(eligible) >= self.config.max_actions_per_step:
                 break
+            if agent_id in dropped:
+                continue
             if not self.state.can_agent_act(agent_id):
                 continue
             if self.governance_engine and not self.governance_engine.can_agent_act(
@@ -813,6 +898,7 @@ class Orchestrator:
         try:
             result = handler.handle_action(action, self.state)
         except Exception:
+            logger.debug("Handler %s.handle_action failed", type(handler).__name__, exc_info=True)
             return False
 
         if not result.success:
@@ -869,7 +955,7 @@ class Orchestrator:
         try:
             handler.post_finalize(result, interaction, gov_effect, self.state)
         except Exception:
-            pass  # post_finalize failures must not break the action
+            logger.debug("Handler %s.post_finalize failed", type(handler).__name__, exc_info=True)
 
         return True
 
@@ -888,7 +974,131 @@ class Orchestrator:
         if action.action_type == ActionType.NOOP:
             return True
 
+        if action.action_type == ActionType.SPAWN_SUBAGENT:
+            return self._handle_spawn_subagent(action)
+
         return None  # Dispatched via handler registry
+
+    def _handle_spawn_subagent(self, action: Action) -> bool:
+        """Handle a SPAWN_SUBAGENT action.
+
+        Validates the spawn request, deducts cost, instantiates child,
+        registers it, and emits events.
+        """
+        if self._spawn_tree is None:
+            return False
+
+        parent_id = action.agent_id
+        parent_state = self.state.get_agent(parent_id)
+        if parent_state is None:
+            return False
+
+        global_step = (
+            self.state.current_epoch * self.config.steps_per_epoch
+            + self.state.current_step
+        )
+
+        can, reason = self._spawn_tree.can_spawn(
+            parent_id, global_step, parent_state.resources
+        )
+        if not can:
+            self._emit_event(
+                Event(
+                    event_type=EventType.SPAWN_REJECTED,
+                    agent_id=parent_id,
+                    payload={"reason": reason},
+                    epoch=self.state.current_epoch,
+                    step=self.state.current_step,
+                )
+            )
+            return False
+
+        spawn_cfg = self._spawn_tree.config
+
+        # Deduct spawn cost
+        parent_state.update_resources(-spawn_cfg.spawn_cost)
+
+        # Determine child type
+        child_type_key = action.metadata.get("child_type")
+        if not child_type_key:
+            child_type_key = parent_state.agent_type.value
+        child_config = action.metadata.get("child_config", {})
+
+        # Import AGENT_TYPES lazily to avoid circular imports
+        from swarm.scenarios.loader import AGENT_TYPES
+
+        agent_class = AGENT_TYPES.get(child_type_key)
+        if agent_class is None:
+            self._emit_event(
+                Event(
+                    event_type=EventType.SPAWN_REJECTED,
+                    agent_id=parent_id,
+                    payload={"reason": f"unknown_agent_type:{child_type_key}"},
+                    epoch=self.state.current_epoch,
+                    step=self.state.current_step,
+                )
+            )
+            return False
+
+        # Generate child ID
+        self._spawn_counter += 1
+        child_id = f"{parent_id}_child{self._spawn_counter}"
+
+        # Instantiate child agent (concrete subclasses set their own agent_type)
+        child_rng = random.Random((self.config.seed or 0) + self._spawn_counter)
+        child_agent = agent_class(  # type: ignore[call-arg]
+            agent_id=child_id,
+            name=child_id,
+            config=child_config if child_config else None,
+            rng=child_rng,
+        )
+        self._agents[child_id] = child_agent
+
+        # Register child in env state with inherited reputation
+        inherited_rep = parent_state.reputation * spawn_cfg.reputation_inheritance_factor
+        child_state = self.state.add_agent(
+            agent_id=child_id,
+            name=child_id,
+            agent_type=child_agent.agent_type,
+            initial_reputation=inherited_rep,
+            initial_resources=spawn_cfg.initial_child_resources,
+        )
+        child_state.parent_id = parent_id
+
+        # Register in spawn tree
+        self._spawn_tree.register_spawn(
+            parent_id=parent_id,
+            child_id=child_id,
+            epoch=self.state.current_epoch,
+            step=self.state.current_step,
+            global_step=global_step,
+        )
+
+        # Add to network if present
+        if self.network is not None:
+            self.network.add_node(child_id)
+            # Connect child to parent
+            self.network.add_edge(parent_id, child_id)
+
+        # Emit event
+        self._emit_event(
+            Event(
+                event_type=EventType.AGENT_SPAWNED,
+                agent_id=child_id,
+                payload={
+                    "parent_id": parent_id,
+                    "child_type": child_type_key,
+                    "depth": self._spawn_tree.get_depth(child_id),
+                    "inherited_reputation": inherited_rep,
+                    "initial_resources": spawn_cfg.initial_child_resources,
+                    "spawn_cost": spawn_cfg.spawn_cost,
+                },
+                epoch=self.state.current_epoch,
+                step=self.state.current_step,
+            )
+        )
+
+        return True
 
     def _resolve_pending_interactions(self) -> None:
         """Resolve any remaining pending interactions."""
@@ -1000,11 +1210,22 @@ class Orchestrator:
         if self.capability_analyzer is not None:
             capability_metrics = self.capability_analyzer.compute_metrics()
 
+        # Collect spawn metrics if spawn tree exists
+        spawn_metrics_dict = None
+        if self._spawn_tree is not None:
+            spawn_metrics_dict = {
+                "total_spawned": self._spawn_tree.total_spawned,
+                "max_depth": self._spawn_tree.max_tree_depth(),
+                "depth_distribution": self._spawn_tree.depth_distribution(),
+                "tree_sizes": self._spawn_tree.tree_size_distribution(),
+            }
+
         if not interactions:
             return EpochMetrics(
                 epoch=self.state.current_epoch,
                 network_metrics=network_metrics,
                 capability_metrics=capability_metrics,
+                spawn_metrics=spawn_metrics_dict,
             )
 
         accepted = [i for i in interactions if i.accepted]
@@ -1026,6 +1247,7 @@ class Orchestrator:
             total_welfare=welfare.get("total_welfare", 0),
             network_metrics=network_metrics,
             capability_metrics=capability_metrics,
+            spawn_metrics=spawn_metrics_dict,
         )
 
     def _emit_event(self, event: Event) -> None:
@@ -1341,6 +1563,10 @@ class Orchestrator:
     def get_network(self) -> Optional[AgentNetwork]:
         """Get the network object for direct manipulation."""
         return self.network
+
+    def get_spawn_tree(self) -> Optional[SpawnTree]:
+        """Get the spawn tree for inspection."""
+        return self._spawn_tree
 
     # =========================================================================
     # Red-Team Support

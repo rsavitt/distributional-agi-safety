@@ -1,5 +1,6 @@
 """Base agent interface and core abstractions."""
 
+import random
 import uuid
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
@@ -68,6 +69,13 @@ class ActionType(Enum):
     SUBMIT_KERNEL = "submit_kernel"
     VERIFY_KERNEL = "verify_kernel"
     AUDIT_KERNEL = "audit_kernel"
+
+    # Spawn actions
+    SPAWN_SUBAGENT = "spawn_subagent"
+
+    # Rivals pipeline actions
+    RIVALS_PRODUCE = "rivals_produce"
+    RIVALS_REVIEW = "rivals_review"
 
     # Special actions
     NOOP = "noop"  # Do nothing this turn
@@ -201,6 +209,14 @@ class Observation:
     kernel_submissions_to_verify: List[Dict] = field(default_factory=list)
     kernel_submission_history: List[Dict] = field(default_factory=list)
 
+    # Spawn observations
+    can_spawn: bool = False
+    spawn_depth: int = 0
+    spawn_children_count: int = 0
+
+    # Rivals pipeline observations
+    rivals_assignments: List[Dict] = field(default_factory=list)
+
 
 @dataclass
 class InteractionProposal:
@@ -233,6 +249,7 @@ class BaseAgent(ABC):
         config: Optional[Dict] = None,
         name: Optional[str] = None,
         memory_config: Optional["MemoryConfig"] = None,
+        rng: Optional[random.Random] = None,
     ):
         """
         Initialize agent.
@@ -244,12 +261,14 @@ class BaseAgent(ABC):
             config: Agent-specific configuration
             name: Human-readable label (defaults to agent_id)
             memory_config: Configuration for memory persistence across epochs
+            rng: Seeded Random instance for deterministic behavior
         """
         self.agent_id = agent_id
         self.name = name or agent_id
         self.agent_type = agent_type
         self.roles = roles or [Role.WORKER]
         self.config = config or {}
+        self._rng: random.Random = rng or random.Random()
 
         # Memory configuration (import here to avoid circular imports)
         if memory_config is None:
@@ -764,6 +783,26 @@ class BaseAgent(ABC):
             agent_id=self.agent_id,
             target_id=entry_id,
             content=reason,
+        )
+
+    def create_spawn_subagent_action(
+        self,
+        child_type: Optional[str] = None,
+        child_config: Optional[Dict] = None,
+    ) -> Action:
+        """Create an action to spawn a child subagent.
+
+        Args:
+            child_type: Agent type key for the child (defaults to parent's type).
+            child_config: Optional config dict for the child agent.
+        """
+        return Action(
+            action_type=ActionType.SPAWN_SUBAGENT,
+            agent_id=self.agent_id,
+            metadata={
+                "child_type": child_type,
+                "child_config": child_config or {},
+            },
         )
 
     def __repr__(self) -> str:

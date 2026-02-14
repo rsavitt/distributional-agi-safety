@@ -87,6 +87,10 @@ class EventType(Enum):
     KERNEL_VERIFIED = "kernel_verified"
     KERNEL_AUDITED = "kernel_audited"
 
+    # Spawn events
+    AGENT_SPAWNED = "agent_spawned"
+    SPAWN_REJECTED = "spawn_rejected"
+
     # Council events
     COUNCIL_DELIBERATION = "council_deliberation"
     COUNCIL_AUDIT = "council_audit"
@@ -94,6 +98,14 @@ class EventType(Enum):
     # Peer review events
     PEER_REVIEW_SUBMITTED = "peer_review_submitted"
     REVIEW_GATE_EVALUATED = "review_gate_evaluated"
+
+    # Self-modification governance events
+    SELF_MODIFICATION_PROPOSED = "self_modification_proposed"
+    SELF_MODIFICATION_REVIEWED = "self_modification_reviewed"
+    SELF_MODIFICATION_APPROVED = "self_modification_approved"
+    SELF_MODIFICATION_DENIED = "self_modification_denied"
+    SELF_MODIFICATION_EXECUTED = "self_modification_executed"
+    SELF_MODIFICATION_REVERTED = "self_modification_reverted"
 
     # System events
     SIMULATION_STARTED = "simulation_started"
