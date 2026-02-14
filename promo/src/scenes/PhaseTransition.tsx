@@ -123,7 +123,7 @@ export const PhaseTransition: React.FC = () => {
           textAlign: "center",
         }}
       >
-        The transition is abrupt, not gradual.
+        Early results suggest the transition is abrupt, not gradual.
       </div>
     </AbsoluteFill>
   );

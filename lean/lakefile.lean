@@ -11,4 +11,4 @@ require mathlib from git
 
 @[default_target]
 lean_lib SwarmProofs where
-  srcDir := "SwarmProofs"
+  roots := #[`SwarmProofs]
