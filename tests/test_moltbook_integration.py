@@ -51,7 +51,25 @@ def test_moltbook_publish_flow():
 
 
 def test_moltbook_rate_limit_hits_recorded():
-    orch = _build_orchestrator(seed=2, challenge_enabled=False)
+    # Use more steps than the cooldown window (5) to ensure spam triggers rate limit
+    gov = GovernanceConfig(
+        moltbook_rate_limit_enabled=True,
+        moltbook_post_cooldown_steps=2,
+        moltbook_comment_cooldown_steps=1,
+        moltbook_daily_comment_cap=50,
+        moltbook_request_cap_per_step=100,
+        moltbook_challenge_enabled=False,
+        moltbook_challenge_difficulty=0.5,
+        moltbook_challenge_window_steps=2,
+    )
+    config = OrchestratorConfig(
+        n_epochs=1,
+        steps_per_epoch=8,
+        seed=2,
+        moltbook_config=MoltbookConfig(enabled=True, seed=2),
+        governance_config=gov,
+    )
+    orch = Orchestrator(config=config)
     agent = SpamBotAgent(agent_id="spam_1", config={"seed": 2})
     orch.register_agent(agent)
     orch.run()

@@ -1,5 +1,6 @@
 """Scenario loader for YAML configuration files."""
 
+import random
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Type
@@ -967,7 +968,10 @@ def parse_llm_config(data: Dict[str, Any]) -> Any:
     )
 
 
-def create_agents(agent_specs: List[Dict[str, Any]]) -> List[BaseAgent]:
+def create_agents(
+    agent_specs: List[Dict[str, Any]],
+    seed: int | None = None,
+) -> List[BaseAgent]:
     """
     Create agent instances from specifications.
 
@@ -976,12 +980,14 @@ def create_agents(agent_specs: List[Dict[str, Any]]) -> List[BaseAgent]:
 
     Args:
         agent_specs: List of agent specifications from YAML
+        seed: Optional seed for deterministic agent RNG creation
 
     Returns:
         List of instantiated agents
     """
     agents = []
     counters: Dict[str, int] = {}
+    _agent_counter = 0  # monotonic counter for child RNG derivation
 
     for spec in agent_specs:
         agent_type = spec.get("type", "honest")
@@ -1046,11 +1052,16 @@ def create_agents(agent_specs: List[Dict[str, Any]]) -> List[BaseAgent]:
                     else base_name
                 )
 
-                # Create agent with optional config
+                # Create agent with optional config and seeded RNG
+                _agent_counter += 1
+                agent_rng = (
+                    random.Random(seed + _agent_counter) if seed is not None else None
+                )
                 agent = agent_class(
                     agent_id=agent_id,
                     name=agent_name,
                     config=agent_config,
+                    rng=agent_rng,
                 )  # type: ignore[call-arg]
                 agents.append(agent)
 
@@ -1077,7 +1088,7 @@ def build_orchestrator(scenario: ScenarioConfig) -> Orchestrator:
     orchestrator.state.rate_limits = scenario.rate_limits
 
     # Create and register agents
-    agents = create_agents(scenario.agent_specs)
+    agents = create_agents(scenario.agent_specs, seed=scenario.orchestrator_config.seed)
     for agent in agents:
         orchestrator.register_agent(agent)
 

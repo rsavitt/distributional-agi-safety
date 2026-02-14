@@ -4,6 +4,7 @@ RivalsProducerAgent: acts on RIVALS_PRODUCE when assigned as coder/chart_maker/w
 RivalsCriticAgent: acts on RIVALS_REVIEW when assigned as critic_code/chart/output.
 """
 
+import random
 from typing import TYPE_CHECKING, Dict, List, Optional
 
 from swarm.agents.base import (
@@ -34,6 +35,7 @@ class RivalsProducerAgent(BaseAgent):
         config: Optional[Dict] = None,
         name: Optional[str] = None,
         memory_config: Optional["MemoryConfig"] = None,
+        rng: Optional[random.Random] = None,
     ):
         super().__init__(
             agent_id=agent_id,
@@ -42,6 +44,7 @@ class RivalsProducerAgent(BaseAgent):
             config=config or {},
             name=name,
             memory_config=memory_config,
+            rng=rng,
         )
         self.quality_level = self.config.get("quality_level", 0.7)
         self.trap_awareness = self.config.get("trap_awareness", 0.5)
@@ -92,6 +95,7 @@ class RivalsCriticAgent(BaseAgent):
         config: Optional[Dict] = None,
         name: Optional[str] = None,
         memory_config: Optional["MemoryConfig"] = None,
+        rng: Optional[random.Random] = None,
     ):
         super().__init__(
             agent_id=agent_id,
@@ -100,6 +104,7 @@ class RivalsCriticAgent(BaseAgent):
             config=config or {},
             name=name,
             memory_config=memory_config,
+            rng=rng,
         )
         self.detection_rate = self.config.get("detection_rate", 0.7)
         self.false_positive_rate = self.config.get("false_positive_rate", 0.1)
