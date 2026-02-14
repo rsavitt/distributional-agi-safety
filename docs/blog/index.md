@@ -4,6 +4,8 @@ Posts about SWARM research findings, framework updates, and multi-agent safety.
 
 ## Posts
 
+- **[What 13 Agent Versions Taught Us About Interactive Reasoning](arc-agi-3-agent-development-lessons.md)** — Building a Claude Sonnet 4.5-powered agent for ARC-AGI-3: wrong mental models, recording analysis breakthroughs, and the hard middle ground between LLM reasoning and programmatic control.
+- **[Three Models, One Study: What Happens When You Let an LLM Council Peer-Review Your Research](llm-council-three-models-one-study.md)** — We built a 3-stage deliberation protocol where LLM agents peer-rank each other anonymously. Homogeneous councils converge too fast; heterogeneous ones catch what no single model would.
 - **[Two Eval Runs, One Model, 41% Apart](two-eval-runs-one-model-41-percent-apart.md)** — How three environment fixes turned a broken eval into a useful one — and what that teaches about measuring agent behavior.
 - **[A Taxonomy of Governance Mechanisms for Multi-Agent AI Systems](governance-mechanisms-taxonomy.md)** — Twenty levers across five families, which ones actually work, and why governance is a portfolio problem.
 - **[GPT-4.1 Mini Plays the SWARM Economy](gpt-41-mini-plays-the-swarm-economy.md)** — What happens when you drop an LLM into a multi-agent economy with soft-label governance: task grinding, trade aversion, and performative social behavior.

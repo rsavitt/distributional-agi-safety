@@ -2,7 +2,7 @@
 
 ## Overview
 
-ARC-AGI-3 is the first interactive reasoning benchmark — video-game-like environments on a 64x64 pixel grid where agents explore, learn rules, and solve puzzles. We built a Claude Sonnet 4.5-powered agent (`ClaudeAgent`) that uses vision, hypothesis-driven reasoning, and tool-use to compete. This document captures key lessons from 11 iterations (V1-V11) of agent development.
+ARC-AGI-3 is the first interactive reasoning benchmark — video-game-like environments on a 64x64 pixel grid where agents explore, learn rules, and solve puzzles. We built a Claude Sonnet 4.5-powered agent (`ClaudeAgent`) that uses vision, hypothesis-driven reasoning, and tool-use to compete. This document captures key lessons from 13 iterations (V1-V13) of agent development.
 
 ## Key Architectural Decisions
 
@@ -58,7 +58,8 @@ V10 introduced a middle ground between full LLM reasoning per move and blind pro
 The single biggest breakthrough came from analyzing JSONL recordings frame-by-frame:
 
 - **V9:** Discovered the timer bar (rows 62-63) changes every action, breaking stuck detection. Led to `content_hash` which immediately improved ft09 from 125 to 21 actions for level 1.
-- **V11:** Discovered that ls20 has NO switch — the "blue object" was the player sprite. The pattern rotation is autonomous, not player-triggered. Every previous iteration was operating on a fundamentally wrong model of the game mechanics.
+- **V11:** Concluded (incorrectly) that ls20 has no switch — believed the "blue object" was the player sprite. This was wrong.
+- **V13:** Deep recording analysis proved the switch EXISTS at (x=20-22, y=31-33). Player activates it at position (19,30). Each touch rotates Box 2's pattern 90° clockwise. One touch achieves the match. Level 1 solved in 19 actions.
 
 **Lesson: Never iterate on prompts without understanding the ground truth.** 6 versions (V4-V10) were spent optimizing for a game mechanic that didn't exist. One recording analysis session revealed the real mechanics and required a complete prompt rewrite.
 
@@ -113,20 +114,19 @@ Key optimizations:
 
 ### ls20 (Movement/Pattern Puzzle)
 
-- **Actual mechanics (discovered V11 via recording analysis):**
-  - A **reference pattern box** (upper area, rows 8-16, cols 32-40) shows the target pattern
-  - An **answer box** (bottom-left, rows 52-63, cols 0-11) displays a pattern that **rotates automatically**
-  - A **moving indicator** (pink+maroon sprite) autonomously cycles through green corridors
-  - Each time the indicator reaches the reference box, the answer box pattern rotates 90 degrees
-  - Pattern cycle: 4 states (original → H-flip → 180-rot → V-flip)
-  - The player must navigate to the answer box when its pattern matches the reference
-  - **There is no switch.** What we identified as a "blue switch" was actually the player sprite's blue accent pixels
-- **Grid structure:** Green (3) walls form corridors and box borders. Yellow (4) and gray (5) are walkable. The player starts at ~(41,45) in an open area surrounded by corridors.
-- **Timer:** ~40 actions per life, 3 lives total, 7 levels to complete
-- **V4-V8 failure:** MazeNavigator explores blindly, never understands puzzle mechanics
-- **V9 change:** Disabled MazeNavigator, full Claude reasoning per move — still wandered aimlessly
-- **V10-V10.3:** Added `navigate_to` virtual tool for efficient multi-step navigation. Fixed wall detection bug, added progress-based abort for infinite loops. Claude correctly navigated to key locations but didn't complete levels.
-- **V11:** Completely rewrote prompt after recording analysis revealed true game mechanics. Previous prompts told Claude to find a non-existent "switch" and navigate to the wrong target box.
+- **Actual mechanics (discovered V13 via deep recording analysis):**
+  - A **reference pattern box** (Box 1, upper area, rows 8-16, cols 32-40) shows the fixed target pattern
+  - A **rotatable pattern box** (Box 2, bottom-left, rows 53-62, cols 1-10) displays a pattern that can be rotated
+  - A **rotation switch** (small blue+black object at x=20-22, y=31-33) — player activates by walking onto position (19,30)
+  - Each touch of the switch rotates Box 2's pattern by 90° clockwise
+  - After exactly 1 touch, Box 2 matches Box 1's target pattern
+  - The player must then navigate to Box 1 and enter it to complete the level
+  - **Optimal solution: 13 moves** (navigate to switch → navigate to Box 1)
+- **Grid structure:** Green (3) walls form corridors and box borders. Yellow (4) and gray (5) are walkable. The player starts at ~(39,45) in the right room.
+- **Timer:** ~41 moves per life, 3 lives total, 7 levels to complete
+- **V4-V10:** Assumed switch existed (partially correct) but couldn't locate or activate it. MazeNavigator (V4-V8) explored blindly. navigate_to (V10) navigated efficiently but still failed to find the switch.
+- **V11:** Incorrectly concluded no switch exists after recording analysis. Rewrote prompt for autonomous rotation model. Still scored 0.
+- **V13:** Deep recording analysis proved switch exists. Hardcoded correct mechanics. **Level 1 solved in 19 actions.** Score: 14.29 (1/7 levels). Levels 2+ fail due to hardcoded level-1 coordinates.
 
 ### vc33 (Click Only)
 
@@ -158,6 +158,7 @@ Key optimizations:
 | V10 | ls20 | 201 | ~500K | ~7K | 0 | ~$1.50 |
 | V10.4 | ls20 | 201 | ~570K | ~7K | 0 | ~$1.70 |
 | V12 | vc33 | 201 | ~190K | ~2.5K | 0 | ~$0.60 |
+| V13 | ls20 | 201 | ~500K | ~7K | 1 (score 14.29) | ~$1.50 |
 
 The key cost driver is images. Each 512x512 PNG is ~1500-3000 tokens. Sending images every turn for 200 actions adds ~400K-600K tokens. For movement games, sending every 3rd turn saves ~70% of image cost.
 
@@ -177,11 +178,11 @@ The `navigate_to` tool (V10+) significantly reduced token usage for movement gam
 
 6. **Multi-layer frames are common and require deduplication.** ft09 starts with 5 layers (cursor blink animation). Rendering all 5 as separate images wastes tokens. MD5 deduplication across layers reduces this to 1-2 unique images.
 
-7. **Don't hardcode game mechanics you haven't verified.** The movement prompt's "SPATIAL LAYOUT" section hardcoded specific coordinates (switch at y~30-35, target at y<25). This was based on an incorrect model of the game. When the model was wrong, Claude was given precise but incorrect instructions, worse than no instructions at all. Game-specific hints should only be added after frame-level verification from recordings.
+7. **Don't hardcode game mechanics you haven't verified.** The movement prompt hardcoded specific coordinates. V4-V10 had the right general idea (switch exists) but wrong specifics. V11 hardcoded an entirely wrong model (no switch). V13 finally got it right after deep frame-level recording analysis. Game-specific hints should only be added after thorough frame-level verification — and "thorough" means checking your correction is actually correct.
 
 8. **Greedy navigation fails in complex environments.** A greedy Manhattan-distance path works for open areas but fails in corridor-heavy environments with walls. The agent needs proper pathfinding (BFS/A*) or at minimum, progress-based abort with fallback to exploratory individual moves. Wall retry + perpendicular approach creates oscillation; progress tracking catches it.
 
-9. **The objects list can be misleading.** `extract_objects()` identifies colored clusters by pixel count, but can't distinguish game-relevant entities from decorative elements. The "blue switch" at (21,32) was actually the player sprite's accent pixels. Objects need semantic context (what role they play) not just spatial data (where they are).
+9. **The objects list can be misleading.** `extract_objects()` identifies colored clusters by pixel count, but can't distinguish game-relevant entities from decorative elements. Additionally, color names are mislabeled (maroon→"blue", orange→"pink"). The switch at (20-22, 31-33) was initially confused with the player sprite's accent pixels due to similar color labeling. Objects need semantic context (what role they play) not just spatial data (where they are).
 
 10. **LLM vision is better at layout comprehension than coordinate extraction.** Claude can identify "there are two pattern boxes and a corridor structure" from the image better than it can read exact pixel coordinates. But for navigation, it needs the objects list's precise coordinates. The combination is essential: vision for understanding, structured data for action.
 
@@ -197,7 +198,7 @@ A catalog of bugs encountered during development, useful for anyone building sim
 | Claude navigates to wrong target | V10.1→V10.2 | Goes to (59,61) instead of target box | No spatial guidance in prompt; Claude guesses wrong box | Added SPATIAL LAYOUT section (later found to be wrong itself) |
 | Content change interruption fires every step | V10.3 | navigate_to interrupted on every step, defeating its purpose | Player movement changes grid (2 px), timer changes grid (49+ px), threshold too low | Changed to pixel magnitude threshold (>5), then discovered 51px noise floor from timer |
 | Nav queue infinite oscillation | V10.3b→V10.4 | 25+ actions wasted bouncing between two positions | Wall retry counter resets on successful perpendicular moves | Progress-based abort: if no distance improvement after 12 steps, abort |
-| Wrong game model (entire paradigm) | V4→V11 | 6 versions optimizing for non-existent mechanics | Never analyzed recordings to verify switch/rotation hypothesis | Frame-by-frame recording analysis revealed autonomous indicator, no switch |
+| Wrong game model (entire paradigm) | V4→V13 | V4-V10: couldn't locate switch. V11: concluded no switch (wrong). V13: found switch exists at (x=20-22, y=31-33) | Insufficient recording analysis in V11 led to wrong "no switch" conclusion | Deep frame-by-frame analysis in V13 proved switch exists; player activates at (19,30), each touch rotates Box 2 by 90° |
 | Timer at row 0 breaks content_hash | V11→V12 | Stuck detection fails for vc33 (timer at top, not bottom) | `content_hash` only strips last 2 rows, but vc33 timer is at row 0 | Strip both row 0 AND last 2 rows |
 | Framework drops action_input in recording | V6→V12 | All recordings show action_id=0 regardless of actual action | `_convert_raw_frame_data` doesn't copy `action_input` from API response | Framework bug — not yet fixed upstream |
 | extract_objects mislabels colors | V12 | Claude told "blue object at (61,29)" when it's actually maroon | Color name mapping in extract_objects doesn't match ARC palette | Needs color mapping fix |
@@ -215,5 +216,6 @@ A catalog of bugs encountered during development, useful for anyone building sim
 | V10.1 | Wall detection fix | — | 0 | — |
 | V10.2 | Spatial layout hints | — | 0 | — |
 | V10.3-10.4 | Content change detection, progress abort | — | 0 | — |
-| V11 | Corrected game mechanics from recording analysis | — | 0 | — |
+| V11 | Corrected game mechanics from recording analysis (wrong — no switch) | — | 0 | — |
 | V12 | Fix content_hash for top-row timers, click-only prompt | — | — | 0 |
+| V13 | Correct ls20 mechanics (switch exists, player-triggered rotation) | — | **14.29** (1/7 levels) | — |
