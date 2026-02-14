@@ -11,13 +11,13 @@ from __future__ import annotations
 
 from typing import Any, Dict, List
 
-import matplotlib
-
-matplotlib.use("Agg")  # Non-interactive backend for CI
-
-import matplotlib.pyplot as plt
 import numpy as np
 import pytest
+
+matplotlib = pytest.importorskip("matplotlib", reason="matplotlib not installed")
+matplotlib.use("Agg")  # Non-interactive backend for CI
+
+import matplotlib.pyplot as plt  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Synthetic data helpers
