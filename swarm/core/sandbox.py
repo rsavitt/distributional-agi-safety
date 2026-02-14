@@ -30,6 +30,7 @@ import hashlib
 import logging
 import posixpath
 import random
+import re
 import time
 import uuid
 from abc import ABC, abstractmethod
@@ -58,16 +59,36 @@ _MAX_ERROR_LENGTH = 200
 """Max characters kept when sanitizing error messages for logs/failure docs."""
 
 
-def _sanitize_error(error: Optional[Exception], max_len: int = _MAX_ERROR_LENGTH) -> str:
-    """Return a truncated, type-prefixed error string safe for logging.
+_SECRET_PATTERNS: List[re.Pattern[str]] = [
+    # URLs with embedded credentials: scheme://user:pass@host
+    re.compile(r"://[^/\s]*:[^/\s]*@"),
+    # API key/token patterns: key=..., token=..., password=..., secret=...
+    re.compile(r"(?i)(api[_-]?key|token|password|passwd|secret|credential)s?\s*[=:]\s*\S+"),
+    # Bearer tokens
+    re.compile(r"(?i)bearer\s+\S+"),
+    # AWS-style keys (AKIA...)
+    re.compile(r"AKIA[0-9A-Z]{16}"),
+]
 
-    Strips potentially sensitive details (paths, credentials) that may
-    appear in long exception messages.
+
+def _redact_secrets(msg: str) -> str:
+    """Replace common secret patterns with [REDACTED]."""
+    for pattern in _SECRET_PATTERNS:
+        msg = pattern.sub("[REDACTED]", msg)
+    return msg
+
+
+def _sanitize_error(error: Optional[Exception], max_len: int = _MAX_ERROR_LENGTH) -> str:
+    """Return a redacted, truncated, type-prefixed error string safe for logging.
+
+    Applies pattern-based redaction of common secret formats (URLs with
+    credentials, API keys, tokens, passwords) **before** truncation, so
+    secrets that appear early in the message are never exposed.
     """
     if error is None:
         return ""
     type_name = type(error).__name__
-    msg = str(error)
+    msg = _redact_secrets(str(error))
     if len(msg) > max_len:
         msg = msg[:max_len] + "... [truncated]"
     return f"{type_name}: {msg}"
@@ -439,6 +460,9 @@ class SandboxEnvironment:
         self.fs = SandboxFileSystem()
         # User-facing checkpoints
         self._checkpoints: Dict[str, Dict[str, FileEntry]] = {}
+        # Monotonic counter for auto-generated checkpoint labels (avoids
+        # collisions after eviction, where len() would recycle old labels).
+        self._checkpoint_counter: int = 0
         # Internal rollback checkpoints (not accessible to agent code)
         self._internal_checkpoints: Dict[str, Dict[str, FileEntry]] = {}
         self._execution_log: Deque[Dict[str, Any]] = deque(
@@ -489,8 +513,11 @@ class SandboxEnvironment:
 
     def checkpoint(self, label: Optional[str] = None) -> str:
         """Snapshot the current filesystem state. Returns checkpoint id."""
-        cp_id = label or f"cp-{len(self._checkpoints)}"
-        self._checkpoints[cp_id] = self.fs.snapshot()
+        if label is None:
+            self._checkpoint_counter += 1
+            label = f"cp-{self._checkpoint_counter}"
+        self._checkpoints[label] = self.fs.snapshot()
+        cp_id = label
         self._evict_checkpoints()
         return cp_id
 
@@ -906,7 +933,20 @@ class AgentPlayground:
         if self.config.learn_from_failures:
             self._record_failure(result)
 
-        # Failover needs async — use asyncio.run() for safe event loop creation
+        # Failover backends are async — we need an event loop.
+        # Detect whether we're already inside one (Jupyter, async frameworks)
+        # and raise a clear error instead of crashing with asyncio.run().
+        try:
+            asyncio.get_running_loop()
+            raise RuntimeError(
+                "run_sync() with a failover chain cannot be called from an "
+                "async context (a running event loop was detected). "
+                "Use 'await playground.run(task)' instead."
+            )
+        except RuntimeError as e:
+            # Re-raise our own error; swallow the "no running event loop" one
+            if "run_sync()" in str(e):
+                raise
         fo_result = asyncio.run(
             self._failover.execute(self.sandbox)
         )

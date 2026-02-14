@@ -18,6 +18,7 @@ from swarm.core.sandbox import (
     SandboxConfig,
     SandboxEnvironment,
     SandboxFileSystem,
+    _redact_secrets,
     _sanitize_error,
     execute_with_retry,
     execute_with_retry_sync,
@@ -428,6 +429,20 @@ class TestSandboxEnvironment:
         assert "d" in cps
         assert len(cps) == 3
 
+    def test_auto_label_no_collision_after_eviction(self):
+        """Checkpoint auto-labels use a monotonic counter, not len(), so
+        labels never collide after eviction shrinks the dict."""
+        sandbox = SandboxEnvironment(SandboxConfig(max_checkpoints=2))
+        id1 = sandbox.checkpoint()  # cp-1
+        id2 = sandbox.checkpoint()  # cp-2, evicts cp-1
+        id3 = sandbox.checkpoint()  # cp-3, evicts cp-2
+        # All IDs are distinct
+        assert len({id1, id2, id3}) == 3
+        # Only the last two survive
+        cps = sandbox.list_checkpoints()
+        assert len(cps) == 2
+        assert id3 in cps
+
     def test_internal_checkpoints_not_visible(self):
         """M-3: Internal rollback checkpoints are not in list_checkpoints."""
         sandbox = SandboxEnvironment(
@@ -667,6 +682,42 @@ class TestErrorSanitization:
         result = _sanitize_error(err)
         assert result.startswith("ConnectionRefusedError:")
 
+    def test_sanitize_redacts_url_credentials(self):
+        """Must-fix #2: Secrets early in message are redacted, not just truncated."""
+        err = Exception("connect to db://user:password@host:5432 failed")
+        result = _sanitize_error(err)
+        assert "password" not in result
+        assert "[REDACTED]" in result
+
+    def test_sanitize_redacts_api_key(self):
+        err = Exception("api_key=sk-abc123def456 is invalid")
+        result = _sanitize_error(err)
+        assert "sk-abc123def456" not in result
+        assert "[REDACTED]" in result
+
+    def test_sanitize_redacts_bearer_token(self):
+        err = Exception("auth failed: Bearer eyJhbGciOiJIUzI1NiJ9.payload.sig")
+        result = _sanitize_error(err)
+        assert "eyJhbGciOiJIUzI1NiJ9" not in result
+        assert "[REDACTED]" in result
+
+
+class TestRedactSecrets:
+    """Direct tests for the _redact_secrets helper."""
+
+    def test_url_with_credentials(self):
+        assert "password" not in _redact_secrets("postgres://admin:password@db:5432/mydb")
+
+    def test_token_assignment(self):
+        assert "abc123" not in _redact_secrets("token=abc123 is expired")
+
+    def test_password_assignment(self):
+        assert "s3cret" not in _redact_secrets("password: s3cret")
+
+    def test_no_false_positive_on_clean_string(self):
+        clean = "Connection refused at port 5432"
+        assert _redact_secrets(clean) == clean
+
 
 # ── FailoverChain ────────────────────────────────────────────────────────────
 
@@ -686,9 +737,12 @@ class _SuccessBackend(ExecutionBackend):
 
 
 class _FailBackend(ExecutionBackend):
+    def __init__(self, backend_name: str = "fail"):
+        self._name = backend_name
+
     @property
     def name(self) -> str:
-        return "fail"
+        return self._name
 
     async def run(self, sandbox: SandboxEnvironment) -> Any:
         raise Exception("backend-failure")
@@ -748,7 +802,7 @@ class TestFailoverChain:
 
     @pytest.mark.asyncio
     async def test_all_backends_fail(self):
-        chain = FailoverChain([_FailBackend(), _FailBackend()])
+        chain = FailoverChain([_FailBackend("fail-1"), _FailBackend("fail-2")])
         sandbox = SandboxEnvironment(
             SandboxConfig(retry_policy=RetryPolicy(max_retries=0))
         )
@@ -756,6 +810,9 @@ class TestFailoverChain:
         assert not fo.result.succeeded
         assert fo.backend_name == "<none>"
         assert len(fo.backends_tried) == 2
+        # Both backends should have distinct error entries
+        assert "fail-1" in fo.failover_errors
+        assert "fail-2" in fo.failover_errors
 
     @pytest.mark.asyncio
     async def test_backend_with_retries(self):
@@ -858,9 +915,9 @@ class TestAgentPlayground:
 
         await playground.run(task)
         content = playground.sandbox.read_file("/.failures/iter-1.md")
-        assert "[truncated]" in content
-        # Full secret should not appear
+        # Secret should be redacted (pattern-matched) or truncated
         assert long_secret not in content
+        assert "[REDACTED]" in content or "[truncated]" in content
 
     @pytest.mark.asyncio
     async def test_run_with_failover(self):
@@ -938,6 +995,25 @@ class TestAgentPlayground:
         await playground.run(task)
         checkpoints = playground.sandbox.list_checkpoints()
         assert any("iter-1" in cp for cp in checkpoints)
+
+    @pytest.mark.asyncio
+    async def test_run_sync_with_failover_in_async_context_raises(self):
+        """Must-fix #1: run_sync() with failover raises inside async context."""
+        chain = FailoverChain([_FailBackend(), _SuccessBackend()])
+        playground = AgentPlayground(
+            PlaygroundConfig(
+                sandbox_config=SandboxConfig(
+                    retry_policy=RetryPolicy(max_retries=0)
+                )
+            ),
+            failover_chain=chain,
+        )
+
+        def failing_task(sb: SandboxEnvironment):
+            raise Exception("primary fails")
+
+        with pytest.raises(RuntimeError, match="run_sync.*async context"):
+            playground.run_sync(failing_task)
 
     def test_reset(self):
         playground = AgentPlayground()
