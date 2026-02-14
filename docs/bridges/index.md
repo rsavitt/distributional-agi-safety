@@ -44,6 +44,16 @@ Instrument real production systems with SWARM metrics.
 
 [Learn more →](gastown.md)
 
+### SWARM–Prime Intellect
+
+Train and evaluate RL models on SWARM safety metrics using Prime Intellect's distributed training platform.
+
+- **Purpose:** Safety-reward RL training and evaluation via the verifiers library
+- **Features:** Environment export, composite reward from SWARM metrics, anti-gaming scoring, platform job management
+- **Status:** In development
+
+[Learn more →](prime_intellect.md)
+
 ### SWARM-Ralph
 
 Ingest Ralph event streams into SWARM governance and metrics.

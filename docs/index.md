@@ -110,7 +110,7 @@ SWARM makes these interaction-level risks **observable, measurable, and governab
   </div>
   <div class="feature">
     <h3>Validate</h3>
-    <p>Integrate with real systems via bridges: Concordia for LLM agents, Gas Town for production data, AgentXiv for research mapping.</p>
+    <p>Integrate with real systems via bridges: Concordia for LLM agents, Prime Intellect for safety-reward RL training, Gas Town for production data, AgentXiv for research mapping.</p>
   </div>
 </div>
 
