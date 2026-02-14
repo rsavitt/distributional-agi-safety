@@ -34,6 +34,7 @@ simulation framework.
 
 import math
 import random
+import threading
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Dict, List, Optional, Tuple
 
@@ -241,6 +242,8 @@ class LDTAgent(BaseAgent):
         self._subjunctive_cache: Dict[str, SubjunctiveDependence] = {}
         # Precommitted policy (UDT): computed once, never updated.
         self._precommitted_cooperate: Optional[bool] = None
+        # Lock for cache access.
+        self._cache_lock = threading.Lock()
 
     # ------------------------------------------------------------------
     # Core LDT reasoning helpers
@@ -309,26 +312,27 @@ class LDTAgent(BaseAgent):
         High conditional agreement + high MI indicates the decisions are
         "subjunctively linked" — changing our output would change theirs.
         """
-        if counterparty_id in self._subjunctive_cache:
-            return self._subjunctive_cache[counterparty_id]
+        with self._cache_lock:
+            if counterparty_id in self._subjunctive_cache:
+                return self._subjunctive_cache[counterparty_id]
 
-        cosine = self._compute_twin_score(counterparty_id)
-        profile = self._counterparty_profiles.get(counterparty_id, [])
-        own = self._own_trace[-self.counterfactual_horizon :]
+            cosine = self._compute_twin_score(counterparty_id)
+            profile = self._counterparty_profiles.get(counterparty_id, [])
+            own = self._own_trace[-self.counterfactual_horizon :]
 
-        # Need paired decisions to compute conditional probabilities.
-        # Match by index (they interacted at the same timesteps).
-        n = min(len(profile), len(own))
-        if n < 3:
-            result = SubjunctiveDependence(
-                cosine_similarity=cosine,
-                conditional_agreement=cosine,
-                conditional_defection=cosine,
-                mutual_information=0.0,
-                subjunctive_score=cosine,
-            )
-            self._subjunctive_cache[counterparty_id] = result
-            return result
+            # Need paired decisions to compute conditional probabilities.
+            # Match by index (they interacted at the same timesteps).
+            n = min(len(profile), len(own))
+            if n < 3:
+                result = SubjunctiveDependence(
+                    cosine_similarity=cosine,
+                    conditional_agreement=cosine,
+                    conditional_defection=cosine,
+                    mutual_information=0.0,
+                    subjunctive_score=cosine,
+                )
+                self._subjunctive_cache[counterparty_id] = result
+                return result
 
         # Align traces: our recent decisions paired with theirs.
         our_decisions = [(acc, p) for acc, p in own[-n:]]

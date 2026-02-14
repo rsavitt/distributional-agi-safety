@@ -1,6 +1,7 @@
 """Orchestrator for running the multi-agent simulation."""
 
 import asyncio
+import logging
 import random
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
@@ -61,6 +62,8 @@ from swarm.models.events import (
     EventType,
 )
 from swarm.models.interaction import InteractionType, SoftInteraction
+
+logger = logging.getLogger(__name__)
 
 
 class OrchestratorConfig(BaseModel):
@@ -619,7 +622,7 @@ class Orchestrator:
             try:
                 handler.on_epoch_start(self.state)
             except Exception:
-                pass  # handler hook failures must not break simulation
+                logger.debug("Handler %s.on_epoch_start failed", type(handler).__name__, exc_info=True)
 
         if self.governance_engine:
             gov_effect = self.governance_engine.apply_epoch_start(
@@ -633,7 +636,7 @@ class Orchestrator:
             try:
                 handler.on_epoch_end(self.state)
             except Exception:
-                pass  # handler hook failures must not break simulation
+                logger.debug("Handler %s.on_epoch_end failed", type(handler).__name__, exc_info=True)
 
         if self.network is not None:
             pruned = self.network.decay_edges()
@@ -701,7 +704,7 @@ class Orchestrator:
             try:
                 handler.on_step(self.state, self.state.current_step)
             except Exception:
-                pass  # handler hook failures must not break simulation
+                logger.debug("Handler %s.on_step failed", type(handler).__name__, exc_info=True)
 
     def _get_eligible_agents(self) -> List[str]:
         """Return agents eligible to act this step (respects schedule, limits, governance)."""
@@ -895,6 +898,7 @@ class Orchestrator:
         try:
             result = handler.handle_action(action, self.state)
         except Exception:
+            logger.debug("Handler %s.handle_action failed", type(handler).__name__, exc_info=True)
             return False
 
         if not result.success:
@@ -951,7 +955,7 @@ class Orchestrator:
         try:
             handler.post_finalize(result, interaction, gov_effect, self.state)
         except Exception:
-            pass  # post_finalize failures must not break the action
+            logger.debug("Handler %s.post_finalize failed", type(handler).__name__, exc_info=True)
 
         return True
 
