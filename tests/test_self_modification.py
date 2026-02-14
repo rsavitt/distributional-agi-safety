@@ -79,6 +79,55 @@ class TestModificationProposal:
         assert d["risk_tier"] == "low"
         assert d["agent_id"] == "a1"
 
+    # --- Security: Finding 3 — hash covers payload and chain ---
+
+    def test_hash_changes_when_payload_changes(self):
+        """Hash must cover proposed_change so post-approval mutation is detectable."""
+        p1 = ModificationProposal(
+            modification_id="abc",
+            agent_id="a1",
+            target_ref="prompt.x",
+            change_type="text_edit",
+            timestamp=1000.0,
+            proposed_change={"files_touched": 1},
+        )
+        p2 = ModificationProposal(
+            modification_id="abc",
+            agent_id="a1",
+            target_ref="prompt.x",
+            change_type="text_edit",
+            timestamp=1000.0,
+            proposed_change={"files_touched": 99},
+        )
+        assert p1.compute_hash() != p2.compute_hash()
+
+    def test_hash_includes_prev_hash_for_chaining(self):
+        """Hash must include prev_hash so integrity chain is linked."""
+        p1 = ModificationProposal(
+            modification_id="abc",
+            agent_id="a1",
+            timestamp=1000.0,
+            prev_hash="",
+        )
+        p2 = ModificationProposal(
+            modification_id="abc",
+            agent_id="a1",
+            timestamp=1000.0,
+            prev_hash="deadbeef12345678",
+        )
+        assert p1.compute_hash() != p2.compute_hash()
+
+    # --- Security: Finding 10 — state transition audit trail ---
+
+    def test_state_history_records_transitions(self):
+        """Each transition appends to state_history."""
+        p = ModificationProposal()
+        p.transition(ModificationState.SANDBOXED, "gates passed")
+        p.transition(ModificationState.TESTED, "tests green")
+        assert len(p.state_history) == 2
+        assert p.state_history[0][0] == "proposed"
+        assert p.state_history[1][0] == "sandboxed"
+
 
 # ---------------------------------------------------------------------------
 # Risk-tier classifier tests
@@ -122,6 +171,31 @@ class TestRiskClassifier:
         )
         assert classify_risk_tier(p) == RiskTier.CRITICAL
 
+    # --- Security: Finding 2 — anti-evasion via default-to-MEDIUM ---
+
+    def test_unknown_target_defaults_to_medium(self):
+        """Unrecognized target_ref must default to MEDIUM, not LOW."""
+        p = ModificationProposal(
+            target_ref="xyzzy_obscure_ref",
+            change_type="delta_apply",
+        )
+        assert classify_risk_tier(p) == RiskTier.MEDIUM
+
+    def test_obfuscated_governance_name_not_low(self):
+        """An agent obfuscating 'governance' as 'gov_rnance' should not get LOW."""
+        p = ModificationProposal(
+            target_ref="gov_rnance.plcy_bndl",
+            change_type="config_edit",
+        )
+        # Should be MEDIUM (not LOW) since it doesn't match any known surface
+        tier = classify_risk_tier(p)
+        assert tier != RiskTier.LOW
+
+    def test_empty_refs_default_to_medium(self):
+        """Empty target_ref and change_type must not classify as LOW."""
+        p = ModificationProposal(target_ref="", change_type="")
+        assert classify_risk_tier(p) == RiskTier.MEDIUM
+
 
 # ---------------------------------------------------------------------------
 # Complexity weight tests
@@ -132,7 +206,7 @@ class TestComplexityWeight:
     def test_default_proposal_weight(self):
         p = ModificationProposal(risk_tier=RiskTier.LOW)
         w = compute_complexity_weight(p)
-        # f=1, t=0, p=0, i=0, s=0 -> 1*1 = 1.0
+        # f=max(1,1)=1, t=0, p=0, i=0, s=0 -> 1*1 = 1.0
         assert w == 1.0
 
     def test_high_risk_includes_safety_penalty(self):
@@ -154,6 +228,47 @@ class TestComplexityWeight:
         w = compute_complexity_weight(p)
         # 1*3 + 2*2 + 4*1 + 3*1 + 5*0 = 3+4+4+3 = 14
         assert w == 14.0
+
+    # --- Security: Finding 1 — negative/zero inputs clamped ---
+
+    def test_negative_files_touched_clamped_to_one(self):
+        """Agent cannot set files_touched to 0 or negative to reduce weight."""
+        p = ModificationProposal(
+            risk_tier=RiskTier.LOW,
+            proposed_change={"files_touched": -5},
+        )
+        w = compute_complexity_weight(p)
+        assert w >= 1.0
+
+    def test_zero_files_touched_clamped_to_one(self):
+        p = ModificationProposal(
+            risk_tier=RiskTier.LOW,
+            proposed_change={"files_touched": 0},
+        )
+        w = compute_complexity_weight(p)
+        assert w >= 1.0
+
+    def test_negative_tool_interfaces_clamped(self):
+        p = ModificationProposal(
+            risk_tier=RiskTier.LOW,
+            proposed_change={"tool_interfaces_changed": -10},
+        )
+        w = compute_complexity_weight(p)
+        assert w >= 1.0
+
+    def test_all_negative_inputs_still_has_floor(self):
+        """Even if all inputs are adversarially negative, floor is 1.0."""
+        p = ModificationProposal(
+            risk_tier=RiskTier.LOW,
+            proposed_change={
+                "files_touched": -100,
+                "tool_interfaces_changed": -100,
+                "privilege_delta": -100,
+                "interaction_surface_delta": -100,
+            },
+        )
+        w = compute_complexity_weight(p)
+        assert w >= 1.0
 
 
 # ---------------------------------------------------------------------------
@@ -252,10 +367,13 @@ class TestKMaxGate:
         result = evaluate_k_max_gate(p, current_budget_used=10.0)
         assert result.passed is True  # 10 + 10 = 20 <= 20
 
-    def test_critical_always_denied(self):
+    # --- Security: Finding 8 — CRITICAL K_max now -1, always denied ---
+
+    def test_critical_always_denied_via_k_max(self):
+        """CRITICAL tier has K_max=-1, so even zero-weight proposals fail."""
         p = ModificationProposal(risk_tier=RiskTier.CRITICAL, complexity_weight=0.0)
         result = evaluate_k_max_gate(p, current_budget_used=0.0)
-        assert result.passed is True  # 0 + 0 = 0 <= 0 (edge case: zero is ok)
+        assert result.passed is False  # 0 + 0 = 0 > -1 is False: 0 <= -1 is False
 
 
 # ---------------------------------------------------------------------------
@@ -331,7 +449,7 @@ class TestSelfModificationLever:
         for _ in range(3):
             p = ModificationProposal(
                 agent_id="a1",
-                target_ref="skill:summarize",
+                target_ref="template.summarize",
                 change_type="text_edit",
             )
             lever.evaluate_proposal(
@@ -349,7 +467,7 @@ class TestSelfModificationLever:
         for i in range(3):
             p = ModificationProposal(
                 agent_id="a1",
-                target_ref=f"skill:task_{i}",
+                target_ref=f"template.task_{i}",
                 change_type="text_edit",
             )
             lever.evaluate_proposal(
@@ -380,3 +498,58 @@ class TestSelfModificationLever:
         assert lever.get_agent_budget("a1")["used"] > 0
         lever.reset_agent_budget("a1")
         assert lever.get_agent_budget("a1")["used"] == 0.0
+
+    # --- Security: Finding 1+2 end-to-end — adversarial proposal ---
+
+    def test_adversarial_zero_weight_proposal_still_costs_budget(self):
+        """An agent setting all proposed_change values to 0 still pays >= 1.0."""
+        lever = self._make_lever()
+        proposal = ModificationProposal(
+            agent_id="a1",
+            target_ref="prompt.greeting",
+            change_type="text_edit",
+            proposed_change={
+                "files_touched": 0,
+                "tool_interfaces_changed": 0,
+                "privilege_delta": 0,
+                "interaction_surface_delta": 0,
+            },
+        )
+        lever.evaluate_proposal(
+            proposal,
+            baseline_means={"tox": 0.1},
+            baseline_stds={"tox": 0.05},
+            candidate_values={"tox": 0.08},
+            candidate_cis={"tox": 0.01},
+            metric_directions={"tox": -1},
+        )
+        assert lever.get_agent_budget("a1")["used"] >= 1.0
+
+    def test_unknown_target_gets_medium_threshold(self):
+        """A proposal with an unrecognized target gets MEDIUM risk, not LOW."""
+        lever = self._make_lever()
+        proposal = ModificationProposal(
+            agent_id="a1",
+            target_ref="xyzzy_totally_unknown",
+            change_type="obfuscated_delta",
+        )
+        approved, tau_r, _ = lever.evaluate_proposal(
+            proposal,
+            baseline_means={"tox": 0.1},
+            baseline_stds={"tox": 0.05},
+            candidate_values={"tox": 0.10},  # no improvement = fails MEDIUM tau>=0
+            candidate_cis={"tox": 0.01},
+            metric_directions={"tox": -1},
+        )
+        # With MEDIUM tier, tau_min=0.0. Candidate tox=0.10 == baseline 0.10,
+        # margin = (-1*(0.10-0.10)/0.05) - 0.01/0.05 = -0.2 < 0.0 => denied
+        assert approved is False
+
+    # --- Security: Finding 7 — get_agent_budget with tier ---
+
+    def test_get_agent_budget_accepts_tier(self):
+        lever = self._make_lever()
+        budget_low = lever.get_agent_budget("a1", RiskTier.LOW)
+        budget_high = lever.get_agent_budget("a1", RiskTier.HIGH)
+        assert budget_low["k_max"] == 20.0
+        assert budget_high["k_max"] == 50.0

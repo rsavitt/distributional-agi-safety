@@ -11,12 +11,14 @@ Implements the architecture from docs/research/self-modification-governance-byli
 from __future__ import annotations
 
 import hashlib
+import json
+import threading
 import time
 import uuid
-from collections import defaultdict
+from collections import defaultdict, deque
 from dataclasses import asdict, dataclass, field
 from enum import Enum
-from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple
 
 from swarm.governance.levers import GovernanceLever, LeverEffect
 
@@ -24,6 +26,12 @@ if TYPE_CHECKING:
     from swarm.env.state import EnvState
     from swarm.governance.config import GovernanceConfig
     from swarm.models.interaction import SoftInteraction
+
+# Maximum number of proposals retained per agent for oscillation detection.
+_MAX_HISTORY_PER_AGENT = 50
+
+# Maximum number of distinct agent IDs tracked to bound memory.
+_MAX_TRACKED_AGENTS = 10_000
 
 
 # ---------------------------------------------------------------------------
@@ -113,25 +121,39 @@ class ModificationProposal:
     entry_hash: str = ""
     prev_hash: str = ""
 
-    # Complexity weight (computed by classifier)
+    # Complexity weight (computed by classifier — not agent-settable)
     complexity_weight: float = 0.0
 
+    # Audit trail of state transitions: (state, reason, timestamp)
+    state_history: list[Tuple[str, str, float]] = field(default_factory=list)
+
     def compute_hash(self) -> str:
-        """Compute deterministic hash over identity + change fields."""
+        """Compute deterministic hash over identity, change payload, and chain.
+
+        Covers all fields that an adversary might mutate post-approval:
+        identity, proposed_change (canonical JSON), and prev_hash for chaining.
+        """
+        # Canonical JSON for proposed_change to ensure deterministic hashing
+        change_canonical = json.dumps(self.proposed_change, sort_keys=True)
         payload = (
             f"{self.modification_id}:{self.agent_id}:{self.target_ref}"
             f":{self.change_type}:{self.timestamp}"
+            f":{change_canonical}:{self.prev_hash}"
         )
         return hashlib.sha256(payload.encode()).hexdigest()[:16]
 
     def transition(self, new_state: ModificationState, reason: str = "") -> None:
-        """Transition to a new lifecycle state with validation."""
+        """Transition to a new lifecycle state with validation.
+
+        Appends to state_history for auditability.
+        """
         allowed = _VALID_TRANSITIONS.get(self.state, set())
         if new_state not in allowed:
             raise ValueError(
                 f"Invalid transition: {self.state.value} -> {new_state.value}. "
                 f"Allowed: {[s.value for s in allowed]}"
             )
+        self.state_history.append((self.state.value, self.state_reason, time.time()))
         self.state = new_state
         self.state_reason = reason
 
@@ -173,6 +195,24 @@ _HIGH_SURFACES = frozenset(
 )
 
 
+# Surfaces that are explicitly LOW risk (must match to get LOW classification).
+# Anything that doesn't match a known surface defaults to MEDIUM to prevent
+# evasion via obfuscated or novel target names.
+_LOW_SURFACES = frozenset(
+    {
+        "prompt",
+        "template",
+        "docs",
+        "readme",
+        "memory_cleanup",
+        "comment",
+        "text_edit",
+        "typo",
+        "cosmetic",
+    }
+)
+
+
 def classify_risk_tier(proposal: ModificationProposal) -> RiskTier:
     """Deterministic risk-tier classification from change surface.
 
@@ -181,11 +221,15 @@ def classify_risk_tier(proposal: ModificationProposal) -> RiskTier:
     - High: new external API/tool, expands permissions, inter-agent capability
     - Medium: workflows, model routing, tool params, memory schemas
     - Low: prompt/template tuning, docs, memory cleanup
+
+    **Anti-evasion:** unknown or unrecognized surfaces default to MEDIUM,
+    not LOW.  An agent must match an explicit LOW-risk surface pattern to
+    receive the most permissive thresholds.
     """
     target = proposal.target_ref.lower()
     change_type = proposal.change_type.lower()
 
-    # Critical check
+    # Critical check (highest priority)
     for surface in _CRITICAL_SURFACES:
         if surface in target or surface in change_type:
             return RiskTier.CRITICAL
@@ -195,33 +239,46 @@ def classify_risk_tier(proposal: ModificationProposal) -> RiskTier:
         if surface in target or surface in change_type:
             return RiskTier.HIGH
 
-    # Medium check
+    # Medium check (explicit indicators)
     medium_indicators = {"workflow", "model", "routing", "tool_param", "memory_schema"}
     for indicator in medium_indicators:
         if indicator in target or indicator in change_type:
             return RiskTier.MEDIUM
 
-    return RiskTier.LOW
+    # Low check — must explicitly match a known-safe surface.
+    # Unknown/unrecognized targets default to MEDIUM (anti-evasion).
+    for surface in _LOW_SURFACES:
+        if surface in target or surface in change_type:
+            return RiskTier.LOW
+
+    # Default: MEDIUM (fail-safe — unrecognized surfaces are not trusted)
+    return RiskTier.MEDIUM
 
 
 def compute_complexity_weight(proposal: ModificationProposal) -> float:
     """Deterministic complexity weight: w(c) = 1*f + 2*t + 4*p + 3*i + 5*s.
 
     Where:
-    - f: normalized files/surfaces touched
-    - t: new/changed tool interfaces count
-    - p: privilege delta score (0 if none, >=1 if expanded)
-    - i: inter-agent interaction surface delta
+    - f: normalized files/surfaces touched (clamped >= 1)
+    - t: new/changed tool interfaces count (clamped >= 0)
+    - p: privilege delta score (clamped >= 0)
+    - i: inter-agent interaction surface delta (clamped >= 0)
     - s: safety-critical surface touched (0/1)
+
+    All inputs are clamped to non-negative values and ``f`` has a floor of 1
+    so that every proposal costs at least 1 unit of budget.  This prevents an
+    adversarial agent from zeroing or inverting its own weight.
     """
     change = proposal.proposed_change
-    f = float(change.get("files_touched", 1))
-    t = float(change.get("tool_interfaces_changed", 0))
-    p = float(change.get("privilege_delta", 0))
-    i = float(change.get("interaction_surface_delta", 0))
+    f = max(float(change.get("files_touched", 1)), 1.0)
+    t = max(float(change.get("tool_interfaces_changed", 0)), 0.0)
+    p = max(float(change.get("privilege_delta", 0)), 0.0)
+    i = max(float(change.get("interaction_surface_delta", 0)), 0.0)
     s = 1.0 if proposal.risk_tier in (RiskTier.CRITICAL, RiskTier.HIGH) else 0.0
 
-    return 1 * f + 2 * t + 4 * p + 3 * i + 5 * s
+    weight = 1 * f + 2 * t + 4 * p + 3 * i + 5 * s
+    # Floor: every proposal costs at least 1.0
+    return max(weight, 1.0)
 
 
 # ---------------------------------------------------------------------------
@@ -338,7 +395,7 @@ _K_MAX_DEFAULTS: dict[RiskTier, float] = {
     RiskTier.LOW: 20.0,
     RiskTier.MEDIUM: 35.0,
     RiskTier.HIGH: 50.0,
-    RiskTier.CRITICAL: 0.0,  # no self-modification
+    RiskTier.CRITICAL: -1.0,  # impossible to pass (strict < 0)
 }
 
 
@@ -386,16 +443,24 @@ class SelfModificationLever(GovernanceLever):
 
     Tracks per-agent modification budgets, evaluates proposals against
     the Two-Gate policy, and detects oscillation patterns.
+
+    Thread safety: ``evaluate_proposal`` acquires a per-agent lock so
+    that concurrent evaluations for the same agent are serialized,
+    preventing TOCTOU races on the budget.
     """
 
     def __init__(self, config: "GovernanceConfig"):
         super().__init__(config)
         # Per-agent rolling budget: agent_id -> total complexity used
         self._agent_budgets: Dict[str, float] = defaultdict(float)
-        # Per-agent modification history for oscillation detection
-        self._agent_history: Dict[str, List[ModificationProposal]] = defaultdict(list)
+        # Per-agent modification history for oscillation detection (bounded)
+        self._agent_history: Dict[str, deque] = defaultdict(
+            lambda: deque(maxlen=_MAX_HISTORY_PER_AGENT)
+        )
         # Per-agent modification count this epoch
         self._epoch_counts: Dict[str, int] = defaultdict(int)
+        # Per-agent lock for atomic budget check-and-update
+        self._agent_locks: Dict[str, threading.Lock] = defaultdict(threading.Lock)
 
     @property
     def name(self) -> str:
@@ -420,10 +485,9 @@ class SelfModificationLever(GovernanceLever):
 
         agent_id = interaction.initiator
 
-        # Check frequency limit
+        # Check frequency limit (check first, increment only on pass)
         max_per_epoch = getattr(self.config, "self_modification_max_per_epoch", 10)
-        self._epoch_counts[agent_id] += 1
-        if self._epoch_counts[agent_id] > max_per_epoch:
+        if self._epoch_counts[agent_id] >= max_per_epoch:
             return LeverEffect(
                 lever_name=self.name,
                 cost_a=1.0,  # Sentinel: blocks the modification
@@ -436,6 +500,8 @@ class SelfModificationLever(GovernanceLever):
                 },
             )
 
+        # Increment only after passing the check
+        self._epoch_counts[agent_id] += 1
         return LeverEffect(lever_name=self.name)
 
     def evaluate_proposal(
@@ -449,10 +515,32 @@ class SelfModificationLever(GovernanceLever):
     ) -> tuple[bool, GateResult, GateResult]:
         """Evaluate a modification proposal against both gates.
 
+        Thread-safe: acquires a per-agent lock so that the budget
+        read-check-update is atomic.
+
         Returns:
             (approved, tau_result, k_max_result)
         """
-        # Classify risk tier
+        # Bound tracked agent count to prevent Sybil-driven memory growth
+        if (
+            proposal.agent_id not in self._agent_budgets
+            and len(self._agent_budgets) >= _MAX_TRACKED_AGENTS
+        ):
+            return (
+                False,
+                GateResult(
+                    passed=False,
+                    gate_name="tau",
+                    details={"reason": "agent tracking limit reached"},
+                ),
+                GateResult(
+                    passed=False,
+                    gate_name="k_max",
+                    details={"reason": "agent tracking limit reached"},
+                ),
+            )
+
+        # Classify risk tier (governance-side, not agent-settable)
         proposal.risk_tier = classify_risk_tier(proposal)
         proposal.complexity_weight = compute_complexity_weight(proposal)
         proposal.entry_hash = proposal.compute_hash()
@@ -467,29 +555,31 @@ class SelfModificationLever(GovernanceLever):
             metric_directions,
         )
 
-        # Gate 2: K_max
-        current_budget = self._agent_budgets[proposal.agent_id]
-        k_max_result = evaluate_k_max_gate(proposal, current_budget)
+        # Gate 2: K_max — under lock for atomic budget check-and-update
+        lock = self._agent_locks[proposal.agent_id]
+        with lock:
+            current_budget = self._agent_budgets[proposal.agent_id]
+            k_max_result = evaluate_k_max_gate(proposal, current_budget)
 
-        approved = tau_result.passed and k_max_result.passed
+            approved = tau_result.passed and k_max_result.passed
 
-        if approved:
-            # Update budget
-            self._agent_budgets[proposal.agent_id] += proposal.complexity_weight
-            self._agent_history[proposal.agent_id].append(proposal)
-            proposal.constitutional_result = tau_result.passed
-            proposal.compositional_result = k_max_result.passed
-            proposal.transition(ModificationState.SANDBOXED, "gates passed")
-        else:
-            reasons = []
-            if not tau_result.passed:
-                reasons.append(f"tau gate: {tau_result.details}")
-            if not k_max_result.passed:
-                reasons.append(f"k_max gate: {k_max_result.details}")
-            proposal.transition(
-                ModificationState.REJECTED,
-                "; ".join(reasons),
-            )
+            if approved:
+                # Atomic budget update
+                self._agent_budgets[proposal.agent_id] += proposal.complexity_weight
+                self._agent_history[proposal.agent_id].append(proposal)
+                proposal.constitutional_result = tau_result.passed
+                proposal.compositional_result = k_max_result.passed
+                proposal.transition(ModificationState.SANDBOXED, "gates passed")
+            else:
+                reasons = []
+                if not tau_result.passed:
+                    reasons.append(f"tau gate: {tau_result.details}")
+                if not k_max_result.passed:
+                    reasons.append(f"k_max gate: {k_max_result.details}")
+                proposal.transition(
+                    ModificationState.REJECTED,
+                    "; ".join(reasons),
+                )
 
         return approved, tau_result, k_max_result
 
@@ -499,11 +589,11 @@ class SelfModificationLever(GovernanceLever):
         Checks if the same target_ref appears in both add/remove or
         opposing changes within the recent modification window.
         """
-        history = self._agent_history.get(agent_id, [])
-        if len(history) < 2:
+        history = self._agent_history.get(agent_id)
+        if history is None or len(history) < 2:
             return False
 
-        recent = history[-window:]
+        recent = list(history)[-window:]
         targets = [p.target_ref for p in recent]
         # Oscillation = same target modified more than twice in window
         from collections import Counter
@@ -511,9 +601,15 @@ class SelfModificationLever(GovernanceLever):
         counts = Counter(targets)
         return any(c > 2 for c in counts.values())
 
-    def get_agent_budget(self, agent_id: str) -> Dict[str, float]:
-        """Return budget status for an agent."""
-        tier = RiskTier.MEDIUM  # default for reporting
+    def get_agent_budget(
+        self, agent_id: str, tier: RiskTier = RiskTier.MEDIUM
+    ) -> Dict[str, float]:
+        """Return budget status for an agent.
+
+        Args:
+            agent_id: The agent to query.
+            tier: Risk tier to report K_max against (default MEDIUM).
+        """
         k_max = _K_MAX_DEFAULTS[tier]
         used = self._agent_budgets.get(agent_id, 0.0)
         return {
@@ -525,4 +621,4 @@ class SelfModificationLever(GovernanceLever):
     def reset_agent_budget(self, agent_id: str) -> None:
         """Reset an agent's modification budget (after consolidation)."""
         self._agent_budgets[agent_id] = 0.0
-        self._agent_history[agent_id] = []
+        self._agent_history[agent_id] = deque(maxlen=_MAX_HISTORY_PER_AGENT)
