@@ -72,6 +72,10 @@ class ActionType(Enum):
     # Spawn actions
     SPAWN_SUBAGENT = "spawn_subagent"
 
+    # Rivals pipeline actions
+    RIVALS_PRODUCE = "rivals_produce"
+    RIVALS_REVIEW = "rivals_review"
+
     # Special actions
     NOOP = "noop"  # Do nothing this turn
 
@@ -208,6 +212,9 @@ class Observation:
     can_spawn: bool = False
     spawn_depth: int = 0
     spawn_children_count: int = 0
+
+    # Rivals pipeline observations
+    rivals_assignments: List[Dict] = field(default_factory=list)
 
 
 @dataclass
