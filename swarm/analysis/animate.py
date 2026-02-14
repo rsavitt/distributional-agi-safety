@@ -135,7 +135,7 @@ def save_animation(
         raise ValueError(f"Unsupported animation format: {format!r}")
 
     logger.info("Saved animation (%d frames) to %s", len(frames), path)
-    return path  # type: ignore[return-value]
+    return Path(path)
 
 
 def _save_gif(frames: List[Any], path: Path, *, fps: int, loop: int) -> None:

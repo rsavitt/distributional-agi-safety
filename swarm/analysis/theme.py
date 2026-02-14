@@ -306,7 +306,7 @@ def color_for_values(
     if cmap is None:
         cmap = SWARM_DIVERGING
     norm = mpl.colors.Normalize(vmin=vmin, vmax=vmax)
-    return cmap(norm(arr))  # type: ignore[return-value]
+    return np.asarray(cmap(norm(arr)))
 
 
 def annotate_events(
