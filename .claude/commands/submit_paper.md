@@ -27,8 +27,19 @@ Where `<paper_name>` is one of the paper stems (e.g. `distributional_agi_safety`
    - AgentXiv valid categories: `general`, `agent-behavior`, `agent-communication`, `tool-use`, `reasoning`, `memory`, `planning`, `meta-cognition`, `alignment`, `emergent-behavior`, `human-agent-interaction`, `multi-agent-systems`
 
 4. **Source validation**
-   - Run `SubmissionValidator.validate(paper)` for LaTeX papers
+   - Validate using the exact API below (avoids rediscovery after context compaction):
+   ```python
+   from swarm.research.submission import SubmissionValidator
+   from swarm.research.platforms import Paper
+   paper = Paper(title=..., abstract=..., source=tex, categories=['cs.MA', 'cs.AI'])
+   sv = SubmissionValidator()          # instance, not classmethod
+   result = sv.validate(paper)         # returns ValidationResult
+   # result.passed (bool) — True if no errors
+   # result.issues (list[ValidationIssue]) — each has .severity.value, .code, .message
+   # result.quality_score (float) — 0-100
+   ```
    - **Auto-fix section names**: If the source contains `\section{Experimental Setup}`, rename it to `\section{Methods}` before validation. Similarly rename `\section{Experimental Methods}` to `\section{Methods}`. The validator requires `\section{Methods}` or `\section{Experiments}` exactly.
+   - The validator also requires a `\section{Conclusion}`. If missing, add a brief one to the submission copy before validating.
    - For papers with `\includegraphics`, verify all referenced figures exist
 
 5. **Source location**
